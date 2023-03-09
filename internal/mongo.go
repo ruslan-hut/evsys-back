@@ -13,6 +13,7 @@ import (
 
 const collectionSysLog = "sys_log"
 const collectionBackLog = "back_log"
+const collectionUsers = "users"
 
 type MongoDB struct {
 	ctx           context.Context
@@ -75,6 +76,23 @@ func (m *MongoDB) ReadSystemLog() (interface{}, error) {
 
 func (m *MongoDB) ReadBackLog() (interface{}, error) {
 	return m.read(collectionBackLog, services.LogMessageType)
+}
+
+func (m *MongoDB) AuthenticateUser(username string, password string) (interface{}, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+	collection := connection.Database(m.database).Collection(collectionUsers)
+	filter := bson.D{{"username", username}, {"password", password}}
+	var user User
+	err = collection.FindOne(m.ctx, filter).Decode(&user)
+	if err != nil {
+		return nil, err
+	}
+	user.Password = ""
+	return user, nil
 }
 
 func (m *MongoDB) read(table, dataType string) (interface{}, error) {
