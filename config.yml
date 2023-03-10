@@ -1,6 +1,7 @@
 ---
 
 is_debug: true
+log_records: 1000
 listen:
   type: port
   bind_ip: 0.0.0.0

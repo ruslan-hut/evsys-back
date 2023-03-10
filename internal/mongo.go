@@ -16,9 +16,10 @@ const collectionBackLog = "back_log"
 const collectionUsers = "users"
 
 type MongoDB struct {
-	ctx           context.Context
-	clientOptions *options.ClientOptions
-	database      string
+	ctx              context.Context
+	clientOptions    *options.ClientOptions
+	database         string
+	logRecordsNumber int64
 }
 
 func NewMongoClient(conf *config.Config) (*MongoDB, error) {
@@ -35,9 +36,10 @@ func NewMongoClient(conf *config.Config) (*MongoDB, error) {
 		})
 	}
 	client := &MongoDB{
-		ctx:           context.Background(),
-		clientOptions: clientOptions,
-		database:      conf.Mongo.Database,
+		ctx:              context.Background(),
+		clientOptions:    clientOptions,
+		database:         conf.Mongo.Database,
+		logRecordsNumber: conf.LogRecords,
 	}
 	return client, nil
 }
@@ -114,7 +116,10 @@ func (m *MongoDB) read(table, dataType string) (interface{}, error) {
 
 	collection := connection.Database(m.database).Collection(table)
 	filter := bson.D{}
-	opts := options.Find().SetSort(bson.D{{"time", -1}}).SetLimit(1000)
+	opts := options.Find().SetSort(bson.D{{"time", -1}})
+	if m.logRecordsNumber > 0 {
+		opts.SetLimit(m.logRecordsNumber)
+	}
 	cursor, err := collection.Find(m.ctx, filter, opts)
 	if err != nil {
 		return nil, err
