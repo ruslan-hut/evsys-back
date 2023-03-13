@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"evsys-back/config"
+	"evsys-back/models"
 	"evsys-back/services"
 	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
@@ -80,21 +81,73 @@ func (m *MongoDB) ReadBackLog() (interface{}, error) {
 	return m.read(collectionBackLog, services.LogMessageType)
 }
 
-func (m *MongoDB) AuthenticateUser(username string, password string) (interface{}, error) {
+func (m *MongoDB) GetUser(username string) (*models.User, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
 	}
 	defer m.disconnect(connection)
 	collection := connection.Database(m.database).Collection(collectionUsers)
-	filter := bson.D{{"username", username}, {"password", password}}
-	var user User
-	err = collection.FindOne(m.ctx, filter).Decode(&user)
+	filter := bson.D{{"username", username}}
+	var userData models.User
+	err = collection.FindOne(m.ctx, filter).Decode(&userData)
 	if err != nil {
 		return nil, err
 	}
-	user.Password = ""
-	return user, nil
+	return &userData, nil
+}
+
+func (m *MongoDB) UpdateUser(user *models.User) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+	collection := connection.Database(m.database).Collection(collectionUsers)
+	filter := bson.D{{"username", user.Username}}
+	update := bson.D{
+		{"$set", bson.D{
+			{"password", user.Password},
+			{"name", user.Name},
+			{"role", user.Role},
+			{"token", user.Token},
+		}},
+	}
+	_, err = collection.UpdateOne(m.ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *MongoDB) AddUser(user *models.User) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+	collection := connection.Database(m.database).Collection(collectionUsers)
+	_, err = collection.InsertOne(m.ctx, user)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *MongoDB) CheckToken(token string) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+	collection := connection.Database(m.database).Collection(collectionUsers)
+	filter := bson.D{{"token", token}}
+	var userData models.User
+	err = collection.FindOne(m.ctx, filter).Decode(&userData)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (m *MongoDB) read(table, dataType string) (interface{}, error) {

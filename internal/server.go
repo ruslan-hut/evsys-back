@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -20,7 +21,7 @@ const (
 type Server struct {
 	conf       *config.Config
 	httpServer *http.Server
-	apiHandler func(ac *Call) []byte
+	apiHandler func(ac *Call) ([]byte, int)
 	logger     services.LogHandler
 }
 
@@ -37,7 +38,7 @@ func NewServer(conf *config.Config) *Server {
 	return &server
 }
 
-func (s *Server) SetApiHandler(handler func(ac *Call) []byte) {
+func (s *Server) SetApiHandler(handler func(ac *Call) ([]byte, int)) {
 	s.apiHandler = handler
 }
 
@@ -60,6 +61,7 @@ func (s *Server) readSystemLog(w http.ResponseWriter, r *http.Request, _ httprou
 	ac := &Call{
 		CallType: ReadSysLog,
 		Remote:   r.RemoteAddr,
+		Token:    s.getToken(r),
 	}
 	s.handleApiRequest(w, ac)
 }
@@ -68,6 +70,7 @@ func (s *Server) readBackLog(w http.ResponseWriter, r *http.Request, _ httproute
 	ac := &Call{
 		CallType: ReadBackLog,
 		Remote:   r.RemoteAddr,
+		Token:    s.getToken(r),
 	}
 	s.handleApiRequest(w, ac)
 }
@@ -90,25 +93,29 @@ func (s *Server) options(w http.ResponseWriter, r *http.Request, _ httprouter.Pa
 	s.logger.Info(fmt.Sprintf("options request from %s", r.RemoteAddr))
 	w.Header().Add("Access-Control-Allow-Origin", r.Header.Get("Origin"))
 	w.Header().Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Add("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) handleApiRequest(w http.ResponseWriter, ac *Call) {
 	if s.apiHandler != nil {
-		data := s.apiHandler(ac)
-		if data != nil {
-			s.sendApiResponse(w, data)
-		}
+		data, status := s.apiHandler(ac)
+		s.sendApiResponse(w, data, status)
 	}
 }
 
-func (s *Server) sendApiResponse(w http.ResponseWriter, data []byte) {
+func (s *Server) sendApiResponse(w http.ResponseWriter, data []byte, status int) {
 	w.Header().Add("Access-Control-Allow-Origin", "*")
 	w.Header().Add("Content-Type", "application/json; charset=utf-8")
-	_, err := w.Write(data)
-	if err != nil {
-		s.logger.Error("send api response", err)
+	if status >= 400 {
+		w.WriteHeader(status)
+	} else if data == nil {
+		w.WriteHeader(http.StatusNoContent)
+	} else {
+		_, err := w.Write(data)
+		if err != nil {
+			s.logger.Error("send api response", err)
+		}
 	}
 }
 
@@ -130,4 +137,12 @@ func (s *Server) Start() error {
 		err = s.httpServer.Serve(listener)
 	}
 	return err
+}
+
+func (s *Server) getToken(r *http.Request) string {
+	header := r.Header.Get("Authorization")
+	if strings.Contains(header, "Bearer") {
+		return strings.Replace(header, "Bearer ", "", 1)
+	}
+	return ""
 }
