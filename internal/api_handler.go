@@ -17,6 +17,7 @@ const (
 	ReadSysLog       CallType = "ReadSysLog"
 	ReadBackLog      CallType = "ReadBackLog"
 	AuthenticateUser CallType = "AuthenticateUser"
+	RegisterUser     CallType = "RegisterUser"
 )
 
 type Call struct {
@@ -54,9 +55,8 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 	var err error
 	status := http.StatusOK
 
-	if ac.CallType != AuthenticateUser {
+	if ac.CallType != AuthenticateUser && ac.CallType != RegisterUser {
 		if err = h.checkToken(ac.Token); err != nil {
-			h.logger.Info("token: " + ac.Token)
 			h.logger.Error("invalid token", err)
 			status = http.StatusUnauthorized
 			return nil, status
@@ -77,16 +77,26 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			status = http.StatusInternalServerError
 		}
 	case AuthenticateUser:
-		var user models.User
-		err = json.Unmarshal(ac.Payload, &user)
+		userData, err := h.unmarshallUserData(ac.Payload)
 		if err != nil {
 			h.logger.Error("decoding user", err)
 			status = http.StatusUnsupportedMediaType
 		} else {
-			data, err = h.authenticateUser(user.Username, user.Password)
+			data, err = h.authenticateUser(userData.Username, userData.Password)
 			if err != nil {
 				h.logger.Error("user authentication", err)
 				status = http.StatusUnauthorized
+			}
+		}
+	case RegisterUser:
+		userData, err := h.unmarshallUserData(ac.Payload)
+		if err != nil {
+			h.logger.Error("decoding user", err)
+			status = http.StatusUnsupportedMediaType
+		} else {
+			err, status = h.registerUser(userData)
+			if err != nil {
+				h.logger.Error("user registration", err)
 			}
 		}
 	default:
@@ -105,24 +115,42 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 	return byteData, status
 }
 
+func (h *Handler) unmarshallUserData(data []byte) (*models.User, error) {
+	var user models.User
+	err := json.Unmarshal(data, &user)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (h *Handler) registerUser(user *models.User) (error, int) {
+	if user.Password == "" {
+		return fmt.Errorf("empty password"), http.StatusBadRequest
+	}
+	if user.Username == "" {
+		return fmt.Errorf("empty username"), http.StatusBadRequest
+	}
+	existedUser, _ := h.database.GetUser(user.Username)
+	if existedUser != nil {
+		return nil, http.StatusConflict
+	}
+	user.Password = h.generatePasswordHash(user.Password)
+	if user.Password == "" {
+		return fmt.Errorf("empty password hash"), http.StatusInternalServerError
+	}
+	err := h.database.AddUser(user)
+	if err != nil {
+		return err, http.StatusInternalServerError
+	}
+	return nil, http.StatusOK
+}
+
 func (h *Handler) authenticateUser(username, password string) (*models.User, error) {
 	userData, err := h.database.GetUser(username)
 	if err != nil {
 		return nil, err
 	}
-
-	// temporary solution
-	//if username == "user" && password == "pass" {
-	//	userData.Token = h.generateToken()
-	//	userData.Password = h.generatePasswordHash(password)
-	//	err = h.database.UpdateUser(userData)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	userData.Password = ""
-	//	return userData, nil
-	//}
-
 	result := bcrypt.CompareHashAndPassword([]byte(userData.Password), []byte(password))
 	if result == nil {
 		token := h.generateToken()

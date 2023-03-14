@@ -16,6 +16,7 @@ const (
 	readSystemLogEndpoint = "syslog"
 	readBackLogEndpoint   = "backlog"
 	userAuthenticate      = "users/authenticate"
+	userRegister          = "users/register"
 )
 
 type Server struct {
@@ -50,6 +51,7 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.GET(route(readSystemLogEndpoint), s.readSystemLog)
 	router.GET(route(readBackLogEndpoint), s.readBackLog)
 	router.POST(route(userAuthenticate), s.authenticateUser)
+	router.POST(route(userRegister), s.registerUser)
 	router.OPTIONS("/*path", s.options)
 }
 
@@ -83,6 +85,20 @@ func (s *Server) authenticateUser(w http.ResponseWriter, r *http.Request, _ http
 	}
 	ac := &Call{
 		CallType: AuthenticateUser,
+		Remote:   r.RemoteAddr,
+		Payload:  body,
+	}
+	s.handleApiRequest(w, ac)
+}
+
+func (s *Server) registerUser(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.logger.Error("get body while register user", err)
+		return
+	}
+	ac := &Call{
+		CallType: RegisterUser,
 		Remote:   r.RemoteAddr,
 		Payload:  body,
 	}
