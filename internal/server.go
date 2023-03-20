@@ -17,6 +17,7 @@ const (
 	readBackLogEndpoint   = "backlog"
 	userAuthenticate      = "users/authenticate"
 	userRegister          = "users/register"
+	getChargePoints       = "chp"
 )
 
 type Server struct {
@@ -52,6 +53,7 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.GET(route(readBackLogEndpoint), s.readBackLog)
 	router.POST(route(userAuthenticate), s.authenticateUser)
 	router.POST(route(userRegister), s.registerUser)
+	router.GET(route(getChargePoints), s.getChargePoints)
 	router.OPTIONS("/*path", s.options)
 }
 
@@ -101,6 +103,15 @@ func (s *Server) registerUser(w http.ResponseWriter, r *http.Request, _ httprout
 		CallType: RegisterUser,
 		Remote:   r.RemoteAddr,
 		Payload:  body,
+	}
+	s.handleApiRequest(w, ac)
+}
+
+func (s *Server) getChargePoints(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	ac := &Call{
+		CallType: GetChargePoints,
+		Remote:   r.RemoteAddr,
+		Token:    s.getToken(r),
 	}
 	s.handleApiRequest(w, ac)
 }

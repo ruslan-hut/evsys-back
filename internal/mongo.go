@@ -12,15 +12,33 @@ import (
 	"log"
 )
 
-const collectionSysLog = "sys_log"
-const collectionBackLog = "back_log"
-const collectionUsers = "users"
+const (
+	collectionSysLog       = "sys_log"
+	collectionBackLog      = "back_log"
+	collectionUsers        = "users"
+	collectionChargePoints = "charge_points"
+)
 
 type MongoDB struct {
 	ctx              context.Context
 	clientOptions    *options.ClientOptions
 	database         string
 	logRecordsNumber int64
+}
+
+func (m *MongoDB) connect() (*mongo.Client, error) {
+	connection, err := mongo.Connect(m.ctx, m.clientOptions)
+	if err != nil {
+		return nil, err
+	}
+	return connection, nil
+}
+
+func (m *MongoDB) disconnect(connection *mongo.Client) {
+	err := connection.Disconnect(m.ctx)
+	if err != nil {
+		log.Println("mongodb disconnect error;", err)
+	}
 }
 
 func NewMongoClient(conf *config.Config) (*MongoDB, error) {
@@ -183,17 +201,22 @@ func (m *MongoDB) read(table, dataType string) (interface{}, error) {
 	return logMessages, nil
 }
 
-func (m *MongoDB) connect() (*mongo.Client, error) {
-	connection, err := mongo.Connect(m.ctx, m.clientOptions)
+func (m *MongoDB) GetChargePoints() (interface{}, error) {
+	connection, err := m.connect()
 	if err != nil {
 		return nil, err
 	}
-	return connection, nil
-}
-
-func (m *MongoDB) disconnect(connection *mongo.Client) {
-	err := connection.Disconnect(m.ctx)
+	defer m.disconnect(connection)
+	collection := connection.Database(m.database).Collection(collectionChargePoints)
+	filter := bson.D{}
+	opts := options.Find().SetSort(bson.D{{"charge_point_id", 1}})
+	var chargePoints []models.ChargePoint
+	cursor, err := collection.Find(m.ctx, filter, opts)
 	if err != nil {
-		log.Println("mongodb disconnect error;", err)
+		return nil, err
 	}
+	if err = cursor.All(m.ctx, &chargePoints); err != nil {
+		return nil, err
+	}
+	return chargePoints, nil
 }

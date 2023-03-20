@@ -18,6 +18,7 @@ const (
 	ReadBackLog      CallType = "ReadBackLog"
 	AuthenticateUser CallType = "AuthenticateUser"
 	RegisterUser     CallType = "RegisterUser"
+	GetChargePoints  CallType = "GetChargePoints"
 )
 
 type Call struct {
@@ -98,6 +99,12 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			if err != nil {
 				h.logger.Error("user registration", err)
 			}
+		}
+	case GetChargePoints:
+		data, err = h.database.GetChargePoints()
+		if err != nil {
+			h.logger.Error("get charge points", err)
+			status = http.StatusInternalServerError
 		}
 	default:
 		h.logger.Warn("unknown call type")
