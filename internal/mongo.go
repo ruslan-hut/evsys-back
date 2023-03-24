@@ -37,7 +37,7 @@ func (m *MongoDB) connect() (*mongo.Client, error) {
 func (m *MongoDB) disconnect(connection *mongo.Client) {
 	err := connection.Disconnect(m.ctx)
 	if err != nil {
-		log.Println("mongodb disconnect error;", err)
+		log.Println("mongodb disconnect error", err)
 	}
 }
 
@@ -71,10 +71,7 @@ func (m *MongoDB) Write(table string, data services.Data) error {
 	defer m.disconnect(connection)
 	collection := connection.Database(m.database).Collection(table)
 	_, err = collection.InsertOne(m.ctx, data)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (m *MongoDB) WriteLogMessage(data services.Data) error {
@@ -85,10 +82,7 @@ func (m *MongoDB) WriteLogMessage(data services.Data) error {
 	defer m.disconnect(connection)
 	collection := connection.Database(m.database).Collection(collectionSysLog)
 	_, err = collection.InsertOne(m.ctx, data)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (m *MongoDB) ReadSystemLog() (interface{}, error) {
@@ -132,10 +126,7 @@ func (m *MongoDB) UpdateUser(user *models.User) error {
 		}},
 	}
 	_, err = collection.UpdateOne(m.ctx, filter, update)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (m *MongoDB) AddUser(user *models.User) error {
@@ -146,10 +137,7 @@ func (m *MongoDB) AddUser(user *models.User) error {
 	defer m.disconnect(connection)
 	collection := connection.Database(m.database).Collection(collectionUsers)
 	_, err = collection.InsertOne(m.ctx, user)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (m *MongoDB) CheckToken(token string) error {
@@ -161,11 +149,7 @@ func (m *MongoDB) CheckToken(token string) error {
 	collection := connection.Database(m.database).Collection(collectionUsers)
 	filter := bson.D{{"token", token}}
 	var userData models.User
-	err = collection.FindOne(m.ctx, filter).Decode(&userData)
-	if err != nil {
-		return err
-	}
-	return nil
+	return collection.FindOne(m.ctx, filter).Decode(&userData)
 }
 
 func (m *MongoDB) read(table, dataType string) (interface{}, error) {
