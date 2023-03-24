@@ -47,8 +47,8 @@ func NewApiHandler() *Handler {
 }
 
 func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
-	h.logger.Info(fmt.Sprintf("call %s from remote %s", ac.CallType, ac.Remote))
 	if h.database == nil {
+		h.logger.Info(fmt.Sprintf("call %s from remote %s", ac.CallType, ac.Remote))
 		return nil, http.StatusOK
 	}
 
@@ -173,6 +173,9 @@ func (h *Handler) authenticateUser(username, password string) (*models.User, err
 }
 
 func (h *Handler) checkToken(token string) error {
+	if token == "" {
+		return fmt.Errorf("empty token")
+	}
 	return h.database.CheckToken(token)
 }
 
