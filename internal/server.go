@@ -275,16 +275,26 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		c.logger.Info(fmt.Sprintf("%s sending message: %s", c.id, message))
-		// send response
+		//c.logger.Info(fmt.Sprintf("%s sending message: %s", c.id, message))
+
+		// send response with sample data
+		//cp := models.ChargePoint{
+		//	Model:  "Model",
+		//	Id:     "TestId",
+		//	Status: "Available",
+		//}
+		//cpj, err := json.Marshal(cp)
+		//if err != nil {
+		//	cpj = []byte("error")
+		//}
 		response := models.WsMessage{
-			Topic: "test",
-			Data:  []byte(fmt.Sprintf("pong %s", c.id)),
+			Topic: "pong",
+			Data:  string(message),
 		}
 		data, err := json.Marshal(response)
 		if err == nil {
-			//c.send <- data
-			c.pool.broadcast <- data
+			c.send <- data
+			//c.pool.broadcast <- data
 		} else {
 			c.logger.Error("read pump: marshal response", err)
 		}
