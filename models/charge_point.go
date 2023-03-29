@@ -11,4 +11,5 @@ type ChargePoint struct {
 	FirmwareVersion string `json:"firmware_version" bson:"firmware_version"`
 	Status          string `json:"status" bson:"status"`
 	ErrorCode       string `json:"error_code" bson:"error_code"`
+	Info            string `json:"info" bson:"info"`
 }
