@@ -275,7 +275,7 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		//c.logger.Info(fmt.Sprintf("%s sending message: %s", c.id, message))
+		//c.logger.Info(fmt.Sprintf("%s --> %s", c.id, message))
 
 		// send response with sample data
 		//cp := models.ChargePoint{
