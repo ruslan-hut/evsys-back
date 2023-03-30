@@ -215,12 +215,12 @@ func (p *Pool) Start() {
 		select {
 		case client := <-p.register:
 			p.clients[client] = true
-			p.logger.Info(fmt.Sprintf("client registered: %s; total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
+			p.logger.Info(fmt.Sprintf("registered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
 		case client := <-p.unregister:
 			if _, ok := p.clients[client]; ok {
 				delete(p.clients, client)
 				close(client.send)
-				p.logger.Info(fmt.Sprintf("client unregistered: %s", client.ws.RemoteAddr()))
+				p.logger.Info(fmt.Sprintf("unregistered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
 			}
 		case message := <-p.broadcast:
 			for client := range p.clients {
@@ -270,7 +270,7 @@ func (c *Client) readPump() {
 	for {
 		_, message, err := c.ws.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNoStatusReceived) {
 				c.logger.Error("read message", err)
 			}
 			break
@@ -304,9 +304,6 @@ func (c *Client) readPump() {
 func (c *Client) close() {
 	c.pool.unregister <- c
 	_ = c.ws.Close()
-	//if err != nil {
-	//	c.logger.Error(fmt.Sprintf("close websocket %s", c.id), err)
-	//}
 }
 
 func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
