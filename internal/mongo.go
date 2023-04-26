@@ -5,11 +5,13 @@ import (
 	"evsys-back/config"
 	"evsys-back/models"
 	"evsys-back/services"
+	"evsys-back/utility"
 	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
+	"time"
 )
 
 const (
@@ -18,6 +20,12 @@ const (
 	collectionUsers        = "users"
 	collectionChargePoints = "charge_points"
 )
+
+type pipeResult struct {
+	Id   string    `bson:"_id"`
+	Info string    `bson:"info"`
+	Time time.Time `bson:"time"`
+}
 
 type MongoDB struct {
 	ctx              context.Context
@@ -191,16 +199,60 @@ func (m *MongoDB) GetChargePoints() (interface{}, error) {
 		return nil, err
 	}
 	defer m.disconnect(connection)
+
+	pipeline := mongo.Pipeline{
+		{{"$lookup", bson.M{
+			"from":         "connectors",
+			"localField":   "charge_point_id",
+			"foreignField": "charge_point_id",
+			"as":           "Connectors",
+		}}},
+		bson.D{{"$sort", bson.D{{"charge_point_id", 1}}}},
+	}
+
 	collection := connection.Database(m.database).Collection(collectionChargePoints)
-	filter := bson.D{}
-	opts := options.Find().SetSort(bson.D{{"charge_point_id", 1}})
 	var chargePoints []models.ChargePoint
-	cursor, err := collection.Find(m.ctx, filter, opts)
+	cursor, err := collection.Aggregate(m.ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}
 	if err = cursor.All(m.ctx, &chargePoints); err != nil {
 		return nil, err
 	}
+
+	// adding last Heartbeat event time
+	logPipe := bson.A{
+		bson.D{{"$match", bson.D{{"feature", "Heartbeat"}}}},
+		bson.D{{"$sort", bson.D{{"time", -1}}}},
+		bson.D{
+			{"$group",
+				bson.D{
+					{"_id", "$charge_point_id"},
+					{"time", bson.D{{"$first", "$timestamp"}}},
+				},
+			},
+		},
+		bson.D{{"$sort", bson.D{{"_id", 1}}}},
+	}
+
+	var pipeResult []pipeResult
+	cLog := connection.Database(m.database).Collection(collectionSysLog)
+	cursor, err = cLog.Aggregate(m.ctx, logPipe)
+	if err != nil {
+		return nil, fmt.Errorf("aggregate Heartbeat: %v", err)
+	}
+	if err = cursor.All(m.ctx, &pipeResult); err != nil {
+		return nil, fmt.Errorf("decode Heartbeat: %v", err)
+	}
+
+	for _, heartbeat := range pipeResult {
+		for i, chp := range chargePoints {
+			if chp.Id == heartbeat.Id {
+				chargePoints[i].LastSeen = utility.TimeAgo(heartbeat.Time)
+				break
+			}
+		}
+	}
+
 	return chargePoints, nil
 }
