@@ -13,5 +13,7 @@ type ChargePoint struct {
 	ErrorCode       string      `json:"error_code" bson:"error_code"`
 	Info            string      `json:"info" bson:"info"`
 	LastSeen        string      `json:"last_seen" bson:"last_seen"`
+	Address         string      `json:"address" bson:"address"`
+	Location        Location    `json:"location" bson:"location"`
 	Connectors      []Connector `json:"connectors" bson:"connectors"`
 }
