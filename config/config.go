@@ -16,14 +16,18 @@ type Config struct {
 		TLS      bool   `yaml:"tls_enabled" env-default:"false"`
 		CertFile string `yaml:"cert_file" env-default:""`
 		KeyFile  string `yaml:"key_file" env-default:""`
-	}
+	} `yaml:"listen"`
+	CentralSystem struct {
+		Enabled bool   `yaml:"enabled" env-default:"false"`
+		Url     string `yaml:"url" env-default:""`
+	} `yaml:"central_system"`
 	Pusher struct {
 		Enabled bool   `yaml:"enabled" env-default:"false"`
 		AppID   string `yaml:"app_id" env-default:""`
 		Key     string `yaml:"key" env-default:""`
 		Secret  string `yaml:"secret" env-default:""`
 		Cluster string `yaml:"cluster" env-default:"eu"`
-	}
+	} `yaml:"pusher"`
 	Mongo struct {
 		Enabled  bool   `yaml:"enabled" env-default:"false"`
 		Host     string `yaml:"host" env-default:"127.0.0.1"`
@@ -31,7 +35,7 @@ type Config struct {
 		User     string `yaml:"user" env-default:"admin"`
 		Password string `yaml:"password" env-default:"pass"`
 		Database string `yaml:"database" env-default:""`
-	}
+	} `yaml:"mongo"`
 }
 
 var instance *Config

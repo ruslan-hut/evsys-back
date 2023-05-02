@@ -21,6 +21,7 @@ const (
 	userAuthenticate      = "users/authenticate"
 	userRegister          = "users/register"
 	getChargePoints       = "chp"
+	centralSystemCommand  = "csc"
 	wsEndpoint            = "/ws"
 )
 
@@ -70,6 +71,7 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.GET(route(readBackLogEndpoint), s.readBackLog)
 	router.POST(route(userAuthenticate), s.authenticateUser)
 	router.POST(route(userRegister), s.registerUser)
+	router.POST(route(centralSystemCommand), s.centralSystemCommand)
 	router.GET(route(getChargePoints), s.getChargePoints)
 	router.OPTIONS("/*path", s.options)
 	router.GET(wsEndpoint, s.handleWs)
@@ -119,6 +121,21 @@ func (s *Server) registerUser(w http.ResponseWriter, r *http.Request, _ httprout
 	}
 	ac := &Call{
 		CallType: RegisterUser,
+		Remote:   r.RemoteAddr,
+		Payload:  body,
+	}
+	s.handleApiRequest(w, ac)
+}
+
+func (s *Server) centralSystemCommand(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.logger.Error("get body while central system command", err)
+		return
+	}
+	ac := &Call{
+		CallType: CentralSystemCommand,
+		Token:    s.getToken(r),
 		Remote:   r.RemoteAddr,
 		Payload:  body,
 	}

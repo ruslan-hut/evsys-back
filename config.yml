@@ -9,6 +9,9 @@ listen:
   tls_enabled: false
   cert_file: c:/cert/cert.pem
   key_file: c:/cert/key.pem
+central_system:
+  enabled: false
+  url: https://example.com/api
 pusher:
   enabled: false
   app_id:

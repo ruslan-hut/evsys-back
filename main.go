@@ -26,12 +26,21 @@ func main() {
 		logger.Info("mongo client initialized")
 	}
 
+	var cs services.CentralSystemService
+	if conf.CentralSystem.Enabled {
+		cs = internal.NewCentralSystem(conf.CentralSystem.Url)
+		logger.Info("central system initialized")
+	} else {
+		logger.Info("central system is disabled")
+	}
+
 	apiLogger := internal.NewLogger("api")
 	apiLogger.SetDebugMode(conf.IsDebug)
 
 	api := internal.NewApiHandler()
 	api.SetLogger(apiLogger)
 	api.SetDatabase(mongo)
+	api.SetCentralSystem(cs)
 
 	serverLogger := internal.NewLogger("server")
 	serverLogger.SetDebugMode(conf.IsDebug)

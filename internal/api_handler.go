@@ -14,11 +14,12 @@ import (
 type CallType string
 
 const (
-	ReadSysLog       CallType = "ReadSysLog"
-	ReadBackLog      CallType = "ReadBackLog"
-	AuthenticateUser CallType = "AuthenticateUser"
-	RegisterUser     CallType = "RegisterUser"
-	GetChargePoints  CallType = "GetChargePoints"
+	ReadSysLog           CallType = "ReadSysLog"
+	ReadBackLog          CallType = "ReadBackLog"
+	AuthenticateUser     CallType = "AuthenticateUser"
+	RegisterUser         CallType = "RegisterUser"
+	GetChargePoints      CallType = "GetChargePoints"
+	CentralSystemCommand CallType = "CentralSystemCommand"
 )
 
 type Call struct {
@@ -29,8 +30,9 @@ type Call struct {
 }
 
 type Handler struct {
-	logger   services.LogHandler
-	database services.Database
+	logger        services.LogHandler
+	database      services.Database
+	centralSystem services.CentralSystemService
 }
 
 func (h *Handler) SetLogger(logger services.LogHandler) {
@@ -39,6 +41,10 @@ func (h *Handler) SetLogger(logger services.LogHandler) {
 
 func (h *Handler) SetDatabase(database services.Database) {
 	h.database = database
+}
+
+func (h *Handler) SetCentralSystem(centralSystem services.CentralSystemService) {
+	h.centralSystem = centralSystem
 }
 
 func NewApiHandler() *Handler {
@@ -105,6 +111,17 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		if err != nil {
 			h.logger.Error("get charge points", err)
 			status = http.StatusInternalServerError
+		}
+	case CentralSystemCommand:
+		if ac.Payload == nil {
+			h.logger.Info("empty payload for central system command")
+			status = http.StatusBadRequest
+		} else {
+			data, err = h.handleCentralSystemCommand(ac.Payload)
+			if err != nil {
+				h.logger.Error("handle central system command", err)
+				status = http.StatusInternalServerError
+			}
 		}
 	default:
 		h.logger.Warn("unknown call type")
@@ -195,4 +212,21 @@ func (h *Handler) generateToken() string {
 		return ""
 	}
 	return hex.EncodeToString(b)
+}
+
+func (h *Handler) handleCentralSystemCommand(payload []byte) (*models.CentralSystemResponse, error) {
+	var command models.CentralSystemCommand
+	err := json.Unmarshal(payload, &command)
+	if err != nil {
+		return nil, fmt.Errorf("decoding central system command: %s", err)
+	}
+	if h.centralSystem != nil {
+		response, err := h.centralSystem.SendCommand(&command)
+		if err != nil {
+			return nil, fmt.Errorf("sending command to central system: %s", err)
+		}
+		return response, nil
+	} else {
+		return models.NewCentralSystemResponse(models.Error, "central system is not connected"), nil
+	}
 }
