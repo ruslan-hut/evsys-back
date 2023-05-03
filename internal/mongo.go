@@ -179,7 +179,7 @@ func (m *MongoDB) read(table, dataType string) (interface{}, error) {
 
 	collection := connection.Database(m.database).Collection(table)
 	filter := bson.D{}
-	opts := options.Find().SetSort(bson.D{{"time", -1}})
+	opts := options.Find().SetSort(bson.D{{"timestamp", -1}})
 	if m.logRecordsNumber > 0 {
 		opts.SetLimit(m.logRecordsNumber)
 	}
