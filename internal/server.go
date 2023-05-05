@@ -208,11 +208,19 @@ func (s *Server) getToken(r *http.Request) string {
 	return ""
 }
 
+type SubscriptionType string
+
+const (
+	Broadcast SubscriptionType = "broadcast"
+	UserEvent SubscriptionType = "user-event"
+)
+
 type Pool struct {
 	register   chan *Client
 	unregister chan *Client
 	clients    map[*Client]bool
 	broadcast  chan []byte
+	userEvent  chan []byte
 	logger     services.LogHandler
 }
 
@@ -223,6 +231,7 @@ func NewPool() *Pool {
 		unregister: make(chan *Client),
 		clients:    make(map[*Client]bool),
 		broadcast:  make(chan []byte),
+		userEvent:  make(chan []byte),
 		logger:     logger,
 	}
 }
@@ -238,14 +247,19 @@ func (p *Pool) Start() {
 				delete(p.clients, client)
 				close(client.send)
 				p.logger.Info(fmt.Sprintf("unregistered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
+			} else {
+				p.logger.Warn(fmt.Sprintf("unregistered unknown %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
 			}
 		case message := <-p.broadcast:
 			for client := range p.clients {
-				select {
-				case client.send <- message:
-				default:
-					close(client.send)
-					delete(p.clients, client)
+				if client.subscription == Broadcast {
+					client.send <- message
+				}
+			}
+		case message := <-p.userEvent:
+			for client := range p.clients {
+				if client.subscription == UserEvent {
+					client.send <- message
 				}
 			}
 		}
@@ -253,11 +267,13 @@ func (p *Pool) Start() {
 }
 
 type Client struct {
-	ws     *websocket.Conn
-	send   chan []byte
-	logger services.LogHandler
-	pool   *Pool
-	id     string
+	ws           *websocket.Conn
+	send         chan []byte
+	logger       services.LogHandler
+	pool         *Pool
+	id           string
+	subscription SubscriptionType
+	isClosed     bool
 }
 
 func (c *Client) writePump() {
@@ -292,18 +308,8 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		//c.logger.Info(fmt.Sprintf("%s --> %s", c.id, message))
+		c.logger.Info(fmt.Sprintf("%s --> %s", c.id, message))
 
-		// send response with sample data
-		//cp := models.ChargePoint{
-		//	Model:  "Model",
-		//	Id:     "TestId",
-		//	Status: "Available",
-		//}
-		//cpj, err := json.Marshal(cp)
-		//if err != nil {
-		//	cpj = []byte("error")
-		//}
 		response := models.WsMessage{
 			Topic: "pong",
 			Data:  string(message),
@@ -319,8 +325,11 @@ func (c *Client) readPump() {
 }
 
 func (c *Client) close() {
-	c.pool.unregister <- c
-	_ = c.ws.Close()
+	if c.isClosed != true {
+		c.isClosed = true
+		c.pool.unregister <- c
+		_ = c.ws.Close()
+	}
 }
 
 func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -331,11 +340,12 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.P
 	}
 
 	client := &Client{
-		ws:     ws,
-		send:   make(chan []byte, 256),
-		logger: s.logger,
-		pool:   s.pool,
-		id:     r.RemoteAddr,
+		ws:           ws,
+		send:         make(chan []byte, 256),
+		logger:       s.logger,
+		pool:         s.pool,
+		id:           r.RemoteAddr,
+		subscription: Broadcast,
 	}
 	s.pool.register <- client
 
