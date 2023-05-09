@@ -18,6 +18,7 @@ const (
 	collectionSysLog       = "sys_log"
 	collectionBackLog      = "back_log"
 	collectionUsers        = "users"
+	collectionUserTags     = "user_tags"
 	collectionChargePoints = "charge_points"
 )
 
@@ -117,22 +118,85 @@ func (m *MongoDB) GetUser(username string) (*models.User, error) {
 	return &userData, nil
 }
 
+func (m *MongoDB) GetUserById(userId string) (*models.User, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionUsers)
+	filter := bson.D{{"user_id", userId}}
+	var userData models.User
+	err = collection.FindOne(m.ctx, filter).Decode(&userData)
+	if err != nil {
+		return nil, err
+	}
+	return &userData, nil
+}
+
+func (m *MongoDB) GetUserTags(userId string) ([]models.UserTag, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionUserTags)
+	filter := bson.D{{"user_id", userId}}
+	var userTags []models.UserTag
+	cursor, err := collection.Find(m.ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if err = cursor.All(m.ctx, &userTags); err != nil {
+		return nil, err
+	}
+	return userTags, nil
+}
+
+func (m *MongoDB) GetUserTag(idTag string) (*models.UserTag, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionUserTags)
+	filter := bson.D{{"id_tag", idTag}}
+	var userTag models.UserTag
+	if err = collection.FindOne(m.ctx, filter).Decode(&userTag); err != nil {
+		return nil, err
+	}
+	return &userTag, nil
+}
+
+func (m *MongoDB) AddUserTag(userTag *models.UserTag) error {
+	existedUserTag, err := m.GetUserTag(userTag.IdTag)
+	if err == nil {
+		return fmt.Errorf("user tag %s already exists for user %s", existedUserTag.IdTag, existedUserTag.UserId)
+	}
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionUserTags)
+	_, err = collection.InsertOne(m.ctx, userTag)
+	return err
+}
+
 func (m *MongoDB) UpdateUser(user *models.User) error {
 	connection, err := m.connect()
 	if err != nil {
 		return err
 	}
 	defer m.disconnect(connection)
+
 	collection := connection.Database(m.database).Collection(collectionUsers)
 	filter := bson.D{{"username", user.Username}}
-	update := bson.D{
-		{"$set", bson.D{
-			{"password", user.Password},
-			{"name", user.Name},
-			{"role", user.Role},
-			{"token", user.Token},
-		}},
-	}
+	update := bson.M{"$set": user}
 	_, err = collection.UpdateOne(m.ctx, filter, update)
 	return err
 }
@@ -143,6 +207,7 @@ func (m *MongoDB) AddUser(user *models.User) error {
 		return err
 	}
 	defer m.disconnect(connection)
+
 	collection := connection.Database(m.database).Collection(collectionUsers)
 	_, err = collection.InsertOne(m.ctx, user)
 	return err
@@ -154,6 +219,7 @@ func (m *MongoDB) CheckToken(token string) error {
 		return err
 	}
 	defer m.disconnect(connection)
+
 	collection := connection.Database(m.database).Collection(collectionUsers)
 	filter := bson.D{{"token", token}}
 	var userData models.User

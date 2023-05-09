@@ -48,6 +48,7 @@ func main() {
 	server := internal.NewServer(conf)
 	server.SetLogger(serverLogger)
 	server.SetApiHandler(api.HandleApiCall)
+	server.SetWsHandler(api.HandleUserRequest)
 
 	err = server.Start()
 	if err != nil {

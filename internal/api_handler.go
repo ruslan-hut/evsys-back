@@ -230,3 +230,127 @@ func (h *Handler) handleCentralSystemCommand(payload []byte) (*models.CentralSys
 		return models.NewCentralSystemResponse(models.Error, "central system is not connected"), nil
 	}
 }
+
+func (h *Handler) HandleUserRequest(request *models.UserRequest) ([]byte, error) {
+	var response *models.CentralSystemResponse
+
+	if h.database == nil {
+		response = models.NewCentralSystemResponse(models.Error, "database is not connected")
+		return getByteData(response)
+	}
+
+	if request.UserId == "" {
+		response = models.NewCentralSystemResponse(models.Error, "empty user id")
+		return getByteData(response)
+	}
+
+	user, err := h.database.GetUserById(request.UserId)
+	if err != nil {
+		h.logger.Error("getting user from database", err)
+	}
+	if user == nil {
+		user = &models.User{
+			Name:   request.Username,
+			UserId: request.UserId,
+		}
+		err = h.database.AddUser(user)
+		if err != nil {
+			h.logger.Error("adding user to database", err)
+			response = models.NewCentralSystemResponse(models.Error, "failed to add user to database")
+			return getByteData(response)
+		}
+	}
+	if user.Name != request.Username {
+		user.Name = request.Username
+		err = h.database.UpdateUser(user)
+		if err != nil {
+			h.logger.Error("updating user in database", err)
+		}
+	}
+
+	tags, err := h.database.GetUserTags(request.UserId)
+	if err != nil {
+		h.logger.Error("getting user tags from database", err)
+	}
+	if tags == nil {
+		tags = make([]models.UserTag, 0)
+	}
+	if len(tags) == 0 {
+		newTag := models.UserTag{
+			UserId:    request.UserId,
+			Username:  request.Username,
+			IdTag:     h.generateUserTag(),
+			IsEnabled: true,
+		}
+		err = h.database.AddUserTag(&newTag)
+		if err != nil {
+			h.logger.Error("adding user tag to database", err)
+			response = models.NewCentralSystemResponse(models.Error, "failed to add user tag to database")
+			return getByteData(response)
+		}
+		tags = append(tags, newTag)
+	}
+	idTag := tags[0].IdTag
+
+	if h.centralSystem != nil {
+
+		command := models.CentralSystemCommand{
+			ChargePointId: request.ChargePointId,
+			ConnectorId:   request.ConnectorId,
+		}
+
+		switch request.Command {
+		case models.StartTransaction:
+			command.FeatureName = "RemoteStartTransaction"
+			command.Payload = idTag
+		default:
+			response = models.NewCentralSystemResponse(models.Error, fmt.Sprintf("unknown command %s", request.Command))
+			return getByteData(response)
+		}
+
+		response, err = h.centralSystem.SendCommand(&command)
+		if err != nil {
+			h.logger.Error("sending command to central system", err)
+			response = models.NewCentralSystemResponse(models.Error, "failed to send command")
+			return getByteData(response)
+		}
+
+		response = models.NewCentralSystemResponse(models.Success, fmt.Sprintf("command %s was sent for %s connector %v", request.Command, request.ChargePointId, request.ConnectorId))
+	} else {
+		response = models.NewCentralSystemResponse(models.Error, "central system is not connected")
+	}
+
+	return getByteData(response)
+}
+
+func getByteData(data interface{}) ([]byte, error) {
+	byteData, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("encoding data: %s", err)
+	}
+	return byteData, nil
+}
+
+func (h *Handler) getUserById(id string) (user *models.User) {
+	var err error
+	if h.database != nil {
+		user, err = h.database.GetUserById(id)
+		if err != nil {
+			h.logger.Error("getting user", err)
+		}
+	}
+	return user
+}
+
+func (h *Handler) generateUserTag() string {
+	b := make([]byte, 20)
+	_, err := rand.Read(b)
+	if err != nil {
+		return ""
+	}
+	s := hex.EncodeToString(b)
+	if len(s) > 20 {
+		s = s[:20]
+	}
+	return s
+}

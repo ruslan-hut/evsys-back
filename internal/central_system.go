@@ -22,12 +22,12 @@ func (cs *CentralSystem) SendCommand(command *models.CentralSystemCommand) (*mod
 	log.Printf("SendCommand: %v", command)
 	data, err := json.Marshal(command)
 	if err != nil {
-		return models.NewCentralSystemResponse(models.Error, "invalid data"), err
+		return nil, fmt.Errorf("error marshalling command: %v", err)
 	}
 
 	req, err := http.NewRequest("POST", cs.url, bytes.NewBuffer(data))
 	if err != nil {
-		return models.NewCentralSystemResponse(models.Error, "invalid request"), err
+		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -43,7 +43,7 @@ func (cs *CentralSystem) SendCommand(command *models.CentralSystemCommand) (*mod
 	}
 
 	if err != nil || resp.StatusCode != http.StatusOK {
-		return models.NewCentralSystemResponse(models.Error, fmt.Sprintf("error sending command; %v", resp.Status)), err
+		return nil, fmt.Errorf("error sending command: %v; response status: %v", err, resp.StatusCode)
 	}
 
 	return models.NewCentralSystemResponse(models.Success, ""), nil

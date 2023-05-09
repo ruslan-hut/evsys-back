@@ -29,6 +29,7 @@ type Server struct {
 	conf       *config.Config
 	httpServer *http.Server
 	apiHandler func(ac *Call) ([]byte, int)
+	wsHandler  func(request *models.UserRequest) ([]byte, error)
 	logger     services.LogHandler
 	upgrader   websocket.Upgrader
 	pool       *Pool
@@ -60,6 +61,10 @@ func NewServer(conf *config.Config) *Server {
 
 func (s *Server) SetApiHandler(handler func(ac *Call) ([]byte, int)) {
 	s.apiHandler = handler
+}
+
+func (s *Server) SetWsHandler(handler func(request *models.UserRequest) ([]byte, error)) {
+	s.wsHandler = handler
 }
 
 func (s *Server) SetLogger(logger services.LogHandler) {
@@ -267,13 +272,14 @@ func (p *Pool) Start() {
 }
 
 type Client struct {
-	ws           *websocket.Conn
-	send         chan []byte
-	logger       services.LogHandler
-	pool         *Pool
-	id           string
-	subscription SubscriptionType
-	isClosed     bool
+	ws             *websocket.Conn
+	send           chan []byte
+	logger         services.LogHandler
+	pool           *Pool
+	id             string
+	subscription   SubscriptionType
+	isClosed       bool
+	requestHandler func(request *models.UserRequest) ([]byte, error)
 }
 
 func (c *Client) writePump() {
@@ -308,19 +314,34 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		c.logger.Info(fmt.Sprintf("%s --> %s", c.id, message))
 
-		response := models.WsMessage{
-			Topic: "pong",
-			Data:  string(message),
+		var userRequest models.UserRequest
+		err = json.Unmarshal(message, &userRequest)
+		if err != nil {
+			c.logger.Error("read pump: unmarshal", err)
+			c.sendErrorResponse("invalid request")
+			continue
 		}
-		data, err := json.Marshal(response)
+
+		data, err := c.requestHandler(&userRequest)
 		if err == nil {
 			c.send <- data
-			//c.pool.broadcast <- data
 		} else {
-			c.logger.Error("read pump: marshal response", err)
+			c.logger.Error("read pump: handle request", err)
 		}
+	}
+}
+
+func (c *Client) sendErrorResponse(info string) {
+	response := models.WsResponse{
+		Status: models.Error,
+		Info:   info,
+	}
+	data, err := json.Marshal(response)
+	if err == nil {
+		c.send <- data
+	} else {
+		c.logger.Error("send error response", err)
 	}
 }
 
@@ -340,12 +361,13 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.P
 	}
 
 	client := &Client{
-		ws:           ws,
-		send:         make(chan []byte, 256),
-		logger:       s.logger,
-		pool:         s.pool,
-		id:           r.RemoteAddr,
-		subscription: Broadcast,
+		ws:             ws,
+		send:           make(chan []byte, 256),
+		logger:         s.logger,
+		pool:           s.pool,
+		id:             r.RemoteAddr,
+		subscription:   Broadcast,
+		requestHandler: s.wsHandler,
 	}
 	s.pool.register <- client
 

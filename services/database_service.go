@@ -10,9 +10,13 @@ type Database interface {
 	ReadBackLog() (interface{}, error)
 
 	GetUser(username string) (*models.User, error)
+	GetUserById(userId string) (*models.User, error)
 	UpdateUser(user *models.User) error
 	AddUser(user *models.User) error
 	CheckToken(token string) error
+
+	GetUserTags(userId string) ([]models.UserTag, error)
+	AddUserTag(userTag *models.UserTag) error
 
 	GetChargePoints() (interface{}, error)
 }
