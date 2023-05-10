@@ -177,7 +177,7 @@ func (h *Handler) authenticateUser(username, password string) (*models.User, err
 	}
 	result := bcrypt.CompareHashAndPassword([]byte(userData.Password), []byte(password))
 	if result == nil {
-		token := h.generateToken()
+		token := h.generateKey(32)
 		userData.Token = token
 		err = h.database.UpdateUser(userData)
 		if err != nil {
@@ -203,15 +203,6 @@ func (h *Handler) generatePasswordHash(password string) string {
 		return ""
 	}
 	return string(hash)
-}
-
-func (h *Handler) generateToken() string {
-	b := make([]byte, 32)
-	_, err := rand.Read(b)
-	if err != nil {
-		return ""
-	}
-	return hex.EncodeToString(b)
 }
 
 func (h *Handler) handleCentralSystemCommand(payload []byte) (*models.CentralSystemResponse, error) {
@@ -249,9 +240,11 @@ func (h *Handler) HandleUserRequest(request *models.UserRequest) ([]byte, error)
 		h.logger.Error("getting user from database", err)
 	}
 	if user == nil {
+		username := fmt.Sprintf("user_%s", h.generateKey(5))
 		user = &models.User{
-			Name:   request.Username,
-			UserId: request.UserId,
+			Username: username,
+			Name:     request.Username,
+			UserId:   request.UserId,
 		}
 		err = h.database.AddUser(user)
 		if err != nil {
@@ -278,8 +271,8 @@ func (h *Handler) HandleUserRequest(request *models.UserRequest) ([]byte, error)
 	if len(tags) == 0 {
 		newTag := models.UserTag{
 			UserId:    request.UserId,
-			Username:  request.Username,
-			IdTag:     h.generateUserTag(),
+			Username:  user.Username,
+			IdTag:     h.generateKey(20),
 			IsEnabled: true,
 		}
 		err = h.database.AddUserTag(&newTag)
@@ -342,15 +335,15 @@ func (h *Handler) getUserById(id string) (user *models.User) {
 	return user
 }
 
-func (h *Handler) generateUserTag() string {
+func (h *Handler) generateKey(length int) string {
 	b := make([]byte, 20)
 	_, err := rand.Read(b)
 	if err != nil {
 		return ""
 	}
 	s := hex.EncodeToString(b)
-	if len(s) > 20 {
-		s = s[:20]
+	if len(s) > length {
+		s = s[:length]
 	}
 	return s
 }
