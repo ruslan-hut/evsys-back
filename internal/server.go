@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -216,8 +217,9 @@ func (s *Server) getToken(r *http.Request) string {
 type SubscriptionType string
 
 const (
-	Broadcast SubscriptionType = "broadcast"
-	UserEvent SubscriptionType = "user-event"
+	Broadcast  SubscriptionType = "broadcast"
+	UserEvent  SubscriptionType = "user-event"
+	pingPeriod                  = 30 * time.Second
 )
 
 type Pool struct {
@@ -309,10 +311,13 @@ func (c *Client) readPump() {
 	for {
 		_, message, err := c.ws.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNoStatusReceived) {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived) {
 				c.logger.Error("read message", err)
 			}
 			break
+		}
+		if string(message) == "ping" {
+			continue
 		}
 
 		var userRequest models.UserRequest
@@ -328,6 +333,23 @@ func (c *Client) readPump() {
 			c.send <- data
 		} else {
 			c.logger.Error("read pump: handle request", err)
+		}
+	}
+}
+
+func (c *Client) checkConnection() {
+	ticker := time.NewTicker(pingPeriod)
+	defer func() {
+		ticker.Stop()
+		c.close()
+	}()
+	for {
+		select {
+		case <-ticker.C:
+			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
+				c.logger.Error(fmt.Sprintf("check connection %s", c.id), err)
+				return
+			}
 		}
 	}
 }
@@ -373,4 +395,5 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.P
 
 	go client.writePump()
 	go client.readPump()
+	go client.checkConnection()
 }
