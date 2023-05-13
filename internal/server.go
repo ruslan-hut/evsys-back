@@ -346,6 +346,9 @@ func (c *Client) checkConnection() {
 	for {
 		select {
 		case <-ticker.C:
+			if c.isClosed {
+				return
+			}
 			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
 				c.logger.Error(fmt.Sprintf("check connection %s", c.id), err)
 				return
