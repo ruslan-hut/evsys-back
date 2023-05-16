@@ -42,6 +42,16 @@ func main() {
 	api.SetDatabase(mongo)
 	api.SetCentralSystem(cs)
 
+	if conf.FirebaseKey != "" {
+		firebase, err := internal.NewFirebase(conf.FirebaseKey)
+		if err != nil {
+			logger.Error("firebase client", err)
+			return
+		}
+		firebase.SetLogger(internal.NewLogger("firebase"))
+		api.SetFirebase(firebase)
+	}
+
 	serverLogger := internal.NewLogger("server")
 	serverLogger.SetDebugMode(conf.IsDebug)
 

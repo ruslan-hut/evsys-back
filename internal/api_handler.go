@@ -33,6 +33,7 @@ type Handler struct {
 	logger        services.LogHandler
 	database      services.Database
 	centralSystem services.CentralSystemService
+	firebase      services.FirebaseAuth
 }
 
 func (h *Handler) SetLogger(logger services.LogHandler) {
@@ -45,6 +46,10 @@ func (h *Handler) SetDatabase(database services.Database) {
 
 func (h *Handler) SetCentralSystem(centralSystem services.CentralSystemService) {
 	h.centralSystem = centralSystem
+}
+
+func (h *Handler) SetFirebase(firebase services.FirebaseAuth) {
+	h.firebase = firebase
 }
 
 func NewApiHandler() *Handler {
@@ -192,6 +197,12 @@ func (h *Handler) authenticateUser(username, password string) (*models.User, err
 func (h *Handler) checkToken(token string) error {
 	if token == "" {
 		return fmt.Errorf("empty token")
+	}
+	if h.firebase != nil {
+		err := h.firebase.CheckToken(token)
+		if err == nil {
+			return nil
+		}
 	}
 	return h.database.CheckToken(token)
 }
