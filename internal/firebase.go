@@ -38,12 +38,11 @@ func (f *Firebase) SetLogger(logger services.LogHandler) {
 	f.logger = logger
 }
 
-func (f *Firebase) CheckToken(tokenId string) error {
+func (f *Firebase) CheckToken(tokenId string) (string, error) {
 	token, err := f.client.VerifyIDToken(f.context, tokenId)
 	if err != nil {
 		f.logger.Error("verifying token", err)
-		return err
+		return "", err
 	}
-	f.logger.Info(fmt.Sprintf("token verified: user %v", token.UID))
-	return nil
+	return token.UID, nil
 }

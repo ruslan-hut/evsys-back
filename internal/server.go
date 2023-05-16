@@ -22,6 +22,7 @@ const (
 	userAuthenticate      = "users/authenticate"
 	userRegister          = "users/register"
 	getChargePoints       = "chp"
+	activeTransactions    = "transactions/active"
 	centralSystemCommand  = "csc"
 	wsEndpoint            = "/ws"
 )
@@ -79,12 +80,22 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.POST(route(userRegister), s.registerUser)
 	router.POST(route(centralSystemCommand), s.centralSystemCommand)
 	router.GET(route(getChargePoints), s.getChargePoints)
+	router.GET(route(activeTransactions), s.activeTransactions)
 	router.OPTIONS("/*path", s.options)
 	router.GET(wsEndpoint, s.handleWs)
 }
 
 func route(path string) string {
 	return fmt.Sprintf("/api/%s/%s", apiVersion, path)
+}
+
+func (s *Server) activeTransactions(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	ac := &Call{
+		CallType: ActiveTransactions,
+		Remote:   r.RemoteAddr,
+		Token:    s.getToken(r),
+	}
+	s.handleApiRequest(w, ac)
 }
 
 func (s *Server) readSystemLog(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {

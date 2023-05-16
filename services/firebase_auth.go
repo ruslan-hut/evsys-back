@@ -1,5 +1,5 @@
 package services
 
 type FirebaseAuth interface {
-	CheckToken(token string) error
+	CheckToken(token string) (string, error)
 }

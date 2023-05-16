@@ -13,12 +13,15 @@ type Database interface {
 	GetUserById(userId string) (*models.User, error)
 	UpdateUser(user *models.User) error
 	AddUser(user *models.User) error
-	CheckToken(token string) error
+	CheckToken(token string) (*models.User, error)
 
 	GetUserTags(userId string) ([]models.UserTag, error)
 	AddUserTag(userTag *models.UserTag) error
 
 	GetChargePoints() (interface{}, error)
+
+	GetTransaction(id int) (*models.Transaction, error)
+	GetActiveTransactions(userId string) ([]models.Transaction, error)
 }
 
 type Data interface {

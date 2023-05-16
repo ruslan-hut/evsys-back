@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,7 @@ const (
 	collectionUsers        = "users"
 	collectionUserTags     = "user_tags"
 	collectionChargePoints = "charge_points"
+	collectionTransactions = "transactions"
 )
 
 type pipeResult struct {
@@ -213,17 +215,21 @@ func (m *MongoDB) AddUser(user *models.User) error {
 	return err
 }
 
-func (m *MongoDB) CheckToken(token string) error {
+func (m *MongoDB) CheckToken(token string) (*models.User, error) {
 	connection, err := m.connect()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer m.disconnect(connection)
 
 	collection := connection.Database(m.database).Collection(collectionUsers)
 	filter := bson.D{{"token", token}}
 	var userData models.User
-	return collection.FindOne(m.ctx, filter).Decode(&userData)
+	err = collection.FindOne(m.ctx, filter).Decode(&userData)
+	if err != nil {
+		return nil, err
+	}
+	return &userData, nil
 }
 
 func (m *MongoDB) read(table, dataType string) (interface{}, error) {
@@ -321,4 +327,56 @@ func (m *MongoDB) GetChargePoints() (interface{}, error) {
 	}
 
 	return chargePoints, nil
+}
+
+func (m *MongoDB) GetTransaction(id int) (*models.Transaction, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionTransactions)
+	filter := bson.D{{"transaction_id", id}}
+	var transaction models.Transaction
+	if err = collection.FindOne(m.ctx, filter).Decode(&transaction); err != nil {
+		return nil, err
+	}
+	return &transaction, nil
+}
+
+func (m *MongoDB) GetActiveTransactions(userId string) ([]models.Transaction, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	tags, err := m.GetUserTags(userId)
+	if err != nil {
+		return nil, err
+	}
+	if len(tags) == 0 {
+		return nil, nil
+	}
+
+	var idTags []string
+	for _, tag := range tags {
+		idTags = append(idTags, strings.ToUpper(tag.IdTag))
+	}
+
+	collection := connection.Database(m.database).Collection(collectionTransactions)
+	filter := bson.D{
+		{"id_tag", bson.D{{"$in", idTags}}},
+		{"is_finished", false},
+	}
+	var transactions []models.Transaction
+	cursor, err := collection.Find(m.ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if err = cursor.All(m.ctx, &transactions); err != nil {
+		return nil, err
+	}
+	return transactions, nil
 }

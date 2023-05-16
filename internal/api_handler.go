@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
 	"net/http"
+	"strings"
 )
 
 type CallType string
@@ -20,6 +21,7 @@ const (
 	RegisterUser         CallType = "RegisterUser"
 	GetChargePoints      CallType = "GetChargePoints"
 	CentralSystemCommand CallType = "CentralSystemCommand"
+	ActiveTransactions   CallType = "ActiveTransactions"
 )
 
 type Call struct {
@@ -63,16 +65,19 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		return nil, http.StatusOK
 	}
 
+	userId := ""
 	var data interface{}
 	var err error
 	status := http.StatusOK
 
 	if ac.CallType != AuthenticateUser && ac.CallType != RegisterUser {
-		if err = h.checkToken(ac.Token); err != nil {
-			h.logger.Error("invalid token", err)
+		user, err := h.checkToken(ac.Token)
+		if err != nil {
+			h.logger.Error("token check failed", err)
 			status = http.StatusUnauthorized
 			return nil, status
 		}
+		userId = user.UserId
 	}
 
 	switch ac.CallType {
@@ -115,6 +120,12 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		data, err = h.database.GetChargePoints()
 		if err != nil {
 			h.logger.Error("get charge points", err)
+			status = http.StatusInternalServerError
+		}
+	case ActiveTransactions:
+		data, err = h.database.GetActiveTransactions(userId)
+		if err != nil {
+			h.logger.Error("get active transactions", err)
 			status = http.StatusInternalServerError
 		}
 	case CentralSystemCommand:
@@ -194,17 +205,34 @@ func (h *Handler) authenticateUser(username, password string) (*models.User, err
 	return userData, nil
 }
 
-func (h *Handler) checkToken(token string) error {
+func (h *Handler) checkToken(token string) (*models.User, error) {
 	if token == "" {
-		return fmt.Errorf("empty token")
+		return nil, fmt.Errorf("empty token")
+	}
+	user, _ := h.database.CheckToken(token)
+	if user != nil {
+		return user, nil
 	}
 	if h.firebase != nil {
-		err := h.firebase.CheckToken(token)
-		if err == nil {
-			return nil
+		userId, _ := h.firebase.CheckToken(token)
+		if userId != "" {
+			user, _ := h.database.GetUserById(userId)
+			if user == nil {
+				username := fmt.Sprintf("user_%s", h.generateKey(5))
+				user = &models.User{
+					Username: username,
+					Name:     "Firebase user",
+					UserId:   userId,
+				}
+				err := h.database.AddUser(user)
+				if err != nil {
+					return nil, fmt.Errorf("adding firebase user: %s", err)
+				}
+			}
+			return user, nil
 		}
 	}
-	return h.database.CheckToken(token)
+	return nil, fmt.Errorf("user not found")
 }
 
 func (h *Handler) generatePasswordHash(password string) string {
@@ -280,10 +308,11 @@ func (h *Handler) HandleUserRequest(request *models.UserRequest) ([]byte, error)
 		tags = make([]models.UserTag, 0)
 	}
 	if len(tags) == 0 {
+		newIdTag := strings.ToUpper(h.generateKey(20))
 		newTag := models.UserTag{
 			UserId:    request.UserId,
 			Username:  user.Username,
-			IdTag:     h.generateKey(20),
+			IdTag:     newIdTag,
 			IsEnabled: true,
 		}
 		err = h.database.AddUserTag(&newTag)
