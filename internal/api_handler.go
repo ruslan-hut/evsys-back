@@ -336,6 +336,9 @@ func (h *Handler) HandleUserRequest(request *models.UserRequest) ([]byte, error)
 		case models.StartTransaction:
 			command.FeatureName = "RemoteStartTransaction"
 			command.Payload = idTag
+		case models.StopTransaction:
+			command.FeatureName = "RemoteStopTransaction"
+			command.Payload = fmt.Sprintf("%d", request.TransactionId)
 		default:
 			response = models.NewCentralSystemResponse(models.Error, fmt.Sprintf("unknown command %s", request.Command))
 			return getByteData(response)
