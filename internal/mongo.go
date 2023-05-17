@@ -21,6 +21,7 @@ const (
 	collectionUsers        = "users"
 	collectionUserTags     = "user_tags"
 	collectionChargePoints = "charge_points"
+	collectionConnectors   = "connectors"
 	collectionTransactions = "transactions"
 )
 
@@ -329,6 +330,39 @@ func (m *MongoDB) GetChargePoints() (interface{}, error) {
 	return chargePoints, nil
 }
 
+func (m *MongoDB) GetChargePoint(id string) (*models.ChargePoint, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionChargePoints)
+	filter := bson.D{{"charge_point_id", id}}
+	var chargePoint models.ChargePoint
+	if err = collection.FindOne(m.ctx, filter).Decode(&chargePoint); err != nil {
+		return nil, err
+	}
+	return &chargePoint, nil
+}
+
+// GetConnector get single connector by charge point id and connector id
+func (m *MongoDB) GetConnector(chargePointId string, connectorId int) (*models.Connector, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionConnectors)
+	filter := bson.D{{"charge_point_id", chargePointId}, {"connector_id", connectorId}}
+	var connector models.Connector
+	if err = collection.FindOne(m.ctx, filter).Decode(&connector); err != nil {
+		return nil, err
+	}
+	return &connector, nil
+}
+
 func (m *MongoDB) GetTransaction(id int) (*models.Transaction, error) {
 	connection, err := m.connect()
 	if err != nil {
@@ -345,7 +379,7 @@ func (m *MongoDB) GetTransaction(id int) (*models.Transaction, error) {
 	return &transaction, nil
 }
 
-func (m *MongoDB) GetActiveTransactions(userId string) ([]models.Transaction, error) {
+func (m *MongoDB) GetActiveTransactions(userId string) ([]models.ChargeState, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -378,5 +412,34 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]models.Transaction, er
 	if err = cursor.All(m.ctx, &transactions); err != nil {
 		return nil, err
 	}
-	return transactions, nil
+
+	var chargeStates []models.ChargeState
+	for _, transaction := range transactions {
+
+		chargePoint, err := m.GetChargePoint(transaction.ChargePointId)
+		if err != nil {
+			continue
+		}
+
+		connector, err := m.GetConnector(transaction.ChargePointId, transaction.ConnectorId)
+		if err != nil {
+			continue
+		}
+
+		chargeStates = append(chargeStates, models.ChargeState{
+			TransactionId:      transaction.TransactionId,
+			ConnectorId:        transaction.ConnectorId,
+			Connector:          "",
+			ChargePointId:      transaction.ChargePointId,
+			ChargePointTitle:   chargePoint.Title,
+			ChargePointAddress: chargePoint.Address,
+			TimeStarted:        transaction.TimeStart,
+			Duration:           int(time.Since(transaction.TimeStart).Seconds()),
+			MeterStart:         transaction.MeterStart,
+			Consumed:           0,
+			Status:             connector.Status,
+			IsCharging:         transaction.IsFinished == false,
+		})
+	}
+	return chargeStates, nil
 }
