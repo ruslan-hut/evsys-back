@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"time"
 )
 
 const (
@@ -228,9 +227,8 @@ func (s *Server) getToken(r *http.Request) string {
 type SubscriptionType string
 
 const (
-	Broadcast  SubscriptionType = "broadcast"
-	UserEvent  SubscriptionType = "user-event"
-	pingPeriod                  = 30 * time.Second
+	Broadcast SubscriptionType = "broadcast"
+	UserEvent SubscriptionType = "user-event"
 )
 
 type Pool struct {
@@ -348,26 +346,6 @@ func (c *Client) readPump() {
 	}
 }
 
-func (c *Client) checkConnection() {
-	ticker := time.NewTicker(pingPeriod)
-	defer func() {
-		ticker.Stop()
-		c.close()
-	}()
-	for {
-		select {
-		case <-ticker.C:
-			if c.isClosed {
-				return
-			}
-			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
-				c.logger.Error(fmt.Sprintf("check connection %s", c.id), err)
-				return
-			}
-		}
-	}
-}
-
 func (c *Client) sendErrorResponse(info string) {
 	response := models.WsResponse{
 		Status: models.Error,
@@ -409,5 +387,4 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.P
 
 	go client.writePump()
 	go client.readPump()
-	go client.checkConnection()
 }

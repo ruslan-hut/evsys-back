@@ -19,7 +19,7 @@ func NewCentralSystem(url string) *CentralSystem {
 }
 
 func (cs *CentralSystem) SendCommand(command *models.CentralSystemCommand) (*models.CentralSystemResponse, error) {
-	log.Printf("SendCommand: %v", command)
+	log.Printf("* SendCommand: %v", command)
 	data, err := json.Marshal(command)
 	if err != nil {
 		return nil, fmt.Errorf("error marshalling command: %v", err)
