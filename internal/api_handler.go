@@ -269,38 +269,19 @@ func (h *Handler) HandleUserRequest(request *models.UserRequest) ([]byte, error)
 		return getByteData(response)
 	}
 
-	if request.UserId == "" {
-		response = models.NewCentralSystemResponse(models.Error, "empty user id")
+	if request.Token == "" {
+		response = models.NewCentralSystemResponse(models.Error, "empty token")
 		return getByteData(response)
 	}
 
-	user, err := h.database.GetUserById(request.UserId)
+	user, err := h.checkToken(request.Token)
 	if err != nil {
-		h.logger.Error("getting user from database", err)
-	}
-	if user == nil {
-		username := fmt.Sprintf("user_%s", h.generateKey(5))
-		user = &models.User{
-			Username: username,
-			Name:     request.Username,
-			UserId:   request.UserId,
-		}
-		err = h.database.AddUser(user)
-		if err != nil {
-			h.logger.Error("adding user to database", err)
-			response = models.NewCentralSystemResponse(models.Error, "failed to add user to database")
-			return getByteData(response)
-		}
-	}
-	if user.Name != request.Username {
-		user.Name = request.Username
-		err = h.database.UpdateUser(user)
-		if err != nil {
-			h.logger.Error("updating user in database", err)
-		}
+		h.logger.Error("invalid token", err)
+		response = models.NewCentralSystemResponse(models.Error, "invalid token")
+		return getByteData(response)
 	}
 
-	tags, err := h.database.GetUserTags(request.UserId)
+	tags, err := h.database.GetUserTags(user.UserId)
 	if err != nil {
 		h.logger.Error("getting user tags from database", err)
 	}
@@ -310,7 +291,7 @@ func (h *Handler) HandleUserRequest(request *models.UserRequest) ([]byte, error)
 	if len(tags) == 0 {
 		newIdTag := strings.ToUpper(h.generateKey(20))
 		newTag := models.UserTag{
-			UserId:    request.UserId,
+			UserId:    user.UserId,
 			Username:  user.Username,
 			IdTag:     newIdTag,
 			IsEnabled: true,
