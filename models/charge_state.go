@@ -15,4 +15,5 @@ type ChargeState struct {
 	Consumed           int       `json:"consumed" bson:"consumed"`
 	Status             string    `json:"status" bson:"status"`
 	IsCharging         bool      `json:"is_charging" bson:"is_charging"`
+	CanStop            bool      `json:"can_stop" bson:"can_stop"`
 }

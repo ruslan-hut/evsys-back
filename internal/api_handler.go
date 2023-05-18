@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -22,6 +23,7 @@ const (
 	GetChargePoints      CallType = "GetChargePoints"
 	CentralSystemCommand CallType = "CentralSystemCommand"
 	ActiveTransactions   CallType = "ActiveTransactions"
+	TransactionInfo      CallType = "TransactionInfo"
 )
 
 type Call struct {
@@ -127,6 +129,18 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		if err != nil {
 			h.logger.Error("get active transactions", err)
 			status = http.StatusInternalServerError
+		}
+	case TransactionInfo:
+		id, err := strconv.Atoi(string(ac.Payload))
+		if err != nil {
+			h.logger.Error("decoding transaction id", err)
+			status = http.StatusBadRequest
+		} else {
+			data, err = h.database.GetTransaction(id)
+			if err != nil {
+				h.logger.Error("get transaction", err)
+				status = http.StatusInternalServerError
+			}
 		}
 	case CentralSystemCommand:
 		if ac.Payload == nil {

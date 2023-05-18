@@ -363,7 +363,7 @@ func (m *MongoDB) GetConnector(chargePointId string, connectorId int) (*models.C
 	return &connector, nil
 }
 
-func (m *MongoDB) GetTransaction(id int) (*models.Transaction, error) {
+func (m *MongoDB) GetTransaction(id int) (*models.ChargeState, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -376,7 +376,34 @@ func (m *MongoDB) GetTransaction(id int) (*models.Transaction, error) {
 	if err = collection.FindOne(m.ctx, filter).Decode(&transaction); err != nil {
 		return nil, err
 	}
-	return &transaction, nil
+
+	var chargeState models.ChargeState
+
+	chargePoint, err := m.GetChargePoint(transaction.ChargePointId)
+	if err != nil {
+		return nil, fmt.Errorf("get charge point: %v", err)
+	}
+	connector, err := m.GetConnector(transaction.ChargePointId, transaction.ConnectorId)
+	if err != nil {
+		return nil, fmt.Errorf("get connector: %v", err)
+	}
+	chargeState = models.ChargeState{
+		TransactionId:      transaction.TransactionId,
+		ConnectorId:        transaction.ConnectorId,
+		Connector:          "",
+		ChargePointId:      transaction.ChargePointId,
+		ChargePointTitle:   chargePoint.Title,
+		ChargePointAddress: chargePoint.Address,
+		TimeStarted:        transaction.TimeStart,
+		Duration:           int(time.Since(transaction.TimeStart).Seconds()),
+		MeterStart:         transaction.MeterStart,
+		Consumed:           0,
+		Status:             connector.Status,
+		IsCharging:         transaction.IsFinished == false,
+		CanStop:            false,
+	}
+
+	return &chargeState, nil
 }
 
 func (m *MongoDB) GetActiveTransactions(userId string) ([]models.ChargeState, error) {
@@ -439,6 +466,7 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]models.ChargeState, er
 			Consumed:           0,
 			Status:             connector.Status,
 			IsCharging:         transaction.IsFinished == false,
+			CanStop:            true,
 		})
 	}
 	return chargeStates, nil

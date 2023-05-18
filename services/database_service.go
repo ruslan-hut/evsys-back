@@ -20,7 +20,7 @@ type Database interface {
 
 	GetChargePoints() (interface{}, error)
 
-	GetTransaction(id int) (*models.Transaction, error)
+	GetTransaction(id int) (*models.ChargeState, error)
 	GetActiveTransactions(userId string) ([]models.ChargeState, error)
 }
 
