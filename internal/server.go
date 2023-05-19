@@ -410,6 +410,10 @@ func (c *Client) listenForTransactionStart() {
 	ticker := time.NewTicker(5 * time.Second)
 	timeout := time.NewTimer(2 * time.Minute)
 	timeStart := time.Now()
+	defer func() {
+		ticker.Stop()
+		timeout.Stop()
+	}()
 	for {
 		select {
 		case <-ticker.C:
@@ -420,16 +424,12 @@ func (c *Client) listenForTransactionStart() {
 			}
 			if transaction.TransactionId > -1 {
 				c.sendResponse(models.Success, fmt.Sprintf("transaction started: %v", transaction.TransactionId))
-				ticker.Stop()
-				timeout.Stop()
 				return
 			} else {
 				c.sendResponse(models.Waiting, "waiting for transaction start")
 			}
 		case <-timeout.C:
 			c.sendResponse(models.Error, "timeout")
-			ticker.Stop()
-			timeout.Stop()
 			return
 		}
 	}
