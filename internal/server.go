@@ -251,7 +251,7 @@ type SubscriptionType string
 
 const (
 	Broadcast SubscriptionType = "broadcast"
-	UserEvent SubscriptionType = "user-event"
+	//UserEvent SubscriptionType = "user-event"
 )
 
 type Pool struct {
@@ -317,6 +317,7 @@ type Client struct {
 	id             string
 	subscription   SubscriptionType
 	isClosed       bool
+	isWaiting      bool
 	requestHandler func(request *models.UserRequest) error
 }
 
@@ -396,9 +397,13 @@ func (c *Client) readPump() {
 
 		switch userRequest.Command {
 		case models.StartTransaction:
-			go c.listenForTransactionStart()
+			timeStart, _ := c.statusReader.SaveStatus(tag)
+			go c.listenForTransactionStart(timeStart)
 		case models.CheckStatus:
-			c.logger.Info(fmt.Sprintf("check status: %v", tag))
+			timeStart, ok := c.statusReader.GetStatus(tag)
+			if ok {
+				go c.listenForTransactionStart(timeStart)
+			}
 		default:
 			c.sendResponse(models.Success, "request handled")
 		}
@@ -406,17 +411,29 @@ func (c *Client) readPump() {
 	}
 }
 
-func (c *Client) listenForTransactionStart() {
+func (c *Client) listenForTransactionStart(timeStart time.Time) {
+
+	duration := 120 - time.Since(timeStart).Seconds()
+	if duration <= 0 {
+		return
+	}
 	ticker := time.NewTicker(5 * time.Second)
-	timeout := time.NewTimer(2 * time.Minute)
-	timeStart := time.Now()
+	timeout := time.NewTimer(time.Duration(duration) * time.Second)
+
 	defer func() {
 		ticker.Stop()
 		timeout.Stop()
+		if !c.isClosed {
+			c.statusReader.ClearStatus(c.id)
+		}
 	}()
+
 	for {
 		select {
 		case <-ticker.C:
+			if c.isClosed {
+				return
+			}
 			transaction, err := c.statusReader.GetTransaction(c.id, timeStart)
 			if err != nil {
 				c.logger.Error("get transaction", err)

@@ -10,6 +10,7 @@ import (
 type StatusReader struct {
 	logger   services.LogHandler
 	database services.Database
+	status   map[string]time.Time
 }
 
 func (sr *StatusReader) SetLogger(logger services.LogHandler) {
@@ -21,7 +22,9 @@ func (sr *StatusReader) SetDatabase(database services.Database) {
 }
 
 func NewStatusReader() *StatusReader {
-	statusReader := StatusReader{}
+	statusReader := StatusReader{
+		status: make(map[string]time.Time),
+	}
 	return &statusReader
 }
 
@@ -34,4 +37,22 @@ func (sr *StatusReader) GetTransaction(userId string, after time.Time) (*models.
 		return &models.Transaction{TransactionId: -1}, nil
 	}
 	return transaction, nil
+}
+
+func (sr *StatusReader) SaveStatus(userId string) (time.Time, error) {
+	timeStart := time.Now()
+	sr.status[userId] = timeStart
+	return timeStart, nil
+}
+
+func (sr *StatusReader) GetStatus(userId string) (time.Time, bool) {
+	status, ok := sr.status[userId]
+	if !ok {
+		return time.Now(), false
+	}
+	return status, true
+}
+
+func (sr *StatusReader) ClearStatus(userId string) {
+	delete(sr.status, userId)
 }
