@@ -1,8 +1,6 @@
 package internal
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"evsys-back/models"
 	"evsys-back/services"
@@ -188,83 +186,44 @@ func (h *Handler) handleCentralSystemCommand(payload []byte) (*models.CentralSys
 	if err != nil {
 		return nil, fmt.Errorf("decoding central system command: %s", err)
 	}
-	if h.centralSystem != nil {
-		response, err := h.centralSystem.SendCommand(&command)
-		if err != nil {
-			return nil, fmt.Errorf("sending command to central system: %s", err)
-		}
-		return response, nil
-	} else {
-		return models.NewCentralSystemResponse(models.Error, "central system is not connected"), nil
+	if h.centralSystem == nil {
+		return nil, fmt.Errorf("central system is not connected")
 	}
+	err = h.centralSystem.SendCommand(&command)
+	if err != nil {
+		return nil, fmt.Errorf("sending command to central system: %s", err)
+	}
+	return models.NewCentralSystemResponse(models.Success, fmt.Sprintf("command %s is sent to %s:%s", command.FeatureName, command.ChargePointId, command.ConnectorId)), nil
 }
 
-func (h *Handler) HandleUserRequest(request *models.UserRequest) ([]byte, error) {
-	var response *models.CentralSystemResponse
+func (h *Handler) HandleUserRequest(request *models.UserRequest) error {
 	var err error
 
-	if h.centralSystem != nil {
-
-		command := models.CentralSystemCommand{
-			ChargePointId: request.ChargePointId,
-			ConnectorId:   request.ConnectorId,
-		}
-
-		switch request.Command {
-		case models.StartTransaction:
-			command.FeatureName = "RemoteStartTransaction"
-			command.Payload = request.Token
-		case models.StopTransaction:
-			command.FeatureName = "RemoteStopTransaction"
-			command.Payload = fmt.Sprintf("%d", request.TransactionId)
-		default:
-			response = models.NewCentralSystemResponse(models.Error, fmt.Sprintf("unknown command %s", request.Command))
-			return getByteData(response)
-		}
-
-		response, err = h.centralSystem.SendCommand(&command)
-		if err != nil {
-			h.logger.Error("sending command to central system", err)
-			response = models.NewCentralSystemResponse(models.Error, "failed to send command")
-			return getByteData(response)
-		}
-
-		response = models.NewCentralSystemResponse(models.Success, fmt.Sprintf("command %s was sent for %s connector %v", request.Command, request.ChargePointId, request.ConnectorId))
-	} else {
-		response = models.NewCentralSystemResponse(models.Error, "central system is not connected")
+	if h.centralSystem == nil {
+		return fmt.Errorf("central system is not connected")
 	}
 
-	return getByteData(response)
-}
+	command := models.CentralSystemCommand{
+		ChargePointId: request.ChargePointId,
+		ConnectorId:   request.ConnectorId,
+	}
 
-func getByteData(data interface{}) ([]byte, error) {
-	byteData, err := json.Marshal(data)
+	switch request.Command {
+	case models.StartTransaction:
+		command.FeatureName = "RemoteStartTransaction"
+		command.Payload = request.Token
+	case models.StopTransaction:
+		command.FeatureName = "RemoteStopTransaction"
+		command.Payload = fmt.Sprintf("%d", request.TransactionId)
+	default:
+		return fmt.Errorf("unknown command %s", request.Command)
+	}
+
+	err = h.centralSystem.SendCommand(&command)
 	if err != nil {
-		return nil, fmt.Errorf("encoding data: %s", err)
+		h.logger.Error("sending command to central system", err)
+		return fmt.Errorf("sending command to central system: %s", err)
 	}
-	return byteData, nil
-}
 
-func (h *Handler) getUserById(id string) (user *models.User) {
-	var err error
-	if h.database != nil {
-		user, err = h.database.GetUserById(id)
-		if err != nil {
-			h.logger.Error("getting user", err)
-		}
-	}
-	return user
-}
-
-func (h *Handler) generateKey(length int) string {
-	b := make([]byte, 20)
-	_, err := rand.Read(b)
-	if err != nil {
-		return ""
-	}
-	s := hex.EncodeToString(b)
-	if len(s) > length {
-		s = s[:length]
-	}
-	return s
+	return nil
 }

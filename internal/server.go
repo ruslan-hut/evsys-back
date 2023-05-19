@@ -32,7 +32,7 @@ type Server struct {
 	httpServer *http.Server
 	auth       services.Auth
 	apiHandler func(ac *Call) ([]byte, int)
-	wsHandler  func(request *models.UserRequest) ([]byte, error)
+	wsHandler  func(request *models.UserRequest) error
 	logger     services.LogHandler
 	upgrader   websocket.Upgrader
 	pool       *Pool
@@ -70,7 +70,7 @@ func (s *Server) SetApiHandler(handler func(ac *Call) ([]byte, int)) {
 	s.apiHandler = handler
 }
 
-func (s *Server) SetWsHandler(handler func(request *models.UserRequest) ([]byte, error)) {
+func (s *Server) SetWsHandler(handler func(request *models.UserRequest) error) {
 	s.wsHandler = handler
 }
 
@@ -309,7 +309,7 @@ type Client struct {
 	id             string
 	subscription   SubscriptionType
 	isClosed       bool
-	requestHandler func(request *models.UserRequest) ([]byte, error)
+	requestHandler func(request *models.UserRequest) error
 }
 
 func (c *Client) writePump() {
@@ -379,9 +379,9 @@ func (c *Client) readPump() {
 		}
 		userRequest.Token = tag
 
-		data, err := c.requestHandler(&userRequest)
+		err = c.requestHandler(&userRequest)
 		if err == nil {
-			c.send <- data
+			c.sendSuccessResponse()
 		} else {
 			c.logger.Error("read pump: handle request", err)
 		}
@@ -398,6 +398,19 @@ func (c *Client) sendErrorResponse(info string) {
 		c.send <- data
 	} else {
 		c.logger.Error("send error response", err)
+	}
+}
+
+func (c *Client) sendSuccessResponse() {
+	response := models.WsResponse{
+		Status: models.Success,
+		Info:   "",
+	}
+	data, err := json.Marshal(response)
+	if err == nil {
+		c.send <- data
+	} else {
+		c.logger.Error("send success response", err)
 	}
 }
 

@@ -18,16 +18,16 @@ func NewCentralSystem(url string) *CentralSystem {
 	return &CentralSystem{url: url}
 }
 
-func (cs *CentralSystem) SendCommand(command *models.CentralSystemCommand) (*models.CentralSystemResponse, error) {
+func (cs *CentralSystem) SendCommand(command *models.CentralSystemCommand) error {
 	log.Printf("* SendCommand: %v", command)
 	data, err := json.Marshal(command)
 	if err != nil {
-		return nil, fmt.Errorf("error marshalling command: %v", err)
+		return fmt.Errorf("error marshalling command: %v", err)
 	}
 
 	req, err := http.NewRequest("POST", cs.url, bytes.NewBuffer(data))
 	if err != nil {
-		return nil, fmt.Errorf("error creating request: %v", err)
+		return fmt.Errorf("error creating request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -43,8 +43,8 @@ func (cs *CentralSystem) SendCommand(command *models.CentralSystemCommand) (*mod
 	}
 
 	if err != nil || resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("error sending command: %v; response status: %v", err, resp.StatusCode)
+		return fmt.Errorf("error sending command: %v; response status: %v", err, resp.StatusCode)
 	}
 
-	return models.NewCentralSystemResponse(models.Success, ""), nil
+	return nil
 }
