@@ -7,10 +7,8 @@ import (
 	"evsys-back/models"
 	"evsys-back/services"
 	"fmt"
-	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"strconv"
-	"strings"
 )
 
 type CallType string
@@ -37,7 +35,7 @@ type Handler struct {
 	logger        services.LogHandler
 	database      services.Database
 	centralSystem services.CentralSystemService
-	firebase      services.FirebaseAuth
+	auth          services.Auth
 }
 
 func (h *Handler) SetLogger(logger services.LogHandler) {
@@ -52,8 +50,8 @@ func (h *Handler) SetCentralSystem(centralSystem services.CentralSystemService) 
 	h.centralSystem = centralSystem
 }
 
-func (h *Handler) SetFirebase(firebase services.FirebaseAuth) {
-	h.firebase = firebase
+func (h *Handler) SetAuth(auth services.Auth) {
+	h.auth = auth
 }
 
 func NewApiHandler() *Handler {
@@ -73,7 +71,12 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 	status := http.StatusOK
 
 	if ac.CallType != AuthenticateUser && ac.CallType != RegisterUser {
-		user, err := h.checkToken(ac.Token)
+		if h.auth == nil {
+			h.logger.Warn("authenticator not initialized")
+			status = http.StatusInternalServerError
+			return nil, status
+		}
+		user, err := h.auth.GetUser(ac.Token)
 		if err != nil {
 			h.logger.Error("token check failed", err)
 			status = http.StatusUnauthorized
@@ -101,7 +104,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			h.logger.Error("decoding user", err)
 			status = http.StatusUnsupportedMediaType
 		} else {
-			data, err = h.authenticateUser(userData.Username, userData.Password)
+			data, err = h.auth.AuthenticateUser(userData.Username, userData.Password)
 			if err != nil {
 				h.logger.Error("user authentication", err)
 				status = http.StatusUnauthorized
@@ -113,9 +116,10 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			h.logger.Error("decoding user", err)
 			status = http.StatusUnsupportedMediaType
 		} else {
-			err, status = h.registerUser(userData)
+			err = h.auth.RegisterUser(userData)
 			if err != nil {
 				h.logger.Error("user registration", err)
+				status = http.StatusInternalServerError
 			}
 		}
 	case GetChargePoints:
@@ -178,86 +182,6 @@ func (h *Handler) unmarshallUserData(data []byte) (*models.User, error) {
 	return &user, nil
 }
 
-func (h *Handler) registerUser(user *models.User) (error, int) {
-	if user.Password == "" {
-		return fmt.Errorf("empty password"), http.StatusBadRequest
-	}
-	if user.Username == "" {
-		return fmt.Errorf("empty username"), http.StatusBadRequest
-	}
-	existedUser, _ := h.database.GetUser(user.Username)
-	if existedUser != nil {
-		return nil, http.StatusConflict
-	}
-	user.Password = h.generatePasswordHash(user.Password)
-	if user.Password == "" {
-		return fmt.Errorf("empty password hash"), http.StatusInternalServerError
-	}
-	err := h.database.AddUser(user)
-	if err != nil {
-		return err, http.StatusInternalServerError
-	}
-	return nil, http.StatusOK
-}
-
-func (h *Handler) authenticateUser(username, password string) (*models.User, error) {
-	userData, err := h.database.GetUser(username)
-	if err != nil {
-		return nil, err
-	}
-	result := bcrypt.CompareHashAndPassword([]byte(userData.Password), []byte(password))
-	if result == nil {
-		token := h.generateKey(32)
-		userData.Token = token
-		err = h.database.UpdateUser(userData)
-		if err != nil {
-			return nil, err
-		}
-	}
-	userData.Password = ""
-	h.logger.Info("user authorized: " + username)
-	return userData, nil
-}
-
-func (h *Handler) checkToken(token string) (*models.User, error) {
-	if token == "" {
-		return nil, fmt.Errorf("empty token")
-	}
-	user, _ := h.database.CheckToken(token)
-	if user != nil {
-		return user, nil
-	}
-	if h.firebase != nil {
-		userId, _ := h.firebase.CheckToken(token)
-		if userId != "" {
-			user, _ := h.database.GetUserById(userId)
-			if user == nil {
-				username := fmt.Sprintf("user_%s", h.generateKey(5))
-				user = &models.User{
-					Username: username,
-					Name:     "Firebase user",
-					UserId:   userId,
-				}
-				err := h.database.AddUser(user)
-				if err != nil {
-					return nil, fmt.Errorf("adding firebase user: %s", err)
-				}
-			}
-			return user, nil
-		}
-	}
-	return nil, fmt.Errorf("user not found")
-}
-
-func (h *Handler) generatePasswordHash(password string) string {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		h.logger.Error("generating password hash", err)
-		return ""
-	}
-	return string(hash)
-}
-
 func (h *Handler) handleCentralSystemCommand(payload []byte) (*models.CentralSystemResponse, error) {
 	var command models.CentralSystemCommand
 	err := json.Unmarshal(payload, &command)
@@ -277,48 +201,7 @@ func (h *Handler) handleCentralSystemCommand(payload []byte) (*models.CentralSys
 
 func (h *Handler) HandleUserRequest(request *models.UserRequest) ([]byte, error) {
 	var response *models.CentralSystemResponse
-
-	if h.database == nil {
-		response = models.NewCentralSystemResponse(models.Error, "database is not connected")
-		return getByteData(response)
-	}
-
-	if request.Token == "" {
-		response = models.NewCentralSystemResponse(models.Error, "empty token")
-		return getByteData(response)
-	}
-
-	user, err := h.checkToken(request.Token)
-	if err != nil {
-		h.logger.Error("invalid token", err)
-		response = models.NewCentralSystemResponse(models.Error, "invalid token")
-		return getByteData(response)
-	}
-
-	tags, err := h.database.GetUserTags(user.UserId)
-	if err != nil {
-		h.logger.Error("getting user tags from database", err)
-	}
-	if tags == nil {
-		tags = make([]models.UserTag, 0)
-	}
-	if len(tags) == 0 {
-		newIdTag := strings.ToUpper(h.generateKey(20))
-		newTag := models.UserTag{
-			UserId:    user.UserId,
-			Username:  user.Username,
-			IdTag:     newIdTag,
-			IsEnabled: true,
-		}
-		err = h.database.AddUserTag(&newTag)
-		if err != nil {
-			h.logger.Error("adding user tag to database", err)
-			response = models.NewCentralSystemResponse(models.Error, "failed to add user tag to database")
-			return getByteData(response)
-		}
-		tags = append(tags, newTag)
-	}
-	idTag := tags[0].IdTag
+	var err error
 
 	if h.centralSystem != nil {
 
@@ -330,7 +213,7 @@ func (h *Handler) HandleUserRequest(request *models.UserRequest) ([]byte, error)
 		switch request.Command {
 		case models.StartTransaction:
 			command.FeatureName = "RemoteStartTransaction"
-			command.Payload = idTag
+			command.Payload = request.Token
 		case models.StopTransaction:
 			command.FeatureName = "RemoteStopTransaction"
 			command.Payload = fmt.Sprintf("%d", request.TransactionId)

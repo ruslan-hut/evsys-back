@@ -23,9 +23,9 @@ type Logger struct {
 	category       string
 }
 
-func NewLogger(category string) *Logger {
+func NewLogger(category string, debug bool) *Logger {
 	return &Logger{
-		debugMode: false,
+		debugMode: debug,
 		category:  category,
 	}
 }

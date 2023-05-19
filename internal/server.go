@@ -30,6 +30,7 @@ const (
 type Server struct {
 	conf       *config.Config
 	httpServer *http.Server
+	auth       services.Auth
 	apiHandler func(ac *Call) ([]byte, int)
 	wsHandler  func(request *models.UserRequest) ([]byte, error)
 	logger     services.LogHandler
@@ -59,6 +60,10 @@ func NewServer(conf *config.Config) *Server {
 	}
 
 	return &server
+}
+
+func (s *Server) SetAuth(auth services.Auth) {
+	s.auth = auth
 }
 
 func (s *Server) SetApiHandler(handler func(ac *Call) ([]byte, int)) {
@@ -245,6 +250,7 @@ const (
 
 type Pool struct {
 	register   chan *Client
+	active     chan *Client
 	unregister chan *Client
 	clients    map[*Client]bool
 	broadcast  chan []byte
@@ -253,7 +259,7 @@ type Pool struct {
 }
 
 func NewPool() *Pool {
-	logger := NewLogger("pool")
+	logger := NewLogger("pool", false)
 	return &Pool{
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
@@ -296,6 +302,7 @@ func (p *Pool) Start() {
 
 type Client struct {
 	ws             *websocket.Conn
+	auth           services.Auth
 	send           chan []byte
 	logger         services.LogHandler
 	pool           *Pool
@@ -349,6 +356,29 @@ func (c *Client) readPump() {
 			continue
 		}
 
+		if c.auth == nil {
+			c.sendErrorResponse("authorization not configured")
+			continue
+		}
+
+		if userRequest.Token == "" {
+			c.sendErrorResponse("token not found")
+			continue
+		}
+
+		user, err := c.auth.GetUser(userRequest.Token)
+		if err != nil {
+			c.sendErrorResponse(fmt.Sprintf("check token: %v", err))
+			continue
+		}
+
+		tag, err := c.auth.GetUserTag(user.UserId)
+		if err != nil {
+			c.sendErrorResponse(fmt.Sprintf("get user tag: %v", err))
+			continue
+		}
+		userRequest.Token = tag
+
 		data, err := c.requestHandler(&userRequest)
 		if err == nil {
 			c.send <- data
@@ -388,6 +418,7 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.P
 
 	client := &Client{
 		ws:             ws,
+		auth:           s.auth,
 		send:           make(chan []byte, 256),
 		logger:         s.logger,
 		pool:           s.pool,

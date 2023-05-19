@@ -8,7 +8,7 @@ import (
 
 func main() {
 
-	logger := internal.NewLogger("internal")
+	logger := internal.NewLogger("internal", false)
 
 	conf, err := config.GetConfig()
 	if err != nil {
@@ -34,13 +34,9 @@ func main() {
 		logger.Info("central system is disabled")
 	}
 
-	apiLogger := internal.NewLogger("api")
-	apiLogger.SetDebugMode(conf.IsDebug)
-
-	api := internal.NewApiHandler()
-	api.SetLogger(apiLogger)
-	api.SetDatabase(mongo)
-	api.SetCentralSystem(cs)
+	auth := internal.NewAuthenticator()
+	auth.SetLogger(internal.NewLogger("auth", conf.IsDebug))
+	auth.SetDatabase(mongo)
 
 	if conf.FirebaseKey != "" {
 		firebase, err := internal.NewFirebase(conf.FirebaseKey)
@@ -48,17 +44,21 @@ func main() {
 			logger.Error("firebase client", err)
 			return
 		}
-		firebase.SetLogger(internal.NewLogger("firebase"))
-		api.SetFirebase(firebase)
+		firebase.SetLogger(internal.NewLogger("firebase", conf.IsDebug))
+		auth.SetFirebase(firebase)
 	}
 
-	serverLogger := internal.NewLogger("server")
-	serverLogger.SetDebugMode(conf.IsDebug)
+	api := internal.NewApiHandler()
+	api.SetLogger(internal.NewLogger("api", conf.IsDebug))
+	api.SetDatabase(mongo)
+	api.SetCentralSystem(cs)
+	api.SetAuth(auth)
 
 	server := internal.NewServer(conf)
-	server.SetLogger(serverLogger)
+	server.SetLogger(internal.NewLogger("server", conf.IsDebug))
 	server.SetApiHandler(api.HandleApiCall)
 	server.SetWsHandler(api.HandleUserRequest)
+	server.SetAuth(auth)
 
 	err = server.Start()
 	if err != nil {
