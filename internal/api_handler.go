@@ -215,6 +215,8 @@ func (h *Handler) HandleUserRequest(request *models.UserRequest) error {
 	case models.StopTransaction:
 		command.FeatureName = "RemoteStopTransaction"
 		command.Payload = fmt.Sprintf("%d", request.TransactionId)
+	case models.CheckStatus:
+		return nil
 	default:
 		return fmt.Errorf("unknown command %s", request.Command)
 	}

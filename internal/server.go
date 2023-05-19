@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -28,14 +29,15 @@ const (
 )
 
 type Server struct {
-	conf       *config.Config
-	httpServer *http.Server
-	auth       services.Auth
-	apiHandler func(ac *Call) ([]byte, int)
-	wsHandler  func(request *models.UserRequest) error
-	logger     services.LogHandler
-	upgrader   websocket.Upgrader
-	pool       *Pool
+	conf         *config.Config
+	httpServer   *http.Server
+	auth         services.Auth
+	statusReader services.StatusReader
+	apiHandler   func(ac *Call) ([]byte, int)
+	wsHandler    func(request *models.UserRequest) error
+	logger       services.LogHandler
+	upgrader     websocket.Upgrader
+	pool         *Pool
 }
 
 func NewServer(conf *config.Config) *Server {
@@ -72,6 +74,10 @@ func (s *Server) SetApiHandler(handler func(ac *Call) ([]byte, int)) {
 
 func (s *Server) SetWsHandler(handler func(request *models.UserRequest) error) {
 	s.wsHandler = handler
+}
+
+func (s *Server) SetStatusReader(statusReader services.StatusReader) {
+	s.statusReader = statusReader
 }
 
 func (s *Server) SetLogger(logger services.LogHandler) {
@@ -254,7 +260,7 @@ type Pool struct {
 	unregister chan *Client
 	clients    map[*Client]bool
 	broadcast  chan []byte
-	userEvent  chan []byte
+	userEvent  chan *models.WsResponse
 	logger     services.LogHandler
 }
 
@@ -265,7 +271,7 @@ func NewPool() *Pool {
 		unregister: make(chan *Client),
 		clients:    make(map[*Client]bool),
 		broadcast:  make(chan []byte),
-		userEvent:  make(chan []byte),
+		userEvent:  make(chan *models.WsResponse),
 		logger:     logger,
 	}
 }
@@ -275,6 +281,7 @@ func (p *Pool) Start() {
 		select {
 		case client := <-p.register:
 			p.clients[client] = true
+			client.sendResponse(models.Ping, "new connection")
 			p.logger.Info(fmt.Sprintf("registered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
 		case client := <-p.unregister:
 			if _, ok := p.clients[client]; ok {
@@ -292,8 +299,8 @@ func (p *Pool) Start() {
 			}
 		case message := <-p.userEvent:
 			for client := range p.clients {
-				if client.subscription == UserEvent {
-					client.send <- message
+				if client.id == message.UserId {
+					client.sendResponse(message.Status, message.Info)
 				}
 			}
 		}
@@ -303,6 +310,7 @@ func (p *Pool) Start() {
 type Client struct {
 	ws             *websocket.Conn
 	auth           services.Auth
+	statusReader   services.StatusReader
 	send           chan []byte
 	logger         services.LogHandler
 	pool           *Pool
@@ -325,7 +333,7 @@ func (c *Client) writePump() {
 			}
 			err := c.ws.WriteMessage(websocket.TextMessage, message)
 			if err != nil {
-				c.logger.Error(fmt.Sprintf("write message for %s", c.id), err)
+				c.logger.Error("write message", err)
 				return
 			}
 		}
@@ -352,65 +360,94 @@ func (c *Client) readPump() {
 		err = json.Unmarshal(message, &userRequest)
 		if err != nil {
 			c.logger.Error("read pump: unmarshal", err)
-			c.sendErrorResponse("invalid request")
+			c.sendResponse(models.Error, "invalid request")
 			continue
 		}
 
 		if c.auth == nil {
-			c.sendErrorResponse("authorization not configured")
+			c.sendResponse(models.Error, "authorization not configured")
 			continue
 		}
 
 		if userRequest.Token == "" {
-			c.sendErrorResponse("token not found")
+			c.sendResponse(models.Error, "token not found")
 			continue
 		}
 
 		user, err := c.auth.GetUser(userRequest.Token)
 		if err != nil {
-			c.sendErrorResponse(fmt.Sprintf("check token: %v", err))
+			c.sendResponse(models.Error, fmt.Sprintf("check token: %v", err))
 			continue
 		}
 
 		tag, err := c.auth.GetUserTag(user.UserId)
 		if err != nil {
-			c.sendErrorResponse(fmt.Sprintf("get user tag: %v", err))
+			c.sendResponse(models.Error, fmt.Sprintf("get user tag: %v", err))
 			continue
 		}
+		c.id = tag
 		userRequest.Token = tag
 
 		err = c.requestHandler(&userRequest)
-		if err == nil {
-			c.sendSuccessResponse()
-		} else {
+		if err != nil {
 			c.logger.Error("read pump: handle request", err)
+			continue
+		}
+
+		switch userRequest.Command {
+		case models.StartTransaction:
+			go c.listenForTransactionStart()
+		case models.CheckStatus:
+			c.logger.Info(fmt.Sprintf("check status: %v", tag))
+		default:
+			c.sendResponse(models.Success, "request handled")
+		}
+
+	}
+}
+
+func (c *Client) listenForTransactionStart() {
+	ticker := time.NewTicker(5 * time.Second)
+	timeout := time.NewTimer(2 * time.Minute)
+	timeStart := time.Now()
+	for {
+		select {
+		case <-ticker.C:
+			transaction, err := c.statusReader.GetTransaction(c.id, timeStart)
+			if err != nil {
+				c.logger.Error("get transaction", err)
+				continue
+			}
+			if transaction.TransactionId > -1 {
+				c.sendResponse(models.Success, fmt.Sprintf("transaction started: %v", transaction.TransactionId))
+				ticker.Stop()
+				timeout.Stop()
+				return
+			} else {
+				c.sendResponse(models.Waiting, "waiting for transaction start")
+			}
+		case <-timeout.C:
+			c.sendResponse(models.Error, "timeout")
+			ticker.Stop()
+			timeout.Stop()
+			return
 		}
 	}
 }
 
-func (c *Client) sendErrorResponse(info string) {
+func (c *Client) sendResponse(status models.ResponseStatus, info string) {
+	if c.isClosed {
+		return
+	}
 	response := models.WsResponse{
-		Status: models.Error,
+		Status: status,
 		Info:   info,
 	}
 	data, err := json.Marshal(response)
 	if err == nil {
 		c.send <- data
 	} else {
-		c.logger.Error("send error response", err)
-	}
-}
-
-func (c *Client) sendSuccessResponse() {
-	response := models.WsResponse{
-		Status: models.Success,
-		Info:   "",
-	}
-	data, err := json.Marshal(response)
-	if err == nil {
-		c.send <- data
-	} else {
-		c.logger.Error("send success response", err)
+		c.logger.Error("send response", err)
 	}
 }
 
@@ -432,10 +469,11 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.P
 	client := &Client{
 		ws:             ws,
 		auth:           s.auth,
+		statusReader:   s.statusReader,
 		send:           make(chan []byte, 256),
 		logger:         s.logger,
 		pool:           s.pool,
-		id:             r.RemoteAddr,
+		id:             "",
 		subscription:   Broadcast,
 		requestHandler: s.wsHandler,
 	}

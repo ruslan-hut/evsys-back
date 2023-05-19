@@ -471,3 +471,22 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]models.ChargeState, er
 	}
 	return chargeStates, nil
 }
+
+func (m *MongoDB) GetTransactionByTag(idTag string, timeStart time.Time) (*models.Transaction, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionTransactions)
+	filter := bson.D{
+		{"id_tag", strings.ToUpper(idTag)},
+		{"time_start", bson.D{{"$gte", timeStart}}},
+	}
+	var transaction models.Transaction
+	if err = collection.FindOne(m.ctx, filter).Decode(&transaction); err != nil {
+		return nil, err
+	}
+	return &transaction, nil
+}

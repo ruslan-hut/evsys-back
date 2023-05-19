@@ -5,6 +5,7 @@ type CommandName string
 const (
 	StartTransaction CommandName = "StartTransaction"
 	StopTransaction  CommandName = "StopTransaction"
+	CheckStatus      CommandName = "CheckStatus"
 )
 
 type UserRequest struct {

@@ -54,11 +54,16 @@ func main() {
 	api.SetCentralSystem(cs)
 	api.SetAuth(auth)
 
+	statusReader := internal.NewStatusReader()
+	statusReader.SetLogger(internal.NewLogger("status", conf.IsDebug))
+	statusReader.SetDatabase(mongo)
+
 	server := internal.NewServer(conf)
 	server.SetLogger(internal.NewLogger("server", conf.IsDebug))
 	server.SetApiHandler(api.HandleApiCall)
 	server.SetWsHandler(api.HandleUserRequest)
 	server.SetAuth(auth)
+	server.SetStatusReader(statusReader)
 
 	err = server.Start()
 	if err != nil {
