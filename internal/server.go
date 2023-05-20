@@ -413,11 +413,14 @@ func (c *Client) readPump() {
 
 func (c *Client) listenForTransactionStart(timeStart time.Time) {
 
-	duration := 120 - time.Since(timeStart).Seconds()
+	maxTimeout := 90
+	waitStep := 3
+
+	duration := maxTimeout - int(time.Since(timeStart).Seconds())
 	if duration <= 0 {
 		return
 	}
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(time.Duration(waitStep) * time.Second)
 	timeout := time.NewTimer(time.Duration(duration) * time.Second)
 
 	defer func() {
@@ -443,7 +446,13 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 				c.sendResponse(models.Success, fmt.Sprintf("transaction started: %v", transaction.TransactionId))
 				return
 			} else {
-				c.sendResponse(models.Waiting, "waiting for transaction start")
+				seconds := int(time.Since(timeStart).Seconds())
+				progress := seconds * 100 / maxTimeout
+				c.wsResponse(models.WsResponse{
+					Status:   models.Waiting,
+					Info:     fmt.Sprintf("waiting %vs; %v%%", seconds, progress),
+					Progress: progress,
+				})
 			}
 		case <-timeout.C:
 			c.sendResponse(models.Error, "timeout")
@@ -453,12 +462,16 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 }
 
 func (c *Client) sendResponse(status models.ResponseStatus, info string) {
-	if c.isClosed {
-		return
-	}
 	response := models.WsResponse{
 		Status: status,
 		Info:   info,
+	}
+	c.wsResponse(response)
+}
+
+func (c *Client) wsResponse(response models.WsResponse) {
+	if c.isClosed {
+		return
 	}
 	data, err := json.Marshal(response)
 	if err == nil {
