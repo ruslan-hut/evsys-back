@@ -56,3 +56,14 @@ func (sr *StatusReader) GetStatus(userId string) (time.Time, bool) {
 func (sr *StatusReader) ClearStatus(userId string) {
 	delete(sr.status, userId)
 }
+
+func (sr *StatusReader) GetLastMeterValue(transactionId int) (*models.TransactionMeter, error) {
+	if sr.database == nil {
+		return nil, fmt.Errorf("database is not set for status reader")
+	}
+	meter, err := sr.database.GetLastMeterValue(transactionId)
+	if err != nil {
+		return nil, err
+	}
+	return meter, nil
+}

@@ -24,6 +24,8 @@ type Database interface {
 	GetTransaction(id int) (*models.ChargeState, error)
 	GetActiveTransactions(userId string) ([]models.ChargeState, error)
 	GetTransactionByTag(idTag string, timeStart time.Time) (*models.Transaction, error)
+
+	GetLastMeterValue(transactionId int) (*models.TransactionMeter, error)
 }
 
 type Data interface {

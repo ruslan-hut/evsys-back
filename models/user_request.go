@@ -3,9 +3,10 @@ package models
 type CommandName string
 
 const (
-	StartTransaction CommandName = "StartTransaction"
-	StopTransaction  CommandName = "StopTransaction"
-	CheckStatus      CommandName = "CheckStatus"
+	StartTransaction  CommandName = "StartTransaction"
+	StopTransaction   CommandName = "StopTransaction"
+	CheckStatus       CommandName = "CheckStatus"
+	ListenTransaction CommandName = "ListenTransaction"
 )
 
 type UserRequest struct {

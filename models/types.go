@@ -7,4 +7,5 @@ const (
 	Error   ResponseStatus = "error"
 	Waiting ResponseStatus = "waiting"
 	Ping    ResponseStatus = "ping"
+	Value   ResponseStatus = "value"
 )

@@ -404,6 +404,8 @@ func (c *Client) readPump() {
 			if ok {
 				go c.listenForTransactionStart(timeStart)
 			}
+		case models.ListenTransaction:
+			go c.listenForTransactionState(userRequest.TransactionId)
 		default:
 			c.sendResponse(models.Success, "request handled")
 		}
@@ -457,6 +459,44 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 		case <-timeout.C:
 			c.sendResponse(models.Error, "timeout")
 			return
+		}
+	}
+}
+
+func (c *Client) listenForTransactionState(transactionId int) {
+	if transactionId < 0 {
+		return
+	}
+
+	errorCounter := 0
+	waitStep := 5
+	ticker := time.NewTicker(time.Duration(waitStep) * time.Second)
+
+	defer func() {
+		ticker.Stop()
+	}()
+
+	for {
+		select {
+		case <-ticker.C:
+			if c.isClosed {
+				return
+			}
+			value, err := c.statusReader.GetLastMeterValue(transactionId)
+			if err != nil {
+				errorCounter++
+				if errorCounter > 10 {
+					c.logger.Warn("quit listen for transaction state")
+					return
+				}
+				continue
+			}
+			c.wsResponse(models.WsResponse{
+				Status:   models.Value,
+				Info:     fmt.Sprintf("transaction %vs: %v %s", transactionId, value.Value, value.Unit),
+				Progress: value.Value,
+				Id:       transactionId,
+			})
 		}
 	}
 }

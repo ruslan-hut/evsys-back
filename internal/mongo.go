@@ -23,6 +23,7 @@ const (
 	collectionChargePoints = "charge_points"
 	collectionConnectors   = "connectors"
 	collectionTransactions = "transactions"
+	collectionMeterValues  = "meter_values"
 )
 
 type pipeResult struct {
@@ -489,4 +490,22 @@ func (m *MongoDB) GetTransactionByTag(idTag string, timeStart time.Time) (*model
 		return nil, err
 	}
 	return &transaction, nil
+}
+
+func (m *MongoDB) GetLastMeterValue(transactionId int) (*models.TransactionMeter, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionMeterValues)
+	filter := bson.D{
+		{"transaction_id", transactionId},
+	}
+	var value models.TransactionMeter
+	if err = collection.FindOne(m.ctx, filter, options.FindOne().SetSort(bson.D{{"time", -1}})).Decode(&value); err != nil {
+		return nil, err
+	}
+	return &value, nil
 }

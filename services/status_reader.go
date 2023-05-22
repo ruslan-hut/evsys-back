@@ -12,4 +12,5 @@ type StatusReader interface {
 	SaveStatus(userId string) (time.Time, error)
 	GetStatus(userId string) (time.Time, bool)
 	ClearStatus(userId string)
+	GetLastMeterValue(transactionId int) (*models.TransactionMeter, error)
 }
