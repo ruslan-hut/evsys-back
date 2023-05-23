@@ -364,6 +364,47 @@ func (m *MongoDB) GetConnector(chargePointId string, connectorId int) (*models.C
 	return &connector, nil
 }
 
+func (m *MongoDB) getTransactionState(transaction *models.Transaction) (*models.ChargeState, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	var chargeState models.ChargeState
+
+	chargePoint, err := m.GetChargePoint(transaction.ChargePointId)
+	if err != nil {
+		return nil, fmt.Errorf("get charge point: %v", err)
+	}
+	connector, err := m.GetConnector(transaction.ChargePointId, transaction.ConnectorId)
+	if err != nil {
+		return nil, fmt.Errorf("get connector: %v", err)
+	}
+	consumed := 0
+	meterValue, _ := m.GetLastMeterValue(transaction.TransactionId)
+	if meterValue != nil {
+		consumed = meterValue.Value - transaction.MeterStart
+	}
+	chargeState = models.ChargeState{
+		TransactionId:      transaction.TransactionId,
+		ConnectorId:        transaction.ConnectorId,
+		Connector:          "",
+		ChargePointId:      transaction.ChargePointId,
+		ChargePointTitle:   chargePoint.Title,
+		ChargePointAddress: chargePoint.Address,
+		TimeStarted:        transaction.TimeStart,
+		Duration:           int(time.Since(transaction.TimeStart).Seconds()),
+		MeterStart:         transaction.MeterStart,
+		Consumed:           consumed,
+		Status:             connector.Status,
+		IsCharging:         transaction.IsFinished == false,
+		CanStop:            false,
+	}
+
+	return &chargeState, nil
+}
+
 func (m *MongoDB) GetTransaction(id int) (*models.ChargeState, error) {
 	connection, err := m.connect()
 	if err != nil {
@@ -378,36 +419,14 @@ func (m *MongoDB) GetTransaction(id int) (*models.ChargeState, error) {
 		return nil, err
 	}
 
-	var chargeState models.ChargeState
-
-	chargePoint, err := m.GetChargePoint(transaction.ChargePointId)
+	chargeState, err := m.getTransactionState(&transaction)
 	if err != nil {
-		return nil, fmt.Errorf("get charge point: %v", err)
+		return nil, err
 	}
-	connector, err := m.GetConnector(transaction.ChargePointId, transaction.ConnectorId)
-	if err != nil {
-		return nil, fmt.Errorf("get connector: %v", err)
-	}
-	chargeState = models.ChargeState{
-		TransactionId:      transaction.TransactionId,
-		ConnectorId:        transaction.ConnectorId,
-		Connector:          "",
-		ChargePointId:      transaction.ChargePointId,
-		ChargePointTitle:   chargePoint.Title,
-		ChargePointAddress: chargePoint.Address,
-		TimeStarted:        transaction.TimeStart,
-		Duration:           int(time.Since(transaction.TimeStart).Seconds()),
-		MeterStart:         transaction.MeterStart,
-		Consumed:           0,
-		Status:             connector.Status,
-		IsCharging:         transaction.IsFinished == false,
-		CanStop:            false,
-	}
-
-	return &chargeState, nil
+	return chargeState, nil
 }
 
-func (m *MongoDB) GetActiveTransactions(userId string) ([]models.ChargeState, error) {
+func (m *MongoDB) GetActiveTransactions(userId string) ([]*models.ChargeState, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -441,34 +460,14 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]models.ChargeState, er
 		return nil, err
 	}
 
-	var chargeStates []models.ChargeState
+	var chargeStates []*models.ChargeState
 	for _, transaction := range transactions {
-
-		chargePoint, err := m.GetChargePoint(transaction.ChargePointId)
+		chargeState, err := m.getTransactionState(&transaction)
 		if err != nil {
-			continue
+			return nil, err
 		}
-
-		connector, err := m.GetConnector(transaction.ChargePointId, transaction.ConnectorId)
-		if err != nil {
-			continue
-		}
-
-		chargeStates = append(chargeStates, models.ChargeState{
-			TransactionId:      transaction.TransactionId,
-			ConnectorId:        transaction.ConnectorId,
-			Connector:          "",
-			ChargePointId:      transaction.ChargePointId,
-			ChargePointTitle:   chargePoint.Title,
-			ChargePointAddress: chargePoint.Address,
-			TimeStarted:        transaction.TimeStart,
-			Duration:           int(time.Since(transaction.TimeStart).Seconds()),
-			MeterStart:         transaction.MeterStart,
-			Consumed:           0,
-			Status:             connector.Status,
-			IsCharging:         transaction.IsFinished == false,
-			CanStop:            true,
-		})
+		chargeState.CanStop = true
+		chargeStates = append(chargeStates, chargeState)
 	}
 	return chargeStates, nil
 }

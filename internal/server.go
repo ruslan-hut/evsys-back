@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -310,15 +311,16 @@ func (p *Pool) Start() {
 type Client struct {
 	ws             *websocket.Conn
 	auth           services.Auth
-	statusReader   services.StatusReader
-	send           chan []byte
+	statusReader   services.StatusReader // user state holder and transaction state reader
+	send           chan []byte           // served by writePump, sending messages to client
 	logger         services.LogHandler
-	pool           *Pool
-	id             string
+	pool           *Pool          // tracking client connect and disconnect, stored active clients array
+	id             string         // replaced with idTag after user authorization
+	listeners      map[int]string // map of transaction state listeners, key is transaction id, value is user idTag
 	subscription   SubscriptionType
 	isClosed       bool
-	isWaiting      bool
 	requestHandler func(request *models.UserRequest) error
+	mux            *sync.Mutex
 }
 
 func (c *Client) writePump() {
@@ -405,7 +407,17 @@ func (c *Client) readPump() {
 				go c.listenForTransactionStart(timeStart)
 			}
 		case models.ListenTransaction:
-			go c.listenForTransactionState(userRequest.TransactionId)
+			_, ok := c.listeners[userRequest.TransactionId]
+			if !ok {
+				c.mux.Lock()
+				c.listeners[userRequest.TransactionId] = tag
+				c.mux.Unlock()
+				go c.listenForTransactionState(userRequest.TransactionId)
+			}
+		case models.StopListenTransaction:
+			c.mux.Lock()
+			delete(c.listeners, userRequest.TransactionId)
+			c.mux.Unlock()
 		default:
 			c.sendResponse(models.Success, "request handled")
 		}
@@ -482,18 +494,21 @@ func (c *Client) listenForTransactionState(transactionId int) {
 			if c.isClosed {
 				return
 			}
+			_, ok := c.listeners[transactionId]
+			if !ok {
+				return
+			}
 			value, err := c.statusReader.GetLastMeterValue(transactionId)
 			if err != nil {
 				errorCounter++
 				if errorCounter > 10 {
-					c.logger.Warn("quit listen for transaction state")
 					return
 				}
 				continue
 			}
 			c.wsResponse(models.WsResponse{
 				Status:   models.Value,
-				Info:     fmt.Sprintf("transaction %vs: %v %s", transactionId, value.Value, value.Unit),
+				Info:     fmt.Sprintf("transaction %v: %v %s", transactionId, value.Value, value.Unit),
 				Progress: value.Value,
 				Id:       transactionId,
 			})
@@ -546,6 +561,8 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.P
 		id:             "",
 		subscription:   Broadcast,
 		requestHandler: s.wsHandler,
+		listeners:      make(map[int]string),
+		mux:            &sync.Mutex{},
 	}
 	s.pool.register <- client
 
