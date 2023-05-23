@@ -8,16 +8,20 @@ import (
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
 	"strings"
+	"sync"
 )
 
 type Authenticator struct {
 	logger   services.LogHandler
 	database services.Database
 	firebase services.FirebaseAuth
+	mux      *sync.Mutex
 }
 
 func NewAuthenticator() *Authenticator {
-	return &Authenticator{}
+	return &Authenticator{
+		mux: &sync.Mutex{},
+	}
 }
 
 func (a *Authenticator) SetLogger(logger services.LogHandler) {
@@ -39,6 +43,8 @@ func (a *Authenticator) GetUser(token string) (*models.User, error) {
 	if a.database == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
+	a.mux.Lock()
+	defer a.mux.Unlock()
 	user, _ := a.database.CheckToken(token)
 	if user != nil {
 		return user, nil
@@ -72,6 +78,8 @@ func (a *Authenticator) GetUserTag(userId string) (string, error) {
 	if a.database == nil {
 		return "", fmt.Errorf("database not initialized")
 	}
+	a.mux.Lock()
+	defer a.mux.Unlock()
 	tags, _ := a.database.GetUserTags(userId)
 	if tags == nil {
 		tags = make([]models.UserTag, 0)
@@ -109,6 +117,11 @@ func (a *Authenticator) generateKey(length int) string {
 // AuthenticateUser method returns user with blank password if authentication is successful
 // Note: in a database, the password should be stored as a hash
 func (a *Authenticator) AuthenticateUser(username, password string) (*models.User, error) {
+	if a.database == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	a.mux.Lock()
+	defer a.mux.Unlock()
 	user, err := a.database.GetUser(username)
 	if err != nil {
 		return nil, err
@@ -137,6 +150,8 @@ func (a *Authenticator) RegisterUser(user *models.User) error {
 	if user.Username == "" {
 		return fmt.Errorf("empty username")
 	}
+	a.mux.Lock()
+	defer a.mux.Unlock()
 	existedUser, _ := a.database.GetUser(user.Username)
 	if existedUser != nil {
 		return fmt.Errorf("user already exists")
