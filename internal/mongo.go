@@ -405,7 +405,25 @@ func (m *MongoDB) getTransactionState(transaction *models.Transaction) (*models.
 	return &chargeState, nil
 }
 
-func (m *MongoDB) GetTransaction(id int) (*models.ChargeState, error) {
+func (m *MongoDB) GetTransactionState(id int) (*models.ChargeState, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	transaction, err := m.GetTransaction(id)
+	if err != nil {
+		return nil, err
+	}
+	chargeState, err := m.getTransactionState(transaction)
+	if err != nil {
+		return nil, err
+	}
+	return chargeState, nil
+}
+
+func (m *MongoDB) GetTransaction(id int) (*models.Transaction, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -418,12 +436,7 @@ func (m *MongoDB) GetTransaction(id int) (*models.ChargeState, error) {
 	if err = collection.FindOne(m.ctx, filter).Decode(&transaction); err != nil {
 		return nil, err
 	}
-
-	chargeState, err := m.getTransactionState(&transaction)
-	if err != nil {
-		return nil, err
-	}
-	return chargeState, nil
+	return &transaction, nil
 }
 
 func (m *MongoDB) GetActiveTransactions(userId string) ([]*models.ChargeState, error) {

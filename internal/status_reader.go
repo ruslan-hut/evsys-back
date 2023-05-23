@@ -4,13 +4,15 @@ import (
 	"evsys-back/models"
 	"evsys-back/services"
 	"fmt"
+	"sync"
 	"time"
 )
 
 type StatusReader struct {
 	logger   services.LogHandler
 	database services.Database
-	status   map[string]time.Time
+	status   map[string]*models.UserStatus
+	mux      *sync.Mutex
 }
 
 func (sr *StatusReader) SetLogger(logger services.LogHandler) {
@@ -23,12 +25,13 @@ func (sr *StatusReader) SetDatabase(database services.Database) {
 
 func NewStatusReader() *StatusReader {
 	statusReader := StatusReader{
-		status: make(map[string]time.Time),
+		status: make(map[string]*models.UserStatus),
+		mux:    &sync.Mutex{},
 	}
 	return &statusReader
 }
 
-func (sr *StatusReader) GetTransaction(userId string, after time.Time) (*models.Transaction, error) {
+func (sr *StatusReader) GetTransactionAfter(userId string, after time.Time) (*models.Transaction, error) {
 	if sr.database == nil {
 		return nil, fmt.Errorf("database is not set for status reader")
 	}
@@ -39,21 +42,41 @@ func (sr *StatusReader) GetTransaction(userId string, after time.Time) (*models.
 	return transaction, nil
 }
 
-func (sr *StatusReader) SaveStatus(userId string) (time.Time, error) {
+func (sr *StatusReader) GetTransaction(transactionId int) (*models.Transaction, error) {
+	if sr.database == nil {
+		return nil, fmt.Errorf("database is not set for status reader")
+	}
+	transaction, err := sr.database.GetTransaction(transactionId)
+	if err != nil {
+		return nil, fmt.Errorf("reading database: %v", err)
+	}
+	return transaction, nil
+}
+
+func (sr *StatusReader) SaveStatus(userId string, stage models.Stage, transactionId int) (time.Time, error) {
+	sr.mux.Lock()
+	defer sr.mux.Unlock()
 	timeStart := time.Now()
-	sr.status[userId] = timeStart
+	sr.status[userId] = &models.UserStatus{
+		UserId:        userId,
+		Time:          timeStart,
+		Stage:         stage,
+		TransactionId: transactionId,
+	}
 	return timeStart, nil
 }
 
-func (sr *StatusReader) GetStatus(userId string) (time.Time, bool) {
+func (sr *StatusReader) GetStatus(userId string) (*models.UserStatus, bool) {
 	status, ok := sr.status[userId]
 	if !ok {
-		return time.Now(), false
+		return nil, false
 	}
 	return status, true
 }
 
 func (sr *StatusReader) ClearStatus(userId string) {
+	sr.mux.Lock()
+	defer sr.mux.Unlock()
 	delete(sr.status, userId)
 }
 

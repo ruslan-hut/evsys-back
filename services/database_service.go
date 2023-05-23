@@ -21,9 +21,10 @@ type Database interface {
 
 	GetChargePoints() (interface{}, error)
 
-	GetTransaction(id int) (*models.ChargeState, error)
-	GetActiveTransactions(userId string) ([]*models.ChargeState, error)
+	GetTransaction(id int) (*models.Transaction, error)
 	GetTransactionByTag(idTag string, timeStart time.Time) (*models.Transaction, error)
+	GetTransactionState(id int) (*models.ChargeState, error)
+	GetActiveTransactions(userId string) ([]*models.ChargeState, error)
 
 	GetLastMeterValue(transactionId int) (*models.TransactionMeter, error)
 }

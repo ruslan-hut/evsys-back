@@ -399,14 +399,25 @@ func (c *Client) readPump() {
 
 		switch userRequest.Command {
 		case models.StartTransaction:
-			timeStart, _ := c.statusReader.SaveStatus(tag)
-			go c.listenForTransactionStart(timeStart)
-		case models.CheckStatus:
-			timeStart, ok := c.statusReader.GetStatus(tag)
-			if ok {
+			timeStart, err := c.statusReader.SaveStatus(tag, models.StageStart, -1)
+			if err == nil {
 				go c.listenForTransactionStart(timeStart)
 			}
+		case models.StopTransaction:
+			timeStart, err := c.statusReader.SaveStatus(tag, models.StageStop, userRequest.TransactionId)
+			if err == nil {
+				go c.listenForTransactionStop(timeStart, userRequest.TransactionId)
+			}
+		case models.CheckStatus:
+			userState, ok := c.statusReader.GetStatus(tag)
+			if ok {
+				c.restoreUserState(userState)
+			}
 		case models.ListenTransaction:
+			_, err := c.statusReader.SaveStatus(tag, models.StageListen, userRequest.TransactionId)
+			if err != nil {
+				c.logger.Error("read pump: save status Listen", err)
+			}
 			_, ok := c.listeners[userRequest.TransactionId]
 			if !ok {
 				c.mux.Lock()
@@ -422,6 +433,23 @@ func (c *Client) readPump() {
 			c.sendResponse(models.Success, "request handled")
 		}
 
+	}
+}
+
+func (c *Client) restoreUserState(userState *models.UserStatus) {
+	switch userState.Stage {
+	case models.StageStart:
+		go c.listenForTransactionStart(userState.Time)
+	case models.StageStop:
+		go c.listenForTransactionStop(userState.Time, userState.TransactionId)
+	case models.StageListen:
+		_, ok := c.listeners[userState.TransactionId]
+		if !ok {
+			c.mux.Lock()
+			c.listeners[userState.TransactionId] = userState.UserId
+			c.mux.Unlock()
+			go c.listenForTransactionState(userState.TransactionId)
+		}
 	}
 }
 
@@ -451,19 +479,79 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 			if c.isClosed {
 				return
 			}
-			transaction, err := c.statusReader.GetTransaction(c.id, timeStart)
+			transaction, err := c.statusReader.GetTransactionAfter(c.id, timeStart)
 			if err != nil {
 				c.logger.Error("get transaction", err)
 				continue
 			}
 			if transaction.TransactionId > -1 {
-				c.sendResponse(models.Success, fmt.Sprintf("transaction started: %v", transaction.TransactionId))
+				c.wsResponse(models.WsResponse{
+					Status: models.Success,
+					Stage:  models.Start,
+					Info:   fmt.Sprintf("transaction started: %v", transaction.TransactionId),
+				})
 				return
 			} else {
 				seconds := int(time.Since(timeStart).Seconds())
 				progress := seconds * 100 / maxTimeout
 				c.wsResponse(models.WsResponse{
 					Status:   models.Waiting,
+					Stage:    models.Start,
+					Info:     fmt.Sprintf("waiting %vs; %v%%", seconds, progress),
+					Progress: progress,
+				})
+			}
+		case <-timeout.C:
+			c.sendResponse(models.Error, "timeout")
+			return
+		}
+	}
+}
+
+func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int) {
+
+	maxTimeout := 90
+	waitStep := 3
+
+	duration := maxTimeout - int(time.Since(timeStart).Seconds())
+	if duration <= 0 {
+		return
+	}
+	ticker := time.NewTicker(time.Duration(waitStep) * time.Second)
+	timeout := time.NewTimer(time.Duration(duration) * time.Second)
+
+	defer func() {
+		ticker.Stop()
+		timeout.Stop()
+		if !c.isClosed {
+			c.statusReader.ClearStatus(c.id)
+		}
+	}()
+
+	for {
+		select {
+		case <-ticker.C:
+			if c.isClosed {
+				return
+			}
+			transaction, err := c.statusReader.GetTransaction(transactionId)
+			if err != nil {
+				c.logger.Error("get transaction", err)
+				continue
+			}
+			if transaction.IsFinished {
+				c.wsResponse(models.WsResponse{
+					Status: models.Success,
+					Stage:  models.Stop,
+					Info:   fmt.Sprintf("transaction stopped: %v", transaction.TransactionId),
+				})
+				return
+			} else {
+				seconds := int(time.Since(timeStart).Seconds())
+				progress := seconds * 100 / maxTimeout
+				c.wsResponse(models.WsResponse{
+					Status:   models.Waiting,
+					Stage:    models.Stop,
 					Info:     fmt.Sprintf("waiting %vs; %v%%", seconds, progress),
 					Progress: progress,
 				})
@@ -508,6 +596,7 @@ func (c *Client) listenForTransactionState(transactionId int) {
 			}
 			c.wsResponse(models.WsResponse{
 				Status:   models.Value,
+				Stage:    models.Info,
 				Info:     fmt.Sprintf("transaction %v: %v %s", transactionId, value.Value, value.Unit),
 				Progress: value.Value,
 				Id:       transactionId,
@@ -520,6 +609,7 @@ func (c *Client) sendResponse(status models.ResponseStatus, info string) {
 	response := models.WsResponse{
 		Status: status,
 		Info:   info,
+		Stage:  models.Info,
 	}
 	c.wsResponse(response)
 }

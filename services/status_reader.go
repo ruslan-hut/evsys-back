@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-type ClientConnectionStatus string
-
 type StatusReader interface {
-	GetTransaction(userId string, after time.Time) (*models.Transaction, error)
-	SaveStatus(userId string) (time.Time, error)
-	GetStatus(userId string) (time.Time, bool)
-	ClearStatus(userId string)
+	GetTransactionAfter(userId string, after time.Time) (*models.Transaction, error)
+	GetTransaction(transactionId int) (*models.Transaction, error)
 	GetLastMeterValue(transactionId int) (*models.TransactionMeter, error)
+
+	SaveStatus(userId string, stage models.Stage, transactionId int) (time.Time, error)
+	GetStatus(userId string) (*models.UserStatus, bool)
+	ClearStatus(userId string)
 }

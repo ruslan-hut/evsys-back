@@ -138,7 +138,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			h.logger.Error("decoding transaction id", err)
 			status = http.StatusBadRequest
 		} else {
-			data, err = h.database.GetTransaction(id)
+			data, err = h.database.GetTransactionState(id)
 			if err != nil {
 				h.logger.Error("get transaction", err)
 				status = http.StatusInternalServerError
