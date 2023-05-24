@@ -13,4 +13,6 @@ type StatusReader interface {
 	SaveStatus(userId string, stage models.Stage, transactionId int) (time.Time, error)
 	GetStatus(userId string) (*models.UserStatus, bool)
 	ClearStatus(userId string)
+
+	ReadLogAfter(timeStart time.Time) ([]*FeatureMessage, error)
 }

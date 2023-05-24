@@ -221,6 +221,10 @@ func (h *Handler) HandleUserRequest(request *models.UserRequest) error {
 		return nil
 	case models.StopListenTransaction:
 		return nil
+	case models.ListenChargePoints:
+		return nil
+	case models.ListenLog:
+		return nil
 	default:
 		return fmt.Errorf("unknown command %s", request.Command)
 	}

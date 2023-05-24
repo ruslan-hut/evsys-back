@@ -90,3 +90,14 @@ func (sr *StatusReader) GetLastMeterValue(transactionId int) (*models.Transactio
 	}
 	return meter, nil
 }
+
+func (sr *StatusReader) ReadLogAfter(timeStart time.Time) ([]*services.FeatureMessage, error) {
+	if sr.database == nil {
+		return nil, fmt.Errorf("database is not set for status reader")
+	}
+	messages, err := sr.database.ReadLogAfter(timeStart)
+	if err != nil {
+		return nil, err
+	}
+	return messages, nil
+}

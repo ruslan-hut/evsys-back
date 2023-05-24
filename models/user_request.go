@@ -8,6 +8,8 @@ const (
 	CheckStatus           CommandName = "CheckStatus"
 	ListenTransaction     CommandName = "ListenTransaction"
 	StopListenTransaction CommandName = "StopListenTransaction"
+	ListenChargePoints    CommandName = "ListenChargePoints"
+	ListenLog             CommandName = "ListenLog"
 )
 
 type UserRequest struct {

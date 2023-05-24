@@ -7,4 +7,5 @@ type WsResponse struct {
 	UserId   string         `json:"user_id"`
 	Progress int            `json:"progress"`
 	Id       int            `json:"id"`
+	Data     string         `json:"data"`
 }

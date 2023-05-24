@@ -106,6 +106,30 @@ func (m *MongoDB) ReadBackLog() (interface{}, error) {
 	return m.read(collectionBackLog, services.LogMessageType)
 }
 
+// ReadLogAfter returns array of log messages in a normal , filtered by timeStart
+func (m *MongoDB) ReadLogAfter(timeStart time.Time) ([]*services.FeatureMessage, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+	collection := connection.Database(m.database).Collection(collectionSysLog)
+	var pipe []bson.M
+	pipe = append(pipe, bson.M{"$match": bson.M{"timestamp": bson.M{"$gt": timeStart}}})
+	pipe = append(pipe, bson.M{"$sort": bson.M{"timestamp": 1}})
+	pipe = append(pipe, bson.M{"$limit": m.logRecordsNumber})
+	cursor, err := collection.Aggregate(m.ctx, pipe)
+	if err != nil {
+		return nil, err
+	}
+	var result []*services.FeatureMessage
+	err = cursor.All(m.ctx, &result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (m *MongoDB) GetUser(username string) (*models.User, error) {
 	connection, err := m.connect()
 	if err != nil {

@@ -429,6 +429,8 @@ func (c *Client) readPump() {
 			c.mux.Lock()
 			delete(c.listeners, userRequest.TransactionId)
 			c.mux.Unlock()
+		case models.ListenLog:
+			go c.listenForLogUpdates()
 		default:
 			c.sendResponse(models.Success, "request handled")
 		}
@@ -601,6 +603,50 @@ func (c *Client) listenForTransactionState(transactionId int) {
 				Progress: value.Value,
 				Id:       transactionId,
 			})
+		}
+	}
+}
+
+func (c *Client) listenForLogUpdates() {
+
+	lastMessageTime := time.Now()
+	errorCounter := 0
+	waitStep := 5
+	ticker := time.NewTicker(time.Duration(waitStep) * time.Second)
+
+	defer func() {
+		ticker.Stop()
+	}()
+
+	for {
+		select {
+		case <-ticker.C:
+			if c.isClosed {
+				return
+			}
+			messages, err := c.statusReader.ReadLogAfter(lastMessageTime)
+			if err != nil {
+				errorCounter++
+				if errorCounter > 10 {
+					return
+				}
+				continue
+			}
+			if len(messages) > 0 {
+				lastMessageTime = messages[len(messages)-1].Timestamp
+				for _, message := range messages {
+					data, err := json.Marshal(message)
+					if err != nil {
+						c.logger.Error("marshal message", err)
+						continue
+					}
+					c.wsResponse(models.WsResponse{
+						Status: models.Success,
+						Stage:  models.Info,
+						Data:   string(data),
+					})
+				}
+			}
 		}
 	}
 }
