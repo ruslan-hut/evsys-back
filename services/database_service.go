@@ -28,6 +28,8 @@ type Database interface {
 	GetActiveTransactions(userId string) ([]*models.ChargeState, error)
 
 	GetLastMeterValue(transactionId int) (*models.TransactionMeter, error)
+
+	CheckInviteCode(code string) (bool, error)
 }
 
 type Data interface {

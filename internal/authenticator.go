@@ -140,6 +140,8 @@ func (a *Authenticator) AuthenticateUser(username, password string) (*models.Use
 	return user, nil
 }
 
+// RegisterUser add new user to the database
+// for new user registration, using "token" field as a value of invite code
 func (a *Authenticator) RegisterUser(user *models.User) error {
 	if a.database == nil {
 		return fmt.Errorf("database not initialized")
@@ -150,11 +152,18 @@ func (a *Authenticator) RegisterUser(user *models.User) error {
 	if user.Username == "" {
 		return fmt.Errorf("empty username")
 	}
+	if user.Token == "" {
+		return fmt.Errorf("empty invite code")
+	}
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	existedUser, _ := a.database.GetUser(user.Username)
 	if existedUser != nil {
 		return fmt.Errorf("user already exists")
+	}
+	ok, _ := a.database.CheckInviteCode(user.Token)
+	if !ok {
+		return fmt.Errorf("invalid invite code")
 	}
 	user.Password = a.generatePasswordHash(user.Password)
 	if user.Password == "" {

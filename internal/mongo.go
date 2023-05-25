@@ -24,6 +24,7 @@ const (
 	collectionConnectors   = "connectors"
 	collectionTransactions = "transactions"
 	collectionMeterValues  = "meter_values"
+	collectionInvites      = "invites"
 )
 
 type pipeResult struct {
@@ -544,4 +545,20 @@ func (m *MongoDB) GetLastMeterValue(transactionId int) (*models.TransactionMeter
 		return nil, err
 	}
 	return &value, nil
+}
+
+func (m *MongoDB) CheckInviteCode(code string) (bool, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return false, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionInvites)
+	filter := bson.D{{"code", code}}
+	var inviteCode models.Invite
+	if err = collection.FindOne(m.ctx, filter).Decode(&inviteCode); err != nil {
+		return false, err
+	}
+	return true, nil
 }
