@@ -173,6 +173,10 @@ func (a *Authenticator) RegisterUser(user *models.User) error {
 	if err != nil {
 		return err
 	}
+	err = a.database.DeleteInviteCode(user.Token)
+	if err != nil {
+		a.logger.Error("deleting invite code", err)
+	}
 	return nil
 }
 

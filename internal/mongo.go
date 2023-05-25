@@ -562,3 +562,16 @@ func (m *MongoDB) CheckInviteCode(code string) (bool, error) {
 	}
 	return true, nil
 }
+
+func (m *MongoDB) DeleteInviteCode(code string) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionInvites)
+	filter := bson.D{{"code", code}}
+	_, err = collection.DeleteOne(m.ctx, filter)
+	return err
+}

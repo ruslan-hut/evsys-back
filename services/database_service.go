@@ -30,6 +30,7 @@ type Database interface {
 	GetLastMeterValue(transactionId int) (*models.TransactionMeter, error)
 
 	CheckInviteCode(code string) (bool, error)
+	DeleteInviteCode(code string) error
 }
 
 type Data interface {
