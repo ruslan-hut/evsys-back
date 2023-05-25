@@ -20,6 +20,7 @@ const (
 	CentralSystemCommand CallType = "CentralSystemCommand"
 	ActiveTransactions   CallType = "ActiveTransactions"
 	TransactionInfo      CallType = "TransactionInfo"
+	GenerateInvites      CallType = "GenerateInvites"
 )
 
 type Call struct {
@@ -62,6 +63,10 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		h.logger.Info(fmt.Sprintf("call %s from remote %s", ac.CallType, ac.Remote))
 		return nil, http.StatusOK
 	}
+	if h.auth == nil {
+		h.logger.Warn("authenticator not initialized")
+		return nil, http.StatusInternalServerError
+	}
 
 	userId := ""
 	var data interface{}
@@ -69,16 +74,10 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 	status := http.StatusOK
 
 	if ac.CallType != AuthenticateUser && ac.CallType != RegisterUser {
-		if h.auth == nil {
-			h.logger.Warn("authenticator not initialized")
-			status = http.StatusInternalServerError
-			return nil, status
-		}
 		user, err := h.auth.GetUser(ac.Token)
 		if err != nil {
 			h.logger.Error("token check failed", err)
-			status = http.StatusUnauthorized
-			return nil, status
+			return nil, http.StatusUnauthorized
 		}
 		userId = user.UserId
 	}
@@ -119,6 +118,12 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 				h.logger.Error("user registration", err)
 				status = http.StatusInternalServerError
 			}
+		}
+	case GenerateInvites:
+		data, err = h.auth.GenerateInvites(5)
+		if err != nil {
+			h.logger.Error("generate invites", err)
+			status = http.StatusInternalServerError
 		}
 	case GetChargePoints:
 		data, err = h.database.GetChargePoints()

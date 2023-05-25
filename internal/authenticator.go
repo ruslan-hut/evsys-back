@@ -9,7 +9,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"strings"
 	"sync"
+	"time"
 )
+
+const tokenLength = 32
 
 type Authenticator struct {
 	logger   services.LogHandler
@@ -45,10 +48,20 @@ func (a *Authenticator) GetUser(token string) (*models.User, error) {
 	}
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	user, _ := a.database.CheckToken(token)
-	if user != nil {
+	if len(token) < tokenLength {
+		return nil, fmt.Errorf("invalid token")
+	}
+	var user *models.User
+	// considering token is database token
+	if len(token) == tokenLength {
+		user, _ = a.database.CheckToken(token)
+		if user == nil {
+			return nil, fmt.Errorf("token check failed")
+		}
+		_ = a.updateLastSeen(user)
 		return user, nil
 	}
+	// considering token is firebase token
 	if a.firebase != nil {
 		userId, err := a.firebase.CheckToken(token)
 		if err != nil {
@@ -59,19 +72,59 @@ func (a *Authenticator) GetUser(token string) (*models.User, error) {
 			if user == nil {
 				username := fmt.Sprintf("user_%s", a.generateKey(5))
 				user = &models.User{
-					Username: username,
-					Name:     "Firebase user",
-					UserId:   userId,
+					Username:       username,
+					Name:           "Firebase user",
+					UserId:         userId,
+					DateRegistered: time.Now(),
 				}
 				err = a.database.AddUser(user)
 				if err != nil {
 					return nil, fmt.Errorf("adding firebase user: %s", err)
 				}
 			}
+			_ = a.updateLastSeen(user)
 			return user, nil
 		}
 	}
 	return nil, fmt.Errorf("token check failed")
+}
+
+// update user last seen
+func (a *Authenticator) updateLastSeen(user *models.User) error {
+	user.LastSeen = time.Now()
+	if user.DateRegistered.IsZero() {
+		user.DateRegistered = time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+	}
+	err := a.database.UpdateUser(user)
+	if err != nil {
+		return fmt.Errorf("updating user: %s", err)
+	}
+	return nil
+}
+
+func (a *Authenticator) GenerateInvites(count int) ([]string, error) {
+	if a.database == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	invites := make([]string, 0)
+	for i := 0; i < count; i++ {
+		inviteCode := a.generateKey(5)
+		invite := &models.Invite{
+			Code: inviteCode,
+		}
+		err := a.database.AddInviteCode(invite)
+		if err != nil {
+			a.logger.Error("adding invite code: %s", err)
+			continue
+		}
+		invites = append(invites, inviteCode)
+	}
+	if len(invites) == 0 {
+		return nil, fmt.Errorf("no invites generated")
+	}
+	return invites, nil
 }
 
 func (a *Authenticator) GetUserTag(userId string) (string, error) {
@@ -102,12 +155,13 @@ func (a *Authenticator) GetUserTag(userId string) (string, error) {
 }
 
 func (a *Authenticator) generateKey(length int) string {
-	b := make([]byte, 20)
+	b := make([]byte, length)
 	_, err := rand.Read(b)
 	if err != nil {
 		return ""
 	}
 	s := hex.EncodeToString(b)
+	// string length is doubled because of hex encoding
 	if len(s) > length {
 		s = s[:length]
 	}
@@ -128,8 +182,9 @@ func (a *Authenticator) AuthenticateUser(username, password string) (*models.Use
 	}
 	result := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if result == nil {
-		token := a.generateKey(32)
+		token := a.generateKey(tokenLength)
 		user.Token = token
+		user.LastSeen = time.Now()
 		err = a.database.UpdateUser(user)
 		if err != nil {
 			return nil, err
@@ -169,6 +224,7 @@ func (a *Authenticator) RegisterUser(user *models.User) error {
 	if user.Password == "" {
 		return fmt.Errorf("empty password hash")
 	}
+	user.DateRegistered = time.Now()
 	err := a.database.AddUser(user)
 	if err != nil {
 		return err

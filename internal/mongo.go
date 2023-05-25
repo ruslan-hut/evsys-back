@@ -547,6 +547,21 @@ func (m *MongoDB) GetLastMeterValue(transactionId int) (*models.TransactionMeter
 	return &value, nil
 }
 
+func (m *MongoDB) AddInviteCode(invite *models.Invite) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionInvites)
+	_, err = collection.InsertOne(m.ctx, invite)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (m *MongoDB) CheckInviteCode(code string) (bool, error) {
 	connection, err := m.connect()
 	if err != nil {

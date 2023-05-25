@@ -22,6 +22,7 @@ const (
 	readBackLogEndpoint   = "backlog"
 	userAuthenticate      = "users/authenticate"
 	userRegister          = "users/register"
+	generateInvites       = "users/invites"
 	getChargePoints       = "chp"
 	activeTransactions    = "transactions/active"
 	transactionInfo       = "transactions/info/:id"
@@ -90,6 +91,7 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.GET(route(readBackLogEndpoint), s.readBackLog)
 	router.POST(route(userAuthenticate), s.authenticateUser)
 	router.POST(route(userRegister), s.registerUser)
+	router.GET(route(generateInvites), s.generateInvites)
 	router.POST(route(centralSystemCommand), s.centralSystemCommand)
 	router.GET(route(getChargePoints), s.getChargePoints)
 	router.GET(route(activeTransactions), s.activeTransactions)
@@ -133,6 +135,15 @@ func (s *Server) readSystemLog(w http.ResponseWriter, r *http.Request, _ httprou
 func (s *Server) readBackLog(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ac := &Call{
 		CallType: ReadBackLog,
+		Remote:   r.RemoteAddr,
+		Token:    s.getToken(r),
+	}
+	s.handleApiRequest(w, ac)
+}
+
+func (s *Server) generateInvites(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	ac := &Call{
+		CallType: GenerateInvites,
 		Remote:   r.RemoteAddr,
 		Token:    s.getToken(r),
 	}
