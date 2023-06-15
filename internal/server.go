@@ -394,7 +394,7 @@ func (c *Client) readPump() {
 			continue
 		}
 
-		tag, err := c.auth.GetUserTag(user.UserId)
+		tag, err := c.auth.GetUserTag(user)
 		if err != nil {
 			c.sendResponse(models.Error, fmt.Sprintf("get user tag: %v", err))
 			continue
@@ -469,7 +469,7 @@ func (c *Client) restoreUserState(userState *models.UserStatus) {
 func (c *Client) listenForTransactionStart(timeStart time.Time) {
 
 	maxTimeout := 90
-	waitStep := 3
+	waitStep := 2
 
 	duration := maxTimeout - int(time.Since(timeStart).Seconds())
 	if duration <= 0 {

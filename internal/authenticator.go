@@ -127,23 +127,24 @@ func (a *Authenticator) GenerateInvites(count int) ([]string, error) {
 	return invites, nil
 }
 
-func (a *Authenticator) GetUserTag(userId string) (string, error) {
+func (a *Authenticator) GetUserTag(user *models.User) (string, error) {
 	if a.database == nil {
 		return "", fmt.Errorf("database not initialized")
 	}
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	tags, _ := a.database.GetUserTags(userId)
+	tags, _ := a.database.GetUserTags(user.UserId)
 	if tags == nil {
 		tags = make([]models.UserTag, 0)
 	}
 	if len(tags) == 0 {
 		newIdTag := strings.ToUpper(a.generateKey(20))
 		newTag := models.UserTag{
-			UserId:    userId,
-			Username:  "",
+			UserId:    user.UserId,
+			Username:  user.Username,
 			IdTag:     newIdTag,
 			IsEnabled: true,
+			Note:      fmt.Sprintf("api: added at %s", time.Now().Format("2006-01-02 15:04:05")),
 		}
 		err := a.database.AddUserTag(&newTag)
 		if err != nil {
