@@ -20,6 +20,7 @@ const (
 	CentralSystemCommand CallType = "CentralSystemCommand"
 	ActiveTransactions   CallType = "ActiveTransactions"
 	TransactionInfo      CallType = "TransactionInfo"
+	TransactionList      CallType = "TransactionList"
 	GenerateInvites      CallType = "GenerateInvites"
 )
 
@@ -135,6 +136,12 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		data, err = h.database.GetActiveTransactions(userId)
 		if err != nil {
 			h.logger.Error("get active transactions", err)
+			status = http.StatusInternalServerError
+		}
+	case TransactionList:
+		data, err = h.database.GetTransactions(userId, 100, 0)
+		if err != nil {
+			h.logger.Error("get transactions list", err)
 			status = http.StatusInternalServerError
 		}
 	case TransactionInfo:

@@ -26,6 +26,7 @@ const (
 	getChargePoints       = "chp"
 	activeTransactions    = "transactions/active"
 	transactionInfo       = "transactions/info/:id"
+	transactionList       = "transactions/list"
 	centralSystemCommand  = "csc"
 	wsEndpoint            = "/ws"
 )
@@ -96,6 +97,7 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.GET(route(getChargePoints), s.getChargePoints)
 	router.GET(route(activeTransactions), s.activeTransactions)
 	router.GET(route(transactionInfo), s.transactionInfo)
+	router.GET(route(transactionList), s.transactionList)
 	router.OPTIONS("/*path", s.options)
 	router.GET(wsEndpoint, s.handleWs)
 }
@@ -116,6 +118,16 @@ func (s *Server) activeTransactions(w http.ResponseWriter, r *http.Request, _ ht
 func (s *Server) transactionInfo(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	ac := &Call{
 		CallType: TransactionInfo,
+		Remote:   r.RemoteAddr,
+		Token:    s.getToken(r),
+		Payload:  []byte(ps.ByName("id")),
+	}
+	s.handleApiRequest(w, ac)
+}
+
+func (s *Server) transactionList(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	ac := &Call{
+		CallType: TransactionList,
 		Remote:   r.RemoteAddr,
 		Token:    s.getToken(r),
 		Payload:  []byte(ps.ByName("id")),
