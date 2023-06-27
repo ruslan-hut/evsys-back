@@ -534,6 +534,7 @@ func (m *MongoDB) GetTransactions(userId string, limit int, offset int) ([]*mode
 	collection := connection.Database(m.database).Collection(collectionTransactions)
 	filter := bson.D{
 		{"id_tag", bson.D{{"$in", idTags}}},
+		{"is_finished", true},
 	}
 	var transactions []*models.Transaction
 	cursor, err := collection.Find(m.ctx, filter, options.Find().SetLimit(int64(limit)).SetSkip(int64(offset)).SetSort(bson.D{{"time_start", -1}}))
