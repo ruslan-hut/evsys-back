@@ -8,6 +8,7 @@ import (
 	"evsys-back/utility"
 	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
@@ -292,14 +293,23 @@ func (m *MongoDB) read(table, dataType string) (interface{}, error) {
 	return logMessages, nil
 }
 
-func (m *MongoDB) GetChargePoints() (interface{}, error) {
+func (m *MongoDB) GetChargePoints(searchTerm string) (interface{}, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
 	}
 	defer m.disconnect(connection)
 
+	var searchRegex = bson.M{"$regex": primitive.Regex{Pattern: ".*" + searchTerm + ".*", Options: "i"}}
+
 	pipeline := mongo.Pipeline{
+		{
+			{"$match", bson.M{"$or": []bson.M{
+				{"description": searchRegex},
+				{"title": searchRegex},
+				{"address": searchRegex},
+			}}},
+		},
 		{{"$lookup", bson.M{
 			"from":         "connectors",
 			"localField":   "charge_point_id",

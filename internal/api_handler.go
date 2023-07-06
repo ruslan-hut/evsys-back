@@ -127,7 +127,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			status = http.StatusInternalServerError
 		}
 	case GetChargePoints:
-		data, err = h.database.GetChargePoints()
+		data, err = h.database.GetChargePoints(string(ac.Payload))
 		if err != nil {
 			h.logger.Error("get charge points", err)
 			status = http.StatusInternalServerError
