@@ -240,7 +240,6 @@ func (s *Server) paymentFail(w http.ResponseWriter, _ *http.Request, _ httproute
 }
 
 func (s *Server) paymentNotify(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	s.logger.Info("payment notify")
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {

@@ -71,4 +71,5 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 	if err != nil {
 		p.logger.Error("save payment result", err)
 	}
+	p.logger.Info(fmt.Sprintf("order: %s; amount: %s", params.Order, params.Amount))
 }
