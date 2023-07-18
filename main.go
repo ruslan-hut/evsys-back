@@ -58,12 +58,17 @@ func main() {
 	statusReader.SetLogger(internal.NewLogger("status", conf.IsDebug))
 	statusReader.SetDatabase(mongo)
 
+	payments := internal.NewPayments()
+	payments.SetLogger(internal.NewLogger("payments", conf.IsDebug))
+	payments.SetDatabase(mongo)
+
 	server := internal.NewServer(conf)
 	server.SetLogger(internal.NewLogger("server", conf.IsDebug))
 	server.SetApiHandler(api.HandleApiCall)
 	server.SetWsHandler(api.HandleUserRequest)
 	server.SetAuth(auth)
 	server.SetStatusReader(statusReader)
+	server.SetPaymentsService(payments)
 
 	err = server.Start()
 	if err != nil {

@@ -43,6 +43,7 @@ type Server struct {
 	statusReader services.StatusReader
 	apiHandler   func(ac *Call) ([]byte, int)
 	wsHandler    func(request *models.UserRequest) error
+	payments     services.Payments
 	logger       services.LogHandler
 	upgrader     websocket.Upgrader
 	pool         *Pool
@@ -88,6 +89,10 @@ func (s *Server) SetStatusReader(statusReader services.StatusReader) {
 	s.statusReader = statusReader
 }
 
+func (s *Server) SetPaymentsService(payments services.Payments) {
+	s.payments = payments
+}
+
 func (s *Server) SetLogger(logger services.LogHandler) {
 	s.logger = logger
 }
@@ -106,7 +111,7 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.GET(route(transactionList), s.transactionList)
 	router.GET(route(paymentSuccess), s.paymentSuccess)
 	router.GET(route(paymentFail), s.paymentFail)
-	router.GET(route(paymentNotify), s.paymentNotify)
+	router.POST(route(paymentNotify), s.paymentNotify)
 	router.OPTIONS("/*path", s.options)
 	router.GET(wsEndpoint, s.handleWs)
 }
@@ -224,60 +229,31 @@ func (s *Server) getChargePoints(w http.ResponseWriter, r *http.Request, ps http
 	s.handleApiRequest(w, ac)
 }
 
-func (s *Server) paymentSuccess(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	queryParams := r.URL.Query()
+func (s *Server) paymentSuccess(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	s.logger.Info("payment success")
-
-	signatureVersion := queryParams.Get("Ds_SignatureVersion")
-	merchantParameters := queryParams.Get("Ds_MerchantParameters")
-	signature := queryParams.Get("Ds_Signature")
-
-	if merchantParameters != "" {
-		s.logger.Info(fmt.Sprintf("Ds_SignatureVersion: %s", signatureVersion))
-		s.logger.Info(fmt.Sprintf("Ds_MerchantParameters: %s", merchantParameters))
-		s.logger.Info(fmt.Sprintf("Ds_Signature: %s", signature))
-	} else {
-		s.logger.Info(fmt.Sprintf("URL: %s", r.URL))
-	}
-
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) paymentFail(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	queryParams := r.URL.Query()
+func (s *Server) paymentFail(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	s.logger.Info(fmt.Sprintf("payment fail"))
-
-	signatureVersion := queryParams.Get("Ds_SignatureVersion")
-	merchantParameters := queryParams.Get("Ds_MerchantParameters")
-	signature := queryParams.Get("Ds_Signature")
-
-	if merchantParameters != "" {
-		s.logger.Info(fmt.Sprintf("Ds_SignatureVersion: %s", signatureVersion))
-		s.logger.Info(fmt.Sprintf("Ds_MerchantParameters: %s", merchantParameters))
-		s.logger.Info(fmt.Sprintf("Ds_Signature: %s", signature))
-	} else {
-		s.logger.Info(fmt.Sprintf("URL: %s", r.URL))
-	}
-
 	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) paymentNotify(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	queryParams := r.URL.Query()
 	s.logger.Info("payment notify")
 
-	signatureVersion := queryParams.Get("Ds_SignatureVersion")
-	merchantParameters := queryParams.Get("Ds_MerchantParameters")
-	signature := queryParams.Get("Ds_Signature")
-
-	if merchantParameters != "" {
-		s.logger.Info(fmt.Sprintf("Ds_SignatureVersion: %s", signatureVersion))
-		s.logger.Info(fmt.Sprintf("Ds_MerchantParameters: %s", merchantParameters))
-		s.logger.Info(fmt.Sprintf("Ds_Signature: %s", signature))
-	} else {
-		s.logger.Info(fmt.Sprintf("URL: %s", r.URL))
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.logger.Error("payment notify: get body", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
+	err = s.payments.Notify(body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 

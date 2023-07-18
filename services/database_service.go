@@ -33,6 +33,11 @@ type Database interface {
 	AddInviteCode(invite *models.Invite) error
 	CheckInviteCode(code string) (bool, error)
 	DeleteInviteCode(code string) error
+
+	SavePaymentResult(paymentParameters *models.PaymentParameters) error
+	SavePaymentMethod(paymentMethod *models.PaymentMethod) error
+	GetPaymentMethods(userId string) ([]*models.PaymentMethod, error)
+	GetPaymentParameters(orderId string) (*models.PaymentParameters, error)
 }
 
 type Data interface {

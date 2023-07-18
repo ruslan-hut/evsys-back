@@ -17,15 +17,17 @@ import (
 )
 
 const (
-	collectionSysLog       = "sys_log"
-	collectionBackLog      = "back_log"
-	collectionUsers        = "users"
-	collectionUserTags     = "user_tags"
-	collectionChargePoints = "charge_points"
-	collectionConnectors   = "connectors"
-	collectionTransactions = "transactions"
-	collectionMeterValues  = "meter_values"
-	collectionInvites      = "invites"
+	collectionSysLog         = "sys_log"
+	collectionBackLog        = "back_log"
+	collectionUsers          = "users"
+	collectionUserTags       = "user_tags"
+	collectionChargePoints   = "charge_points"
+	collectionConnectors     = "connectors"
+	collectionTransactions   = "transactions"
+	collectionMeterValues    = "meter_values"
+	collectionInvites        = "invites"
+	collectionPayment        = "payment"
+	collectionPaymentMethods = "payment_methods"
 )
 
 type pipeResult struct {
@@ -636,4 +638,94 @@ func (m *MongoDB) DeleteInviteCode(code string) error {
 	filter := bson.D{{"code", code}}
 	_, err = collection.DeleteOne(m.ctx, filter)
 	return err
+}
+
+func (m *MongoDB) SavePaymentResult(paymentParameters *models.PaymentParameters) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionPayment)
+	_, err = collection.InsertOne(m.ctx, paymentParameters)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetPaymentParameters get payment parameters by order id
+func (m *MongoDB) GetPaymentParameters(orderId string) (*models.PaymentParameters, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionPayment)
+	filter := bson.D{{"order", orderId}}
+	var paymentParameters models.PaymentParameters
+	if err = collection.FindOne(m.ctx, filter).Decode(&paymentParameters); err != nil {
+		return nil, err
+	}
+	return &paymentParameters, nil
+}
+
+func (m *MongoDB) SavePaymentMethod(paymentMethod *models.PaymentMethod) error {
+	saved, _ := m.GetPaymentMethod(paymentMethod.Identifier)
+	if saved != nil {
+		return nil
+	}
+
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionPaymentMethods)
+	_, err = collection.InsertOne(m.ctx, paymentMethod)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetPaymentMethods get payment methods by user id
+func (m *MongoDB) GetPaymentMethods(userId string) ([]*models.PaymentMethod, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionPaymentMethods)
+	filter := bson.D{{"user_id", userId}}
+	var paymentMethods []*models.PaymentMethod
+	cursor, err := collection.Find(m.ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if err = cursor.All(m.ctx, &paymentMethods); err != nil {
+		return nil, err
+	}
+	return paymentMethods, nil
+}
+
+// GetPaymentMethod get payment method by identifier
+func (m *MongoDB) GetPaymentMethod(identifier string) (*models.PaymentMethod, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionPaymentMethods)
+	filter := bson.D{{"identifier", identifier}}
+	var paymentMethod models.PaymentMethod
+	if err = collection.FindOne(m.ctx, filter).Decode(&paymentMethod); err != nil {
+		return nil, err
+	}
+	return &paymentMethod, nil
 }
