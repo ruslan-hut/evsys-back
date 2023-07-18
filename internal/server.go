@@ -34,6 +34,9 @@ const (
 	paymentSuccess = "payment/ok"
 	paymentFail    = "payment/ko"
 	paymentNotify  = "payment/notify"
+
+	paymentMethods    = "payment/methods"
+	paymentSaveMethod = "payment/save"
 )
 
 type Server struct {
@@ -112,6 +115,8 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.GET(route(paymentSuccess), s.paymentSuccess)
 	router.GET(route(paymentFail), s.paymentFail)
 	router.POST(route(paymentNotify), s.paymentNotify)
+	router.GET(route(paymentMethods), s.paymentMethods)
+	router.POST(route(paymentSaveMethod), s.paymentSaveMethod)
 	router.OPTIONS("/*path", s.options)
 	router.GET(wsEndpoint, s.handleWs)
 }
@@ -227,6 +232,29 @@ func (s *Server) getChargePoints(w http.ResponseWriter, r *http.Request, ps http
 		Payload:  []byte(ps.ByName("search")),
 	}
 	s.handleApiRequest(w, ac)
+}
+
+func (s *Server) paymentMethods(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	ac := &Call{
+		CallType: PaymentMethods,
+		Remote:   r.RemoteAddr,
+		Token:    s.getToken(r),
+	}
+	s.handleApiRequest(w, ac)
+}
+
+func (s *Server) paymentSaveMethod(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.logger.Error("get body while payment save method", err)
+		return
+	}
+	err = s.payments.SavePaymentMethod(body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) paymentSuccess(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {

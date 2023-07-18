@@ -22,6 +22,7 @@ const (
 	TransactionInfo      CallType = "TransactionInfo"
 	TransactionList      CallType = "TransactionList"
 	GenerateInvites      CallType = "GenerateInvites"
+	PaymentMethods       CallType = "PaymentMethods"
 )
 
 type Call struct {
@@ -130,6 +131,12 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		data, err = h.database.GetChargePoints(string(ac.Payload))
 		if err != nil {
 			h.logger.Error("get charge points", err)
+			status = http.StatusInternalServerError
+		}
+	case PaymentMethods:
+		data, err = h.database.GetPaymentMethods(userId)
+		if err != nil {
+			h.logger.Error("get payment methods", err)
 			status = http.StatusInternalServerError
 		}
 	case ActiveTransactions:

@@ -62,7 +62,7 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 	var params models.PaymentParameters
 	err = json.Unmarshal(jsonBytes, &params)
 	if err != nil {
-		p.logger.Error("unmarshal json", err)
+		p.logger.Error("parameters: unmarshal json", err)
 		p.logger.Info(fmt.Sprintf("Ds_MerchantParameters: %s", string(jsonBytes)))
 		return
 	}
@@ -72,4 +72,20 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 		p.logger.Error("save payment result", err)
 	}
 	p.logger.Info(fmt.Sprintf("order: %s; amount: %s", params.Order, params.Amount))
+}
+
+func (p *Payments) SavePaymentMethod(data []byte) error {
+	var paymentMethod models.PaymentMethod
+	err := json.Unmarshal(data, &paymentMethod)
+	if err != nil {
+		p.logger.Error("method: unmarshal json", err)
+		p.logger.Info(fmt.Sprintf("method data: %s", string(data)))
+		return err
+	}
+	err = p.database.SavePaymentMethod(&paymentMethod)
+	if err != nil {
+		p.logger.Error("save payment method", err)
+		return err
+	}
+	return nil
 }
