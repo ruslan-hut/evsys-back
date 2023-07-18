@@ -249,7 +249,12 @@ func (s *Server) paymentSaveMethod(w http.ResponseWriter, r *http.Request, _ htt
 		s.logger.Error("get body while payment save method", err)
 		return
 	}
-	err = s.payments.SavePaymentMethod(body)
+	user := s.authorizeRequest(r)
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	err = s.payments.SavePaymentMethod(user, body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -339,6 +344,19 @@ func (s *Server) getToken(r *http.Request) string {
 		return strings.Replace(header, "Bearer ", "", 1)
 	}
 	return ""
+}
+
+func (s *Server) authorizeRequest(r *http.Request) *models.User {
+	token := s.getToken(r)
+	if token == "" {
+		return nil
+	}
+	user, err := s.auth.GetUser(token)
+	if err != nil {
+		s.logger.Error("authorize request", err)
+		return nil
+	}
+	return user
 }
 
 type SubscriptionType string

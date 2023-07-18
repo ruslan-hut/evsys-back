@@ -1,7 +1,6 @@
 package models
 
 type PaymentMethod struct {
-	Id          string `json:"id" bson:"_id"`
 	Description string `json:"description" bson:"description"`
 	Identifier  string `json:"identifier" bson:"identifier"`
 	CardNumber  string `json:"card_number" bson:"card_number"`

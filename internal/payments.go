@@ -74,7 +74,7 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 	p.logger.Info(fmt.Sprintf("order: %s; amount: %s", params.Order, params.Amount))
 }
 
-func (p *Payments) SavePaymentMethod(data []byte) error {
+func (p *Payments) SavePaymentMethod(user *models.User, data []byte) error {
 	var paymentMethod models.PaymentMethod
 	err := json.Unmarshal(data, &paymentMethod)
 	if err != nil {
@@ -82,6 +82,14 @@ func (p *Payments) SavePaymentMethod(data []byte) error {
 		p.logger.Info(fmt.Sprintf("method data: %s", string(data)))
 		return err
 	}
+	if paymentMethod.Identifier == "" {
+		p.logger.Warn("empty identifier")
+		return fmt.Errorf("empty identifier")
+	}
+
+	paymentMethod.UserId = user.UserId
+	paymentMethod.UserName = user.Username
+
 	err = p.database.SavePaymentMethod(&paymentMethod)
 	if err != nil {
 		p.logger.Error("save payment method", err)

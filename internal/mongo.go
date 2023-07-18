@@ -673,9 +673,9 @@ func (m *MongoDB) GetPaymentParameters(orderId string) (*models.PaymentParameter
 }
 
 func (m *MongoDB) SavePaymentMethod(paymentMethod *models.PaymentMethod) error {
-	saved, _ := m.GetPaymentMethod(paymentMethod.Identifier)
+	saved, _ := m.GetPaymentMethod(paymentMethod.Identifier, paymentMethod.UserId)
 	if saved != nil {
-		return nil
+		return fmt.Errorf("payment method with identifier %s... already exists", paymentMethod.Identifier[0:10])
 	}
 
 	connection, err := m.connect()
@@ -714,7 +714,7 @@ func (m *MongoDB) GetPaymentMethods(userId string) ([]*models.PaymentMethod, err
 }
 
 // GetPaymentMethod get payment method by identifier
-func (m *MongoDB) GetPaymentMethod(identifier string) (*models.PaymentMethod, error) {
+func (m *MongoDB) GetPaymentMethod(identifier, userId string) (*models.PaymentMethod, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -722,7 +722,7 @@ func (m *MongoDB) GetPaymentMethod(identifier string) (*models.PaymentMethod, er
 	defer m.disconnect(connection)
 
 	collection := connection.Database(m.database).Collection(collectionPaymentMethods)
-	filter := bson.D{{"identifier", identifier}}
+	filter := bson.D{{"identifier", identifier}, {"user_id", userId}}
 	var paymentMethod models.PaymentMethod
 	if err = collection.FindOne(m.ctx, filter).Decode(&paymentMethod); err != nil {
 		return nil, err
