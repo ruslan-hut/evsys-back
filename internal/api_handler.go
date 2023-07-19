@@ -21,6 +21,7 @@ const (
 	ActiveTransactions   CallType = "ActiveTransactions"
 	TransactionInfo      CallType = "TransactionInfo"
 	TransactionList      CallType = "TransactionList"
+	TransactionBill      CallType = "TransactionBill"
 	GenerateInvites      CallType = "GenerateInvites"
 	PaymentMethods       CallType = "PaymentMethods"
 )
@@ -149,6 +150,12 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		data, err = h.database.GetTransactions(userId, 100, 0)
 		if err != nil {
 			h.logger.Error("get transactions list", err)
+			status = http.StatusInternalServerError
+		}
+	case TransactionBill:
+		data, err = h.database.GetTransactionsToBill(userId)
+		if err != nil {
+			h.logger.Error("get bill transactions", err)
 			status = http.StatusInternalServerError
 		}
 	case TransactionInfo:

@@ -535,6 +535,44 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]*models.ChargeState, e
 	return chargeStates, nil
 }
 
+// GetTransactionsToBill get list of transactions to bill
+func (m *MongoDB) GetTransactionsToBill(userId string) ([]*models.Transaction, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	tags, err := m.GetUserTags(userId)
+	if err != nil {
+		return nil, err
+	}
+	if len(tags) == 0 {
+		return nil, nil
+	}
+
+	var idTags []string
+	for _, tag := range tags {
+		idTags = append(idTags, strings.ToUpper(tag.IdTag))
+	}
+
+	collection := connection.Database(m.database).Collection(collectionTransactions)
+	filter := bson.D{
+		{"id_tag", bson.D{{"$in", idTags}}},
+		{"is_finished", true},
+		{"$expr", bson.D{{"$lt", bson.A{"$payment_billed", "$payment_amount"}}}},
+	}
+	var transactions []*models.Transaction
+	cursor, err := collection.Find(m.ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if err = cursor.All(m.ctx, &transactions); err != nil {
+		return nil, err
+	}
+	return transactions, nil
+}
+
 // GetTransactions gets list of a user's transactions
 func (m *MongoDB) GetTransactions(userId string, limit int, offset int) ([]*models.Transaction, error) {
 	connection, err := m.connect()

@@ -27,6 +27,7 @@ type Database interface {
 	GetTransactionState(id int) (*models.ChargeState, error)
 	GetActiveTransactions(userId string) ([]*models.ChargeState, error)
 	GetTransactions(userId string, limit int, offset int) ([]*models.Transaction, error)
+	GetTransactionsToBill(userId string) ([]*models.Transaction, error)
 
 	GetLastMeterValue(transactionId int) (*models.TransactionMeter, error)
 
