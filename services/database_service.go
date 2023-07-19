@@ -39,6 +39,9 @@ type Database interface {
 	SavePaymentMethod(paymentMethod *models.PaymentMethod) error
 	GetPaymentMethods(userId string) ([]*models.PaymentMethod, error)
 	GetPaymentParameters(orderId string) (*models.PaymentParameters, error)
+
+	GetLastOrder() (*models.PaymentOrder, error)
+	SavePaymentOrder(order *models.PaymentOrder) error
 }
 
 type Data interface {

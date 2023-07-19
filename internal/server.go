@@ -38,6 +38,7 @@ const (
 
 	paymentMethods    = "payment/methods"
 	paymentSaveMethod = "payment/save"
+	paymentSetOrder   = "payment/order"
 )
 
 type Server struct {
@@ -119,6 +120,7 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.POST(route(paymentNotify), s.paymentNotify)
 	router.GET(route(paymentMethods), s.paymentMethods)
 	router.POST(route(paymentSaveMethod), s.paymentSaveMethod)
+	router.POST(route(paymentSetOrder), s.paymentSetOrder)
 	router.OPTIONS("/*path", s.options)
 	router.GET(wsEndpoint, s.handleWs)
 }
@@ -270,6 +272,29 @@ func (s *Server) paymentSaveMethod(w http.ResponseWriter, r *http.Request, _ htt
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) paymentSetOrder(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.logger.Error("get body while payment set order", err)
+		return
+	}
+	user := s.authorizeRequest(r)
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	order, err := s.payments.SetOrder(user, body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	err = json.NewEncoder(w).Encode(order)
+	if err != nil {
+		s.logger.Error("payment set order: encode order", err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func (s *Server) paymentSuccess(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {

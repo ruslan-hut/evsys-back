@@ -7,6 +7,7 @@ import (
 	"evsys-back/services"
 	"fmt"
 	"net/url"
+	"time"
 )
 
 type Payments struct {
@@ -93,6 +94,36 @@ func (p *Payments) SavePaymentMethod(user *models.User, data []byte) error {
 	err = p.database.SavePaymentMethod(&paymentMethod)
 	if err != nil {
 		p.logger.Error("save payment method", err)
+		return err
+	}
+	return nil
+}
+
+func (p *Payments) SetOrder(user *models.User, data []byte) error {
+	var order models.PaymentOrder
+	err := json.Unmarshal(data, &order)
+	if err != nil {
+		p.logger.Error("order: unmarshal json", err)
+		p.logger.Info(fmt.Sprintf("method data: %s", string(data)))
+		return err
+	}
+
+	if order.Order == 0 {
+		lastOrder, _ := p.database.GetLastOrder()
+		if lastOrder != nil {
+			order.Order = lastOrder.Order + 1
+		} else {
+			order.Order = 1200
+		}
+		order.TimeOpened = time.Now()
+	}
+
+	order.UserId = user.UserId
+	order.UserName = user.Username
+
+	err = p.database.SavePaymentOrder(&order)
+	if err != nil {
+		p.logger.Error("save order", err)
 		return err
 	}
 	return nil

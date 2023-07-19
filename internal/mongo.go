@@ -28,6 +28,7 @@ const (
 	collectionInvites        = "invites"
 	collectionPayment        = "payment"
 	collectionPaymentMethods = "payment_methods"
+	collectionPaymentOrders  = "payment_orders"
 )
 
 type pipeResult struct {
@@ -779,4 +780,53 @@ func (m *MongoDB) GetPaymentMethod(identifier, userId string) (*models.PaymentMe
 		return nil, err
 	}
 	return &paymentMethod, nil
+}
+
+func (m *MongoDB) GetLastOrder() (*models.PaymentOrder, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionPaymentOrders)
+	filter := bson.D{}
+	var order models.PaymentOrder
+	if err = collection.FindOne(m.ctx, filter, options.FindOne().SetSort(bson.D{{"time_opened", -1}})).Decode(&order); err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
+func (m *MongoDB) GetPaymentOrder(id int) (*models.PaymentOrder, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionPaymentOrders)
+	filter := bson.D{{"order", id}}
+	var order models.PaymentOrder
+	if err = collection.FindOne(m.ctx, filter).Decode(&order); err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
+// SavePaymentOrder insert or update order
+func (m *MongoDB) SavePaymentOrder(order *models.PaymentOrder) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+
+	filter := bson.D{{"order", order.Order}}
+	collection := connection.Database(m.database).Collection(collectionPaymentOrders)
+	_, err = collection.UpdateOne(m.ctx, filter, order, options.Update().SetUpsert(true))
+	if err != nil {
+		return err
+	}
+	return nil
 }
