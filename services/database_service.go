@@ -28,6 +28,7 @@ type Database interface {
 	GetActiveTransactions(userId string) ([]*models.ChargeState, error)
 	GetTransactions(userId string, limit int, offset int) ([]*models.Transaction, error)
 	GetTransactionsToBill(userId string) ([]*models.Transaction, error)
+	UpdateTransaction(transaction *models.Transaction) error
 
 	GetLastMeterValue(transactionId int) (*models.TransactionMeter, error)
 
@@ -42,6 +43,7 @@ type Database interface {
 
 	GetLastOrder() (*models.PaymentOrder, error)
 	SavePaymentOrder(order *models.PaymentOrder) error
+	GetPaymentOrder(id int) (*models.PaymentOrder, error)
 }
 
 type Data interface {

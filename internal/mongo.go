@@ -490,6 +490,28 @@ func (m *MongoDB) GetTransaction(id int) (*models.Transaction, error) {
 	return &transaction, nil
 }
 
+// UpdateTransaction update transaction billed data
+func (m *MongoDB) UpdateTransaction(transaction *models.Transaction) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionTransactions)
+	filter := bson.D{{"transaction_id", transaction.TransactionId}}
+	update := bson.D{
+		{"$set", bson.D{
+			{"payment_order", transaction.PaymentOrder},
+			{"payment_billed", transaction.PaymentBilled},
+		}},
+	}
+	if _, err = collection.UpdateOne(m.ctx, filter, update); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (m *MongoDB) GetActiveTransactions(userId string) ([]*models.ChargeState, error) {
 	connection, err := m.connect()
 	if err != nil {

@@ -15,5 +15,5 @@ type Transaction struct {
 	TimeStop      time.Time `json:"time_stop" bson:"time_stop"`
 	PaymentAmount int       `json:"payment_amount" bson:"payment_amount"`
 	PaymentBilled int       `json:"payment_billed" bson:"payment_billed"`
-	PaymentOrder  string    `json:"payment_order" bson:"payment_order"`
+	PaymentOrder  int       `json:"payment_order" bson:"payment_order"`
 }
