@@ -146,7 +146,7 @@ func (s *Server) transactionInfo(w http.ResponseWriter, r *http.Request, ps http
 	s.handleApiRequest(w, ac)
 }
 
-func (s *Server) transactionList(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *Server) transactionList(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ac := &Call{
 		CallType: TransactionList,
 		Remote:   r.RemoteAddr,
@@ -155,7 +155,7 @@ func (s *Server) transactionList(w http.ResponseWriter, r *http.Request, ps http
 	s.handleApiRequest(w, ac)
 }
 
-func (s *Server) transactionBill(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *Server) transactionBill(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ac := &Call{
 		CallType: TransactionBill,
 		Remote:   r.RemoteAddr,
