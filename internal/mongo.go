@@ -418,11 +418,23 @@ func (m *MongoDB) getTransactionState(transaction *models.Transaction) (*models.
 	if err != nil {
 		return nil, fmt.Errorf("get connector: %v", err)
 	}
+
 	consumed := 0
+	price := 0
 	meterValue, _ := m.GetLastMeterValue(transaction.TransactionId)
 	if meterValue != nil {
 		consumed = meterValue.Value - transaction.MeterStart
+		price = meterValue.Price
+	} else {
+		consumed = transaction.MeterStop - transaction.MeterStart
+		price = transaction.PaymentAmount
 	}
+
+	duration := int(time.Since(transaction.TimeStart).Seconds())
+	if transaction.IsFinished {
+		duration = int(transaction.TimeStop.Sub(transaction.TimeStart).Seconds())
+	}
+
 	chargeState = models.ChargeState{
 		TransactionId:      transaction.TransactionId,
 		ConnectorId:        transaction.ConnectorId,
@@ -431,9 +443,10 @@ func (m *MongoDB) getTransactionState(transaction *models.Transaction) (*models.
 		ChargePointTitle:   chargePoint.Title,
 		ChargePointAddress: chargePoint.Address,
 		TimeStarted:        transaction.TimeStart,
-		Duration:           int(time.Since(transaction.TimeStart).Seconds()),
+		Duration:           duration,
 		MeterStart:         transaction.MeterStart,
 		Consumed:           consumed,
+		Price:              price,
 		Status:             connector.Status,
 		IsCharging:         transaction.IsFinished == false,
 		CanStop:            false,
