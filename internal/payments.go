@@ -74,7 +74,7 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 		p.logger.Info(fmt.Sprintf("Ds_MerchantParameters: %s", paymentResult.Parameters[0:50]))
 		return
 	}
-	p.logger.Info(fmt.Sprintf("Ds_MerchantParameters: %s", string(jsonBytes)))
+	//p.logger.Info(fmt.Sprintf("Ds_MerchantParameters: %s", string(jsonBytes)))
 
 	var params models.PaymentParameters
 	err = json.Unmarshal(jsonBytes, &params)

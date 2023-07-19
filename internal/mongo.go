@@ -845,8 +845,9 @@ func (m *MongoDB) SavePaymentOrder(order *models.PaymentOrder) error {
 	defer m.disconnect(connection)
 
 	filter := bson.D{{"order", order.Order}}
+	set := bson.M{"$set": order}
 	collection := connection.Database(m.database).Collection(collectionPaymentOrders)
-	_, err = collection.UpdateOne(m.ctx, filter, order, options.Update().SetUpsert(true))
+	_, err = collection.UpdateOne(m.ctx, filter, set, options.Update().SetUpsert(true))
 	if err != nil {
 		return err
 	}
