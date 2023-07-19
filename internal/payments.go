@@ -99,13 +99,13 @@ func (p *Payments) SavePaymentMethod(user *models.User, data []byte) error {
 	return nil
 }
 
-func (p *Payments) SetOrder(user *models.User, data []byte) error {
+func (p *Payments) SetOrder(user *models.User, data []byte) (*models.PaymentOrder, error) {
 	var order models.PaymentOrder
 	err := json.Unmarshal(data, &order)
 	if err != nil {
 		p.logger.Error("order: unmarshal json", err)
 		p.logger.Info(fmt.Sprintf("method data: %s", string(data)))
-		return err
+		return nil, err
 	}
 
 	if order.Order == 0 {
@@ -124,7 +124,7 @@ func (p *Payments) SetOrder(user *models.User, data []byte) error {
 	err = p.database.SavePaymentOrder(&order)
 	if err != nil {
 		p.logger.Error("save order", err)
-		return err
+		return nil, err
 	}
-	return nil
+	return &order, nil
 }
