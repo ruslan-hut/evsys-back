@@ -711,7 +711,9 @@ func (c *Client) listenForTransactionState(transactionId int) {
 				Status:   models.Value,
 				Stage:    models.Info,
 				Info:     fmt.Sprintf("transaction %v: %v %s", transactionId, value.Value, value.Unit),
-				Progress: value.Value,
+				Progress: value.Value, // for compatibility with old clients
+				Power:    value.Value,
+				Price:    value.Price,
 				Id:       transactionId,
 			})
 		}

@@ -13,4 +13,7 @@ type Transaction struct {
 	MeterStop     int       `json:"meter_stop" bson:"meter_stop"`
 	TimeStart     time.Time `json:"time_start" bson:"time_start"`
 	TimeStop      time.Time `json:"time_stop" bson:"time_stop"`
+	PaymentAmount int       `json:"payment_amount" bson:"payment_amount"`
+	PaymentBilled int       `json:"payment_billed" bson:"payment_billed"`
+	PaymentOrder  string    `json:"payment_order" bson:"payment_order"`
 }

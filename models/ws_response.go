@@ -6,6 +6,8 @@ type WsResponse struct {
 	Info     string         `json:"info"`
 	UserId   string         `json:"user_id"`
 	Progress int            `json:"progress"`
+	Power    int            `json:"power"`
+	Price    int            `json:"price"`
 	Id       int            `json:"id"`
 	Data     string         `json:"data"`
 }
