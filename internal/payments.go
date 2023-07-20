@@ -136,24 +136,60 @@ func (p *Payments) SavePaymentMethod(user *models.User, data []byte) error {
 	p.Lock()
 	defer p.Unlock()
 
-	var paymentMethod models.PaymentMethod
-	err := json.Unmarshal(data, &paymentMethod)
+	paymentMethod, err := p.unmarshallPaymentMethod(data)
 	if err != nil {
 		p.logger.Error("method: unmarshal json", err)
-		p.logger.Info(fmt.Sprintf("method data: %s", string(data)))
 		return err
-	}
-	if paymentMethod.Identifier == "" {
-		p.logger.Warn("empty identifier")
-		return fmt.Errorf("empty identifier")
 	}
 
 	paymentMethod.UserId = user.UserId
 	paymentMethod.UserName = user.Username
 
-	err = p.database.SavePaymentMethod(&paymentMethod)
+	err = p.database.SavePaymentMethod(paymentMethod)
 	if err != nil {
 		p.logger.Error("save payment method", err)
+		return err
+	}
+	return nil
+}
+
+func (p *Payments) UpdatePaymentMethod(data []byte) error {
+	p.Lock()
+	defer p.Unlock()
+
+	paymentMethod, err := p.unmarshallPaymentMethod(data)
+	if err != nil {
+		p.logger.Error("method: unmarshal json", err)
+		return err
+	}
+	if paymentMethod.UserId == "" {
+		return fmt.Errorf("empty user id")
+	}
+
+	err = p.database.UpdatePaymentMethod(paymentMethod)
+	if err != nil {
+		p.logger.Error("update payment method", err)
+		return err
+	}
+	return nil
+}
+
+func (p *Payments) DeletePaymentMethod(data []byte) error {
+	p.Lock()
+	defer p.Unlock()
+
+	paymentMethod, err := p.unmarshallPaymentMethod(data)
+	if err != nil {
+		p.logger.Error("method: unmarshal json", err)
+		return err
+	}
+	if paymentMethod.UserId == "" {
+		return fmt.Errorf("empty user id")
+	}
+
+	err = p.database.DeletePaymentMethod(paymentMethod)
+	if err != nil {
+		p.logger.Error("delete payment method", err)
 		return err
 	}
 	return nil
@@ -190,4 +226,18 @@ func (p *Payments) SetOrder(user *models.User, data []byte) (*models.PaymentOrde
 		return nil, err
 	}
 	return &order, nil
+}
+
+// unmarshall payment method from bytes
+func (p *Payments) unmarshallPaymentMethod(data []byte) (*models.PaymentMethod, error) {
+	var paymentMethod models.PaymentMethod
+	err := json.Unmarshal(data, &paymentMethod)
+	if err != nil {
+		p.logger.Info(fmt.Sprintf("method data: %s", string(data)))
+		return nil, err
+	}
+	if paymentMethod.Identifier == "" {
+		return nil, fmt.Errorf("empty identifier")
+	}
+	return &paymentMethod, nil
 }

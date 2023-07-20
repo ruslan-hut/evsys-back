@@ -38,6 +38,8 @@ const (
 
 	paymentMethods    = "payment/methods"
 	paymentSaveMethod = "payment/save"
+	paymentUpdate     = "payment/update"
+	paymentDelete     = "payment/delete"
 	paymentSetOrder   = "payment/order"
 )
 
@@ -120,6 +122,8 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.POST(route(paymentNotify), s.paymentNotify)
 	router.GET(route(paymentMethods), s.paymentMethods)
 	router.POST(route(paymentSaveMethod), s.paymentSaveMethod)
+	router.POST(route(paymentUpdate), s.paymentUpdateMethod)
+	router.POST(route(paymentDelete), s.paymentDeleteMethod)
 	router.POST(route(paymentSetOrder), s.paymentSetOrder)
 	router.OPTIONS("/*path", s.options)
 	router.GET(wsEndpoint, s.handleWs)
@@ -267,6 +271,44 @@ func (s *Server) paymentSaveMethod(w http.ResponseWriter, r *http.Request, _ htt
 		return
 	}
 	err = s.payments.SavePaymentMethod(user, body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) paymentUpdateMethod(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.logger.Error("get body while payment update method", err)
+		return
+	}
+	user := s.authorizeRequest(r)
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	err = s.payments.UpdatePaymentMethod(body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) paymentDeleteMethod(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.logger.Error("get body while payment delete method", err)
+		return
+	}
+	user := s.authorizeRequest(r)
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	err = s.payments.DeletePaymentMethod(body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

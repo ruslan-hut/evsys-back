@@ -766,6 +766,44 @@ func (m *MongoDB) SavePaymentMethod(paymentMethod *models.PaymentMethod) error {
 	return nil
 }
 
+// UpdatePaymentMethod update user-editable fields for payment method
+func (m *MongoDB) UpdatePaymentMethod(paymentMethod *models.PaymentMethod) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionPaymentMethods)
+	filter := bson.D{{"identifier", paymentMethod.Identifier}, {"user_id", paymentMethod.UserId}}
+	update := bson.M{"$set": bson.D{
+		{"description", paymentMethod.Description},
+		{"is_default", paymentMethod.IsDefault},
+	}}
+	_, err = collection.UpdateOne(m.ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// DeletePaymentMethod delete payment method by identifier
+func (m *MongoDB) DeletePaymentMethod(paymentMethod *models.PaymentMethod) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionPaymentMethods)
+	filter := bson.D{{"identifier", paymentMethod.Identifier}, {"user_id", paymentMethod.UserId}}
+	_, err = collection.DeleteOne(m.ctx, filter)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // GetPaymentMethods get payment methods by user id
 func (m *MongoDB) GetPaymentMethods(userId string) ([]*models.PaymentMethod, error) {
 	connection, err := m.connect()

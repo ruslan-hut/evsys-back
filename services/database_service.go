@@ -38,6 +38,8 @@ type Database interface {
 
 	SavePaymentResult(paymentParameters *models.PaymentParameters) error
 	SavePaymentMethod(paymentMethod *models.PaymentMethod) error
+	UpdatePaymentMethod(paymentMethod *models.PaymentMethod) error
+	DeletePaymentMethod(paymentMethod *models.PaymentMethod) error
 	GetPaymentMethods(userId string) ([]*models.PaymentMethod, error)
 	GetPaymentParameters(orderId string) (*models.PaymentParameters, error)
 
