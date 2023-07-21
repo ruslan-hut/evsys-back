@@ -115,21 +115,47 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 		p.logger.Error("save payment order", err)
 	}
 
-	transaction, err := p.database.GetTransaction(order.TransactionId)
-	if err != nil {
-		p.logger.Error("get transaction", err)
+	if params.Response != "0000" {
+		p.logger.Warn(fmt.Sprintf("payment response: %s; order: %s; amount: %s", params.Response, params.Order, params.Amount))
 		return
 	}
-	transaction.PaymentOrder = order.Order
-	transaction.PaymentBilled = order.Amount
-
-	err = p.database.UpdateTransaction(transaction)
-	if err != nil {
-		p.logger.Error("update transaction", err)
-		return
-	}
-
 	p.logger.Info(fmt.Sprintf("order: %s; amount: %s", params.Order, params.Amount))
+
+	if order.TransactionId > 0 {
+
+		transaction, err := p.database.GetTransaction(order.TransactionId)
+		if err != nil {
+			p.logger.Error("get transaction", err)
+			return
+		}
+		transaction.PaymentOrder = order.Order
+		transaction.PaymentBilled = order.Amount
+
+		err = p.database.UpdateTransaction(transaction)
+		if err != nil {
+			p.logger.Error("update transaction", err)
+			return
+		}
+
+	} else {
+
+		paymentMethod := models.PaymentMethod{
+			Description: "**** **** **** ****",
+			Identifier:  params.MerchantIdentifier,
+			CardBrand:   params.CardBrand,
+			CardCountry: params.CardCountry,
+			ExpiryDate:  params.ExpiryDate,
+			UserId:      order.UserId,
+			UserName:    order.UserName,
+		}
+		err = p.database.SavePaymentMethod(&paymentMethod)
+		if err != nil {
+			p.logger.Error("save payment method", err)
+			return
+		}
+
+	}
+
 }
 
 func (p *Payments) SavePaymentMethod(user *models.User, data []byte) error {
