@@ -775,6 +775,17 @@ func (m *MongoDB) UpdatePaymentMethod(paymentMethod *models.PaymentMethod) error
 	defer m.disconnect(connection)
 
 	collection := connection.Database(m.database).Collection(collectionPaymentMethods)
+
+	// if current method is default, then set all other methods to not default
+	if paymentMethod.IsDefault {
+		filter := bson.D{{"user_id", paymentMethod.UserId}}
+		update := bson.M{"$set": bson.D{{"is_default", false}}}
+		_, err = collection.UpdateMany(m.ctx, filter, update)
+		if err != nil {
+			return err
+		}
+	}
+
 	filter := bson.D{{"identifier", paymentMethod.Identifier}, {"user_id", paymentMethod.UserId}}
 	update := bson.M{"$set": bson.D{
 		{"description", paymentMethod.Description},
