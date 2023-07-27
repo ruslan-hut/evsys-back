@@ -12,6 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -596,8 +597,8 @@ func (m *MongoDB) GetTransactionsToBill(userId string) ([]*models.Transaction, e
 	return transactions, nil
 }
 
-// GetTransactions gets list of a user's transactions
-func (m *MongoDB) GetTransactions(userId string, limit int, offset int) ([]*models.Transaction, error) {
+// GetTransactions gets list of a user's transactions; if period is empty, returns last 100 transactions
+func (m *MongoDB) GetTransactions(userId string, period string) ([]*models.Transaction, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -618,12 +619,27 @@ func (m *MongoDB) GetTransactions(userId string, limit int, offset int) ([]*mode
 	}
 
 	collection := connection.Database(m.database).Collection(collectionTransactions)
-	filter := bson.D{
-		{"id_tag", bson.D{{"$in", idTags}}},
-		{"is_finished", true},
-	}
+
 	var transactions []*models.Transaction
-	cursor, err := collection.Find(m.ctx, filter, options.Find().SetLimit(int64(limit)).SetSkip(int64(offset)).SetSort(bson.D{{"time_start", -1}}))
+	var cursor *mongo.Cursor
+
+	time1, time2, err := parsePeriod(period)
+	if err != nil {
+		filter := bson.D{
+			{"id_tag", bson.D{{"$in", idTags}}},
+			{"is_finished", true},
+		}
+		cursor, err = collection.Find(m.ctx, filter, options.Find().SetLimit(int64(100)).SetSkip(int64(0)).SetSort(bson.D{{"time_start", -1}}))
+	} else {
+		filter := bson.D{
+			{"id_tag", bson.D{{"$in", idTags}}},
+			{"is_finished", true},
+			{"time_start", bson.D{{"$gte", time1}}},
+			{"time_start", bson.D{{"$lte", time2}}},
+		}
+		cursor, err = collection.Find(m.ctx, filter, options.Find().SetSort(bson.D{{"time_start", -1}}))
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -901,4 +917,32 @@ func (m *MongoDB) SavePaymentOrder(order *models.PaymentOrder) error {
 		return err
 	}
 	return nil
+}
+
+// Helper function to convert a string of milliseconds to a time.Time value
+func millisToTime(millis string) (time.Time, error) {
+	// Convert the string to an int64
+	millisInt, err := strconv.ParseInt(millis, 10, 64)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	// Convert the int64 to a time.Time value
+	return time.Unix(0, millisInt*int64(time.Millisecond)), nil
+}
+
+func parsePeriod(period string) (time1, time2 time.Time, err error) {
+	parts := strings.Split(period, "-")
+	if len(parts) != 2 {
+		return time.Time{}, time.Time{}, fmt.Errorf("invalid period format")
+	}
+	time1, err = millisToTime(parts[0])
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	time2, err = millisToTime(parts[1])
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return time1, time2, nil
 }

@@ -26,7 +26,7 @@ type Database interface {
 	GetTransactionByTag(idTag string, timeStart time.Time) (*models.Transaction, error)
 	GetTransactionState(id int) (*models.ChargeState, error)
 	GetActiveTransactions(userId string) ([]*models.ChargeState, error)
-	GetTransactions(userId string, limit int, offset int) ([]*models.Transaction, error)
+	GetTransactions(userId string, period string) ([]*models.Transaction, error)
 	GetTransactionsToBill(userId string) ([]*models.Transaction, error)
 	UpdateTransaction(transaction *models.Transaction) error
 

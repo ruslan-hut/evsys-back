@@ -147,7 +147,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			status = http.StatusInternalServerError
 		}
 	case TransactionList:
-		data, err = h.database.GetTransactions(userId, 100, 0)
+		data, err = h.database.GetTransactions(userId, string(ac.Payload))
 		if err != nil {
 			h.logger.Error("get transactions list", err)
 			status = http.StatusInternalServerError
