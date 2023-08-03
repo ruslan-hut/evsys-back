@@ -4,13 +4,18 @@ import (
 	"evsys-back/config"
 	"evsys-back/internal"
 	"evsys-back/services"
+	"flag"
 )
 
 func main() {
 
 	logger := internal.NewLogger("internal", false)
 
-	conf, err := config.GetConfig()
+	configPath := flag.String("conf", "config.yml", "path to config file")
+	flag.Parse()
+
+	logger.Info("using config file: " + *configPath)
+	conf, err := config.GetConfig(*configPath)
 	if err != nil {
 		logger.Error("boot", err)
 		return
