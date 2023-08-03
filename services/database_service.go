@@ -46,6 +46,7 @@ type Database interface {
 	GetLastOrder() (*models.PaymentOrder, error)
 	SavePaymentOrder(order *models.PaymentOrder) error
 	GetPaymentOrder(id int) (*models.PaymentOrder, error)
+	GetPaymentOrderByTransaction(transactionId int) (*models.PaymentOrder, error)
 }
 
 type Data interface {

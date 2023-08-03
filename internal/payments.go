@@ -234,6 +234,13 @@ func (p *Payments) SetOrder(user *models.User, data []byte) (*models.PaymentOrde
 	}
 
 	if order.Order == 0 {
+
+		// if payment process was interrupted, continue with the same order
+		continueOrder, _ := p.database.GetPaymentOrderByTransaction(order.TransactionId)
+		if continueOrder != nil {
+			return continueOrder, nil
+		}
+
 		lastOrder, _ := p.database.GetLastOrder()
 		if lastOrder != nil {
 			order.Order = lastOrder.Order + 1

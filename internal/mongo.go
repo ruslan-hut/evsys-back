@@ -885,6 +885,23 @@ func (m *MongoDB) GetLastOrder() (*models.PaymentOrder, error) {
 	return &order, nil
 }
 
+// GetPaymentOrderByTransaction get payment order by transaction id
+func (m *MongoDB) GetPaymentOrderByTransaction(transactionId int) (*models.PaymentOrder, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionPaymentOrders)
+	filter := bson.D{{"transaction_id", transactionId}, {"is_completed", false}}
+	var order models.PaymentOrder
+	if err = collection.FindOne(m.ctx, filter).Decode(&order); err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
 func (m *MongoDB) GetPaymentOrder(id int) (*models.PaymentOrder, error) {
 	connection, err := m.connect()
 	if err != nil {
