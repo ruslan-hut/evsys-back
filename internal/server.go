@@ -22,6 +22,7 @@ const (
 	readBackLogEndpoint   = "backlog"
 	userAuthenticate      = "users/authenticate"
 	userRegister          = "users/register"
+	userInfo              = "users/info"
 	generateInvites       = "users/invites"
 	getChargePoints       = "chp"
 	getChargePointsSearch = "chp/:search"
@@ -110,6 +111,7 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.GET(route(readBackLogEndpoint), s.readBackLog)
 	router.POST(route(userAuthenticate), s.authenticateUser)
 	router.POST(route(userRegister), s.registerUser)
+	router.GET(route(userInfo), s.userInfo)
 	router.GET(route(generateInvites), s.generateInvites)
 	router.POST(route(centralSystemCommand), s.centralSystemCommand)
 	router.GET(route(getChargePoints), s.getChargePoints)
@@ -224,6 +226,15 @@ func (s *Server) registerUser(w http.ResponseWriter, r *http.Request, _ httprout
 		CallType: RegisterUser,
 		Remote:   r.RemoteAddr,
 		Payload:  body,
+	}
+	s.handleApiRequest(w, ac)
+}
+
+func (s *Server) userInfo(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	ac := &Call{
+		CallType: UserInfo,
+		Remote:   r.RemoteAddr,
+		Token:    s.getToken(r),
 	}
 	s.handleApiRequest(w, ac)
 }

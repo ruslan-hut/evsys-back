@@ -16,6 +16,7 @@ const (
 	ReadBackLog          CallType = "ReadBackLog"
 	AuthenticateUser     CallType = "AuthenticateUser"
 	RegisterUser         CallType = "RegisterUser"
+	UserInfo             CallType = "UserInfo"
 	GetChargePoints      CallType = "GetChargePoints"
 	CentralSystemCommand CallType = "CentralSystemCommand"
 	ActiveTransactions   CallType = "ActiveTransactions"
@@ -71,13 +72,14 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		return nil, http.StatusInternalServerError
 	}
 
+	var user *models.User
 	userId := ""
 	var data interface{}
 	var err error
 	status := http.StatusOK
 
 	if ac.CallType != AuthenticateUser && ac.CallType != RegisterUser {
-		user, err := h.auth.GetUser(ac.Token)
+		user, err = h.auth.GetUser(ac.Token)
 		if err != nil {
 			h.logger.Error("token check failed", err)
 			return nil, http.StatusUnauthorized
@@ -122,6 +124,9 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 				status = http.StatusInternalServerError
 			}
 		}
+	case UserInfo:
+		// user data is already loaded by token check
+		data = user
 	case GenerateInvites:
 		data, err = h.auth.GenerateInvites(5)
 		if err != nil {
