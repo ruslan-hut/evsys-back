@@ -23,10 +23,11 @@ type Logger struct {
 	category       string
 }
 
-func NewLogger(category string, debug bool) *Logger {
+func NewLogger(category string, debug bool, db services.Database) *Logger {
 	return &Logger{
 		debugMode: debug,
 		category:  category,
+		database:  db,
 	}
 }
 
@@ -80,12 +81,20 @@ func (l *Logger) logEvent(level Importance, text string) {
 	messageText := fmt.Sprintf("%s: %s", message.Category, message.Text)
 	l.logLine(message.Level, messageText)
 
+	go l.sendToMessageService(message)
+
+	go l.writeToDatabase(message)
+}
+
+func (l *Logger) sendToMessageService(message *services.LogMessage) {
 	if l.messageService != nil {
 		if err := l.messageService.Send(message); err != nil {
 			l.internalError("sending message", err)
 		}
 	}
+}
 
+func (l *Logger) writeToDatabase(message *services.LogMessage) {
 	if l.database != nil {
 		if err := l.database.WriteLogMessage(message); err != nil {
 			l.internalError("write to database", err)

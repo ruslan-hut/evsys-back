@@ -99,7 +99,7 @@ func (m *MongoDB) WriteLogMessage(data services.Data) error {
 		return err
 	}
 	defer m.disconnect(connection)
-	collection := connection.Database(m.database).Collection(collectionSysLog)
+	collection := connection.Database(m.database).Collection(collectionBackLog)
 	_, err = collection.InsertOne(m.ctx, data)
 	return err
 }
