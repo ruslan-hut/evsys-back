@@ -468,7 +468,7 @@ type Pool struct {
 }
 
 func NewPool() *Pool {
-	logger := NewLogger("pool", false)
+	logger := NewLogger("pool", false, nil)
 	return &Pool{
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
