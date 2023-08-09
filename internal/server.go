@@ -411,6 +411,9 @@ func (s *Server) Start() error {
 		return fmt.Errorf("configuration not loaded")
 	}
 
+	pool := NewPool(s.logger)
+	go pool.Start()
+
 	serverAddress := fmt.Sprintf("%s:%s", s.conf.Listen.BindIP, s.conf.Listen.Port)
 	s.logger.Info(fmt.Sprintf("starting on %s", serverAddress))
 	listener, err := net.Listen("tcp", serverAddress)
@@ -425,9 +428,6 @@ func (s *Server) Start() error {
 		s.logger.Info("starting http")
 		err = s.httpServer.Serve(listener)
 	}
-
-	pool := NewPool(s.logger)
-	go pool.Start()
 
 	return err
 }
