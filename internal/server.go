@@ -411,8 +411,8 @@ func (s *Server) Start() error {
 		return fmt.Errorf("configuration not loaded")
 	}
 
-	pool := NewPool(s.logger)
-	go pool.Start()
+	s.pool = NewPool(s.logger)
+	go s.pool.Start()
 
 	serverAddress := fmt.Sprintf("%s:%s", s.conf.Listen.BindIP, s.conf.Listen.Port)
 	s.logger.Info(fmt.Sprintf("starting on %s", serverAddress))
@@ -488,14 +488,14 @@ func (p *Pool) Start() {
 		case client := <-p.register:
 			p.clients[client] = true
 			client.sendResponse(models.Ping, "new connection")
-			//p.logger.Info(fmt.Sprintf("pool: registered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
+			p.logger.Info(fmt.Sprintf("pool: registered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
 		case client := <-p.unregister:
 			if _, ok := p.clients[client]; ok {
 				delete(p.clients, client)
 				close(client.send)
-				//p.logger.Info(fmt.Sprintf("pool: unregistered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
+				p.logger.Info(fmt.Sprintf("pool: unregistered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
 			} else {
-				//p.logger.Warn(fmt.Sprintf("pool: unregistered unknown %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
+				p.logger.Warn(fmt.Sprintf("pool: unregistered unknown %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
 			}
 		case message := <-p.broadcast:
 			for client := range p.clients {
