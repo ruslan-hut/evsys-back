@@ -355,7 +355,9 @@ func (s *Server) paymentSuccess(w http.ResponseWriter, _ *http.Request, _ httpro
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) paymentFail(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+func (s *Server) paymentFail(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	// log request params
+	s.logger.Info(fmt.Sprintf("params: %+v", r.URL.Query()))
 	s.logger.Info(fmt.Sprintf("payment fail"))
 	w.WriteHeader(http.StatusOK)
 }
