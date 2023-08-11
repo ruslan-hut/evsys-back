@@ -12,6 +12,7 @@ type PaymentOrder struct {
 	Description   string    `json:"description" bson:"description"`
 	Identifier    string    `json:"identifier" bson:"identifier"`
 	IsCompleted   bool      `json:"is_completed" bson:"is_completed"`
+	Result        string    `json:"result" bson:"result"`
 	Date          string    `json:"date" bson:"date"`
 	TimeOpened    time.Time `json:"time_opened" bson:"time_opened"`
 	TimeClosed    time.Time `json:"time_closed" bson:"time_closed"`
