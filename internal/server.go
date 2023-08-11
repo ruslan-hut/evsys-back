@@ -351,14 +351,15 @@ func (s *Server) paymentSetOrder(w http.ResponseWriter, r *http.Request, _ httpr
 }
 
 func (s *Server) paymentSuccess(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	s.logger.Info("payment success")
+	s.logger.Info("payment OK")
 	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) paymentFail(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	// log request params
-	s.logger.Info(fmt.Sprintf("params: %+v", r.URL.Query()))
-	s.logger.Info(fmt.Sprintf("payment fail"))
+	err := s.payments.Notify([]byte(r.URL.RawQuery))
+	if err != nil {
+		s.logger.Error("payment KO", err)
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
