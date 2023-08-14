@@ -106,6 +106,7 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 	}
 	order.Amount = amount
 	order.IsCompleted = true
+	order.Result = params.Response
 	order.TimeClosed = time.Now()
 	order.Currency = params.Currency
 	order.Date = fmt.Sprintf("%s %s", params.Date, params.Hour)
@@ -116,7 +117,7 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 	}
 
 	if params.Response != "0000" {
-		p.logger.Warn(fmt.Sprintf("payment response: %s; order: %s; amount: %s", params.Response, params.Order, params.Amount))
+		p.logger.Info(fmt.Sprintf("error result: %s; order: %s; amount: %s", params.Response, params.Order, params.Amount))
 		return
 	}
 	p.logger.Info(fmt.Sprintf("order: %s; amount: %s", params.Order, params.Amount))

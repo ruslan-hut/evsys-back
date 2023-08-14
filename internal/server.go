@@ -59,8 +59,6 @@ type Server struct {
 }
 
 func NewServer(conf *config.Config) *Server {
-	pool := NewPool()
-	go pool.Start()
 
 	server := Server{
 		conf: conf,
@@ -69,7 +67,6 @@ func NewServer(conf *config.Config) *Server {
 				return true
 			},
 		},
-		pool: pool,
 	}
 
 	// register itself as a router for httpServer handler
@@ -354,12 +351,15 @@ func (s *Server) paymentSetOrder(w http.ResponseWriter, r *http.Request, _ httpr
 }
 
 func (s *Server) paymentSuccess(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	s.logger.Info("payment success")
+	s.logger.Info("payment OK")
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) paymentFail(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	s.logger.Info(fmt.Sprintf("payment fail"))
+func (s *Server) paymentFail(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	err := s.payments.Notify([]byte(r.URL.RawQuery))
+	if err != nil {
+		s.logger.Error("payment KO", err)
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -413,12 +413,17 @@ func (s *Server) Start() error {
 	if s.conf == nil {
 		return fmt.Errorf("configuration not loaded")
 	}
+
+	s.pool = NewPool(s.logger)
+	go s.pool.Start()
+
 	serverAddress := fmt.Sprintf("%s:%s", s.conf.Listen.BindIP, s.conf.Listen.Port)
 	s.logger.Info(fmt.Sprintf("starting on %s", serverAddress))
 	listener, err := net.Listen("tcp", serverAddress)
 	if err != nil {
 		return err
 	}
+
 	if s.conf.Listen.TLS {
 		s.logger.Info("starting https TLS")
 		err = s.httpServer.ServeTLS(listener, s.conf.Listen.CertFile, s.conf.Listen.KeyFile)
@@ -426,6 +431,7 @@ func (s *Server) Start() error {
 		s.logger.Info("starting http")
 		err = s.httpServer.Serve(listener)
 	}
+
 	return err
 }
 
@@ -467,8 +473,8 @@ type Pool struct {
 	logger     services.LogHandler
 }
 
-func NewPool() *Pool {
-	logger := NewLogger("pool", false)
+func NewPool(logger services.LogHandler) *Pool {
+	//logger := NewLogger("pool", false, nil)
 	return &Pool{
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
@@ -485,14 +491,14 @@ func (p *Pool) Start() {
 		case client := <-p.register:
 			p.clients[client] = true
 			client.sendResponse(models.Ping, "new connection")
-			p.logger.Info(fmt.Sprintf("registered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
+			p.logger.Info(fmt.Sprintf("pool: registered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
 		case client := <-p.unregister:
 			if _, ok := p.clients[client]; ok {
 				delete(p.clients, client)
 				close(client.send)
-				p.logger.Info(fmt.Sprintf("unregistered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
+				p.logger.Info(fmt.Sprintf("pool: unregistered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
 			} else {
-				p.logger.Warn(fmt.Sprintf("unregistered unknown %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
+				p.logger.Warn(fmt.Sprintf("pool: unregistered unknown %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
 			}
 		case message := <-p.broadcast:
 			for client := range p.clients {

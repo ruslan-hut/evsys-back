@@ -9,7 +9,7 @@ import (
 
 func main() {
 
-	logger := internal.NewLogger("internal", false)
+	logger := internal.NewLogger("internal", false, nil)
 
 	configPath := flag.String("conf", "config.yml", "path to config file")
 	flag.Parse()
@@ -40,7 +40,7 @@ func main() {
 	}
 
 	auth := internal.NewAuthenticator()
-	auth.SetLogger(internal.NewLogger("auth", conf.IsDebug))
+	auth.SetLogger(internal.NewLogger("auth", conf.IsDebug, mongo))
 	auth.SetDatabase(mongo)
 
 	if conf.FirebaseKey != "" {
@@ -49,26 +49,26 @@ func main() {
 			logger.Error("firebase client", err)
 			return
 		}
-		firebase.SetLogger(internal.NewLogger("firebase", conf.IsDebug))
+		firebase.SetLogger(internal.NewLogger("firebase", conf.IsDebug, mongo))
 		auth.SetFirebase(firebase)
 	}
 
 	api := internal.NewApiHandler()
-	api.SetLogger(internal.NewLogger("api", conf.IsDebug))
+	api.SetLogger(internal.NewLogger("api", conf.IsDebug, mongo))
 	api.SetDatabase(mongo)
 	api.SetCentralSystem(cs)
 	api.SetAuth(auth)
 
 	statusReader := internal.NewStatusReader()
-	statusReader.SetLogger(internal.NewLogger("status", conf.IsDebug))
+	statusReader.SetLogger(internal.NewLogger("status", conf.IsDebug, mongo))
 	statusReader.SetDatabase(mongo)
 
 	payments := internal.NewPayments()
-	payments.SetLogger(internal.NewLogger("payments", conf.IsDebug))
+	payments.SetLogger(internal.NewLogger("payments", conf.IsDebug, mongo))
 	payments.SetDatabase(mongo)
 
 	server := internal.NewServer(conf)
-	server.SetLogger(internal.NewLogger("server", conf.IsDebug))
+	server.SetLogger(internal.NewLogger("server", conf.IsDebug, mongo))
 	server.SetApiHandler(api.HandleApiCall)
 	server.SetWsHandler(api.HandleUserRequest)
 	server.SetAuth(auth)
