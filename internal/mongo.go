@@ -272,18 +272,21 @@ func (m *MongoDB) read(table, dataType string) (interface{}, error) {
 	defer m.disconnect(connection)
 
 	var logMessages interface{}
+	timeFieldName := "timestamp"
+
 	switch dataType {
 	case services.FeatureMessageType:
 		logMessages = []services.FeatureMessage{}
 	case services.LogMessageType:
 		logMessages = []services.LogMessage{}
+		timeFieldName = "time"
 	default:
 		return nil, fmt.Errorf("unknown data type: %s", dataType)
 	}
 
 	collection := connection.Database(m.database).Collection(table)
 	filter := bson.D{}
-	opts := options.Find().SetSort(bson.D{{"timestamp", -1}})
+	opts := options.Find().SetSort(bson.D{{timeFieldName, -1}})
 	if m.logRecordsNumber > 0 {
 		opts.SetLimit(m.logRecordsNumber)
 	}
