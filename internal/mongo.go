@@ -828,6 +828,21 @@ func (m *MongoDB) DeletePaymentMethod(paymentMethod *models.PaymentMethod) error
 	if err != nil {
 		return err
 	}
+
+	var method models.PaymentMethod
+	filter = bson.D{{"is_default", paymentMethod.Identifier}, {"user_id", paymentMethod.UserId}}
+	err = collection.FindOne(m.ctx, filter).Decode(&method)
+	if err != nil {
+		filter = bson.D{{"user_id", paymentMethod.UserId}}
+		err = collection.FindOne(m.ctx, filter).Decode(&method)
+		if err == nil {
+			filter = bson.D{{"identifier", method.Identifier}, {"user_id", method.UserId}}
+			update := bson.M{"$set": bson.D{
+				{"is_default", true},
+			}}
+			_, _ = collection.UpdateOne(m.ctx, filter, update)
+		}
+	}
 	return nil
 }
 
