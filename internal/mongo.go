@@ -443,7 +443,7 @@ func (m *MongoDB) getTransactionState(transaction *models.Transaction) (*models.
 	chargeState = models.ChargeState{
 		TransactionId:      transaction.TransactionId,
 		ConnectorId:        transaction.ConnectorId,
-		Connector:          "",
+		Connector:          connector,
 		ChargePointId:      transaction.ChargePointId,
 		ChargePointTitle:   chargePoint.Title,
 		ChargePointAddress: chargePoint.Address,
