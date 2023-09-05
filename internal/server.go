@@ -804,6 +804,7 @@ func (c *Client) listenForTransactionState(transactionId int) {
 				}
 				continue
 			}
+			errorCounter = 0
 			c.wsResponse(models.WsResponse{
 				Status:   models.Value,
 				Stage:    models.Info,
