@@ -236,11 +236,14 @@ func (p *Payments) SetOrder(user *models.User, data []byte) (*models.PaymentOrde
 
 	if order.Order == 0 {
 
-		// if payment process was interrupted, continue with the same order
+		// if payment process was interrupted, find unclosed order and close it
 		if order.TransactionId > 0 {
 			continueOrder, _ := p.database.GetPaymentOrderByTransaction(order.TransactionId)
 			if continueOrder != nil {
-				return continueOrder, nil
+				continueOrder.IsCompleted = true
+				continueOrder.Result = "closed without response"
+				continueOrder.TimeClosed = time.Now()
+				_ = p.database.SavePaymentOrder(continueOrder)
 			}
 		}
 
