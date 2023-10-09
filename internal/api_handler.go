@@ -158,11 +158,15 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			status = http.StatusInternalServerError
 		}
 	case TransactionBill:
-		data, err = h.database.GetTransactionsToBill(userId)
-		if err != nil {
-			h.logger.Error("get bill transactions", err)
-			status = http.StatusInternalServerError
-		}
+		//data, err = h.database.GetTransactionsToBill(userId)
+		//if err != nil {
+		//	h.logger.Error("get bill transactions", err)
+		//	status = http.StatusInternalServerError
+		//}
+		//**************************************************
+		// billing transactions is disabled for client app
+		data = []models.Transaction{}
+		//**************************************************
 	case TransactionInfo:
 		id, err := strconv.Atoi(string(ac.Payload))
 		if err != nil {
