@@ -20,7 +20,7 @@ type Database interface {
 	GetUserTags(userId string) ([]models.UserTag, error)
 	AddUserTag(userTag *models.UserTag) error
 
-	GetChargePoints(searchTerm string) (interface{}, error)
+	GetChargePoints(searchTerm string) ([]*models.ChargePoint, error)
 
 	GetTransaction(id int) (*models.Transaction, error)
 	GetTransactionByTag(idTag string, timeStart time.Time) (*models.Transaction, error)

@@ -12,7 +12,10 @@ type ChargePoint struct {
 	Status          string      `json:"status" bson:"status"`
 	ErrorCode       string      `json:"error_code" bson:"error_code"`
 	Info            string      `json:"info" bson:"info"`
-	LastSeen        string      `json:"last_seen" bson:"last_seen"`
+	LastSeen        string      `json:"last_seen" bson:"last_seen"` // deprecated
+	EventTime       string      `json:"event_time" bson:"event_time"`
+	IsOnline        bool        `json:"is_online" bson:"is_online"`
+	StatusTime      string      `json:"status_time" bson:"status_time"`
 	Address         string      `json:"address" bson:"address"`
 	Location        Location    `json:"location" bson:"location"`
 	Connectors      []Connector `json:"connectors" bson:"connectors"`
