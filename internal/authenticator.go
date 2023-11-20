@@ -91,13 +91,9 @@ func (a *Authenticator) GetUser(token string) (*models.User, error) {
 
 // update user last seen
 func (a *Authenticator) updateLastSeen(user *models.User) error {
-	user.LastSeen = time.Now()
-	if user.DateRegistered.IsZero() {
-		user.DateRegistered = time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
-	}
-	err := a.database.UpdateUser(user)
+	err := a.database.UpdateLastSeen(user)
 	if err != nil {
-		return fmt.Errorf("updating user: %s", err)
+		return fmt.Errorf("updating user last seen: %s", err)
 	}
 	return nil
 }
@@ -186,7 +182,7 @@ func (a *Authenticator) AuthenticateUser(username, password string) (*models.Use
 		token := a.generateKey(tokenLength)
 		user.Token = token
 		user.LastSeen = time.Now()
-		err = a.database.UpdateUser(user)
+		err = a.database.UpdateLastSeen(user)
 		if err != nil {
 			return nil, err
 		}

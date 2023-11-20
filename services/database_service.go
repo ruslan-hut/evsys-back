@@ -13,7 +13,7 @@ type Database interface {
 
 	GetUser(username string) (*models.User, error)
 	GetUserById(userId string) (*models.User, error)
-	UpdateUser(user *models.User) error
+	UpdateLastSeen(user *models.User) error
 	AddUser(user *models.User) error
 	CheckToken(token string) (*models.User, error)
 
