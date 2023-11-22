@@ -228,7 +228,7 @@ func (h *Handler) handleCentralSystemCommand(payload []byte) (*models.CentralSys
 	if err != nil {
 		return nil, fmt.Errorf("sending command to central system: %s", err)
 	}
-	return models.NewCentralSystemResponse(models.Success, fmt.Sprintf("command %s is sent to %s:%s", command.FeatureName, command.ChargePointId, command.ConnectorId)), nil
+	return models.NewCentralSystemResponse(models.Success, fmt.Sprintf("command %s is sent to %s:%v", command.FeatureName, command.ChargePointId, command.ConnectorId)), nil
 }
 
 func (h *Handler) HandleUserRequest(request *models.UserRequest) error {
