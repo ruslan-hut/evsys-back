@@ -224,13 +224,18 @@ func (h *Handler) handleCentralSystemCommand(payload []byte) (*models.CentralSys
 	if h.centralSystem == nil {
 		return nil, fmt.Errorf("central system is not connected")
 	}
-	err = h.centralSystem.SendCommand(&command)
+	response := models.NewCentralSystemResponse(command.ChargePointId, command.ConnectorId)
+	result, err := h.centralSystem.SendCommand(&command)
 	if err != nil {
-		return nil, fmt.Errorf("sending command to central system: %s", err)
+		response.Status = models.Error
+		response.Info = err.Error()
+		return response, nil
 	}
-	return models.NewCentralSystemResponse(models.Success, fmt.Sprintf("command %s is sent to %s:%v", command.FeatureName, command.ChargePointId, command.ConnectorId)), nil
+	response.Info = result
+	return response, nil
 }
 
+// HandleUserRequest handler for requests made via websocket
 func (h *Handler) HandleUserRequest(request *models.UserRequest) error {
 	var err error
 
@@ -264,7 +269,7 @@ func (h *Handler) HandleUserRequest(request *models.UserRequest) error {
 		return fmt.Errorf("unknown command %s", request.Command)
 	}
 
-	err = h.centralSystem.SendCommand(&command)
+	_, err = h.centralSystem.SendCommand(&command)
 	if err != nil {
 		h.logger.Error("sending command to central system", err)
 		return fmt.Errorf("sending command to central system: %s", err)

@@ -18,16 +18,16 @@ func NewCentralSystem(url string) *CentralSystem {
 	return &CentralSystem{url: url}
 }
 
-func (cs *CentralSystem) SendCommand(command *models.CentralSystemCommand) error {
+func (cs *CentralSystem) SendCommand(command *models.CentralSystemCommand) (string, error) {
 	log.Printf("* SendCommand: %v", command)
 	data, err := json.Marshal(command)
 	if err != nil {
-		return fmt.Errorf("error marshalling command: %v", err)
+		return "", fmt.Errorf("marshalling command: %v", err)
 	}
 
 	req, err := http.NewRequest("POST", cs.url, bytes.NewBuffer(data))
 	if err != nil {
-		return fmt.Errorf("error creating request: %v", err)
+		return "", fmt.Errorf("creating request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -37,14 +37,19 @@ func (cs *CentralSystem) SendCommand(command *models.CentralSystemCommand) error
 		defer func(Body io.ReadCloser) {
 			err := Body.Close()
 			if err != nil {
-				log.Printf("error closing response body: %v", err)
+				log.Printf("closing response body: %v", err)
 			}
 		}(resp.Body)
 	}
 
 	if err != nil || resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("error sending command: %v; response status: %v", err, resp.StatusCode)
+		return "", fmt.Errorf("sending command: %v; response status: %v", err, resp.StatusCode)
 	}
 
-	return nil
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading response body: %v", err)
+	}
+
+	return string(bodyBytes), nil
 }
