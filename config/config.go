@@ -21,6 +21,7 @@ type Config struct {
 	CentralSystem struct {
 		Enabled bool   `yaml:"enabled" env-default:"false"`
 		Url     string `yaml:"url" env-default:""`
+		Token   string `yaml:"token" env-default:""`
 	} `yaml:"central_system"`
 	Pusher struct {
 		Enabled bool   `yaml:"enabled" env-default:"false"`

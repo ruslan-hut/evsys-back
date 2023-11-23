@@ -13,6 +13,7 @@ listen:
 central_system:
   enabled: false
   url: https://example.com/api
+  token: 1234567890
 pusher:
   enabled: false
   app_id:

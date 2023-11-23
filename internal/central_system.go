@@ -11,11 +11,12 @@ import (
 )
 
 type CentralSystem struct {
-	url string
+	url   string
+	token string
 }
 
-func NewCentralSystem(url string) *CentralSystem {
-	return &CentralSystem{url: url}
+func NewCentralSystem(url, token string) *CentralSystem {
+	return &CentralSystem{url: url, token: token}
 }
 
 func (cs *CentralSystem) SendCommand(command *models.CentralSystemCommand) (string, error) {
@@ -30,6 +31,7 @@ func (cs *CentralSystem) SendCommand(command *models.CentralSystemCommand) (stri
 		return "", fmt.Errorf("creating request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cs.token))
 
 	client := &http.Client{}
 	resp, err := client.Do(req)

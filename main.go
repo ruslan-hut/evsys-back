@@ -33,7 +33,7 @@ func main() {
 
 	var cs services.CentralSystemService
 	if conf.CentralSystem.Enabled {
-		cs = internal.NewCentralSystem(conf.CentralSystem.Url)
+		cs = internal.NewCentralSystem(conf.CentralSystem.Url, conf.CentralSystem.Token)
 		logger.Info("central system initialized")
 	} else {
 		logger.Info("central system is disabled")
