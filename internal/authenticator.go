@@ -133,14 +133,17 @@ func (a *Authenticator) GetUserTag(user *models.User) (string, error) {
 	if tags == nil {
 		tags = make([]models.UserTag, 0)
 	}
+	// auto create new tag in enabled state, if no tags found
+	// because user is authenticated by token, not by tag
 	if len(tags) == 0 {
 		newIdTag := strings.ToUpper(a.generateKey(20))
 		newTag := models.UserTag{
-			UserId:    user.UserId,
-			Username:  user.Username,
-			IdTag:     newIdTag,
-			IsEnabled: true,
-			Note:      fmt.Sprintf("api: added at %s", time.Now().Format("2006-01-02 15:04:05")),
+			UserId:         user.UserId,
+			Username:       user.Username,
+			IdTag:          newIdTag,
+			IsEnabled:      true,
+			Note:           "api: added by request",
+			DateRegistered: time.Now(),
 		}
 		err := a.database.AddUserTag(&newTag)
 		if err != nil {
@@ -148,6 +151,7 @@ func (a *Authenticator) GetUserTag(user *models.User) (string, error) {
 		}
 		tags = append(tags, newTag)
 	}
+	_ = a.database.UpdateTagLastSeen(&tags[0])
 	return tags[0].IdTag, nil
 }
 

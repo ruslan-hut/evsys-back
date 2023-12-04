@@ -214,6 +214,22 @@ func (m *MongoDB) AddUserTag(userTag *models.UserTag) error {
 	return err
 }
 
+func (m *MongoDB) UpdateTagLastSeen(userTag *models.UserTag) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionUserTags)
+	filter := bson.D{{"id_tag", userTag.IdTag}}
+	update := bson.M{"$set": bson.D{
+		{"last_seen", time.Now()},
+	}}
+	_, err = collection.UpdateOne(m.ctx, filter, update)
+	return err
+}
+
 func (m *MongoDB) UpdateLastSeen(user *models.User) error {
 	connection, err := m.connect()
 	if err != nil {
