@@ -181,15 +181,17 @@ func (a *Authenticator) AuthenticateUser(username, password string) (*models.Use
 	if err != nil {
 		return nil, err
 	}
-	result := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
-	if result == nil {
-		token := a.generateKey(tokenLength)
-		user.Token = token
-		user.LastSeen = time.Now()
-		err = a.database.UpdateLastSeen(user)
-		if err != nil {
-			return nil, err
-		}
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	if err != nil {
+		return nil, err
+
+	}
+	token := a.generateKey(tokenLength)
+	user.Token = token
+	user.LastSeen = time.Now()
+	err = a.database.UpdateLastSeen(user)
+	if err != nil {
+		return nil, err
 	}
 	user.Password = ""
 	a.logger.Info(fmt.Sprintf("user %s logged in with password", user.Username))
