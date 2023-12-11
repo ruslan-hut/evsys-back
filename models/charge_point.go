@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type ChargePoint struct {
 	Id              string      `json:"charge_point_id" bson:"charge_point_id"`
@@ -21,4 +24,13 @@ type ChargePoint struct {
 	Address         string      `json:"address" bson:"address"`
 	Location        Location    `json:"location" bson:"location"`
 	Connectors      []Connector `json:"connectors" bson:"connectors"`
+}
+
+func (cp *ChargePoint) GetConnector(id int) (*Connector, error) {
+	for _, c := range cp.Connectors {
+		if c.Id == id {
+			return &c, nil
+		}
+	}
+	return nil, fmt.Errorf("connector %d not found", id)
 }

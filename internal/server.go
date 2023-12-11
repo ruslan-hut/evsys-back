@@ -26,6 +26,7 @@ const (
 	generateInvites       = "users/invites"
 	getChargePoints       = "chp"
 	getChargePointsSearch = "chp/:search"
+	chargePointInfo       = "chp/info/:id"
 	activeTransactions    = "transactions/active"
 	transactionInfo       = "transactions/info/:id"
 	transactionList       = "transactions/list"
@@ -113,6 +114,7 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.POST(route(centralSystemCommand), s.centralSystemCommand)
 	router.GET(route(getChargePoints), s.getChargePoints)
 	router.GET(route(getChargePointsSearch), s.getChargePoints)
+	router.GET(route(chargePointInfo), s.getChargePointInfo)
 	router.GET(route(activeTransactions), s.activeTransactions)
 	router.GET(route(transactionInfo), s.transactionInfo)
 	router.GET(route(transactionList), s.transactionList)
@@ -257,6 +259,16 @@ func (s *Server) getChargePoints(w http.ResponseWriter, r *http.Request, ps http
 		Remote:   r.RemoteAddr,
 		Token:    s.getToken(r),
 		Payload:  []byte(ps.ByName("search")),
+	}
+	s.handleApiRequest(w, ac)
+}
+
+func (s *Server) getChargePointInfo(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	ac := &Call{
+		CallType: ChargePointInfo,
+		Remote:   r.RemoteAddr,
+		Token:    s.getToken(r),
+		Payload:  []byte(ps.ByName("id")),
 	}
 	s.handleApiRequest(w, ac)
 }

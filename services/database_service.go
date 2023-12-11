@@ -22,6 +22,7 @@ type Database interface {
 	UpdateTagLastSeen(userTag *models.UserTag) error
 
 	GetChargePoints(searchTerm string) ([]*models.ChargePoint, error)
+	GetChargePoint(id string) (*models.ChargePoint, error)
 
 	GetTransaction(id int) (*models.Transaction, error)
 	GetTransactionByTag(idTag string, timeStart time.Time) (*models.Transaction, error)

@@ -18,6 +18,7 @@ const (
 	RegisterUser         CallType = "RegisterUser"
 	UserInfo             CallType = "UserInfo"
 	GetChargePoints      CallType = "GetChargePoints"
+	ChargePointInfo      CallType = "ChargePointInfo"
 	CentralSystemCommand CallType = "CentralSystemCommand"
 	ActiveTransactions   CallType = "ActiveTransactions"
 	TransactionInfo      CallType = "TransactionInfo"
@@ -134,28 +135,36 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			status = http.StatusInternalServerError
 		}
 	case GetChargePoints:
-		data, err = h.database.GetChargePoints(string(ac.Payload))
+		search := string(ac.Payload)
+		data, err = h.database.GetChargePoints(search)
 		if err != nil {
-			h.logger.Error("get charge points", err)
-			status = http.StatusInternalServerError
+			h.logger.Warn(fmt.Sprintf("no data by search: %s", search))
+			status = http.StatusNoContent
+		}
+	case ChargePointInfo:
+		id := string(ac.Payload)
+		data, err = h.database.GetChargePoint(id)
+		if err != nil {
+			h.logger.Warn(fmt.Sprintf("not found charge point: %s", id))
+			status = http.StatusNoContent
 		}
 	case PaymentMethods:
 		data, err = h.database.GetPaymentMethods(userId)
 		if err != nil {
-			h.logger.Error("get payment methods", err)
-			status = http.StatusInternalServerError
+			h.logger.Warn(fmt.Sprintf("no payment methods for %s", user.Username))
+			status = http.StatusNoContent
 		}
 	case ActiveTransactions:
 		data, err = h.database.GetActiveTransactions(userId)
 		if err != nil {
-			h.logger.Error("get active transactions", err)
-			status = http.StatusInternalServerError
+			h.logger.Warn(fmt.Sprintf("no active transactions for %s", user.Username))
+			status = http.StatusNoContent
 		}
 	case TransactionList:
 		data, err = h.database.GetTransactions(userId, string(ac.Payload))
 		if err != nil {
-			h.logger.Error("get transactions list", err)
-			status = http.StatusInternalServerError
+			h.logger.Warn(fmt.Sprintf("no transactions data for %s", user.Username))
+			status = http.StatusNoContent
 		}
 	case TransactionBill:
 		//data, err = h.database.GetTransactionsToBill(userId)

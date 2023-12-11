@@ -330,7 +330,7 @@ func (m *MongoDB) GetChargePoints(searchTerm string) ([]*models.ChargePoint, err
 			}}},
 		},
 		{{"$lookup", bson.M{
-			"from":         "connectors",
+			"from":         collectionConnectors,
 			"localField":   "charge_point_id",
 			"foreignField": "charge_point_id",
 			"as":           "Connectors",
@@ -360,14 +360,32 @@ func (m *MongoDB) GetChargePoint(id string) (*models.ChargePoint, error) {
 
 	collection := connection.Database(m.database).Collection(collectionChargePoints)
 	filter := bson.D{{"charge_point_id", id}}
+
+	pipeline := mongo.Pipeline{
+		bson.D{{"$match", filter}}, // Match the charge point
+		bson.D{{"$lookup", bson.D{ // Lookup to join with connectors collection
+			{"from", collectionConnectors},      // The collection to join
+			{"localField", "charge_point_id"},   // Field from charge_points collection
+			{"foreignField", "charge_point_id"}, // Field from connectors collection
+			{"as", "Connectors"},                // The array field to add in chargePoint
+		}}},
+	}
+
 	var chargePoint models.ChargePoint
-	if err = collection.FindOne(m.ctx, filter).Decode(&chargePoint); err != nil {
+	cursor, err := collection.Aggregate(m.ctx, pipeline)
+	if err != nil {
 		return nil, err
+	}
+	if cursor.Next(m.ctx) {
+		if err := cursor.Decode(&chargePoint); err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, fmt.Errorf("no charge point found")
 	}
 	return &chargePoint, nil
 }
 
-// GetConnector get single connector by charge point id and connector id
 func (m *MongoDB) GetConnector(chargePointId string, connectorId int) (*models.Connector, error) {
 	connection, err := m.connect()
 	if err != nil {
@@ -397,7 +415,7 @@ func (m *MongoDB) getTransactionState(transaction *models.Transaction) (*models.
 	if err != nil {
 		return nil, fmt.Errorf("get charge point: %v", err)
 	}
-	connector, err := m.GetConnector(transaction.ChargePointId, transaction.ConnectorId)
+	connector, err := chargePoint.GetConnector(transaction.ConnectorId)
 	if err != nil {
 		return nil, fmt.Errorf("get connector: %v", err)
 	}
