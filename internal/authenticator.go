@@ -179,11 +179,11 @@ func (a *Authenticator) AuthenticateUser(username, password string) (*models.Use
 	defer a.mux.Unlock()
 	user, err := a.database.GetUser(username)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("user not found: %s", username)
 	}
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		return nil, fmt.Errorf("password check failed")
+		return nil, fmt.Errorf("password check failed: %s", username)
 	}
 	token := a.generateKey(tokenLength)
 	user.Token = token
