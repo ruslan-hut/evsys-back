@@ -183,8 +183,7 @@ func (a *Authenticator) AuthenticateUser(username, password string) (*models.Use
 	}
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		return nil, err
-
+		return nil, fmt.Errorf("password check failed")
 	}
 	token := a.generateKey(tokenLength)
 	user.Token = token
