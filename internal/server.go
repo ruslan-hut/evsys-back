@@ -114,7 +114,7 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.POST(route(centralSystemCommand), s.centralSystemCommand)
 	router.GET(route(getChargePoints), s.getChargePoints)
 	router.GET(route(getChargePointsSearch), s.getChargePoints)
-	router.GET(route(chargePointInfo), s.getChargePointInfo)
+	router.GET(route(chargePointInfo), s.getChargePoints)
 	router.GET(route(activeTransactions), s.activeTransactions)
 	router.GET(route(transactionInfo), s.transactionInfo)
 	router.GET(route(transactionList), s.transactionList)
@@ -260,15 +260,10 @@ func (s *Server) getChargePoints(w http.ResponseWriter, r *http.Request, ps http
 		Token:    s.getToken(r),
 		Payload:  []byte(ps.ByName("search")),
 	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) getChargePointInfo(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	ac := &Call{
-		CallType: ChargePointInfo,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-		Payload:  []byte(ps.ByName("id")),
+	id := ps.ByName("id")
+	if id != "" {
+		ac.CallType = ChargePointInfo
+		ac.Payload = []byte(id)
 	}
 	s.handleApiRequest(w, ac)
 }
