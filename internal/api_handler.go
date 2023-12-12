@@ -17,6 +17,7 @@ const (
 	AuthenticateUser     CallType = "AuthenticateUser"
 	RegisterUser         CallType = "RegisterUser"
 	UserInfo             CallType = "UserInfo"
+	UsersList            CallType = "UsersList"
 	GetChargePoints      CallType = "GetChargePoints"
 	ChargePointInfo      CallType = "ChargePointInfo"
 	CentralSystemCommand CallType = "CentralSystemCommand"
@@ -80,7 +81,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 	status := http.StatusOK
 
 	if ac.CallType != AuthenticateUser && ac.CallType != RegisterUser {
-		user, err = h.auth.GetUser(ac.Token)
+		user, err = h.auth.AuthenticateByToken(ac.Token)
 		if err != nil {
 			h.logger.Error("token check failed", err)
 			return nil, http.StatusUnauthorized
@@ -128,6 +129,12 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 	case UserInfo:
 		// user data is already loaded by token check
 		data = user
+	case UsersList:
+		data, err = h.auth.GetUsers(user.Role)
+		if err != nil {
+			h.logger.Warn(fmt.Sprintf("get users: %s", err))
+			status = http.StatusNoContent
+		}
 	case GenerateInvites:
 		data, err = h.auth.GenerateInvites(5)
 		if err != nil {

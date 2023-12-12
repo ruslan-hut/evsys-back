@@ -39,7 +39,7 @@ func (a *Authenticator) SetFirebase(firebase services.FirebaseAuth) {
 	a.firebase = firebase
 }
 
-func (a *Authenticator) GetUser(token string) (*models.User, error) {
+func (a *Authenticator) AuthenticateByToken(token string) (*models.User, error) {
 	if token == "" {
 		return nil, fmt.Errorf("empty token")
 	}
@@ -112,7 +112,7 @@ func (a *Authenticator) GenerateInvites(count int) ([]string, error) {
 		}
 		err := a.database.AddInviteCode(invite)
 		if err != nil {
-			a.logger.Error("adding invite code: %s", err)
+			a.logger.Error("adding invite code", err)
 			continue
 		}
 		invites = append(invites, inviteCode)
@@ -236,6 +236,22 @@ func (a *Authenticator) RegisterUser(user *models.User) error {
 		a.logger.Error("deleting invite code", err)
 	}
 	return nil
+}
+
+func (a *Authenticator) GetUsers(role string) ([]*models.User, error) {
+	if a.database == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	if role != "admin" {
+		return nil, fmt.Errorf("access denied")
+	}
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	users, err := a.database.GetUsers()
+	if err != nil {
+		return nil, err
+	}
+	return users, nil
 }
 
 func (a *Authenticator) generatePasswordHash(password string) string {

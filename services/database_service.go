@@ -12,6 +12,7 @@ type Database interface {
 	ReadLogAfter(timeStart time.Time) ([]*FeatureMessage, error)
 
 	GetUser(username string) (*models.User, error)
+	GetUsers() ([]*models.User, error)
 	GetUserById(userId string) (*models.User, error)
 	UpdateLastSeen(user *models.User) error
 	AddUser(user *models.User) error

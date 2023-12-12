@@ -23,6 +23,7 @@ const (
 	userAuthenticate      = "users/authenticate"
 	userRegister          = "users/register"
 	userInfo              = "users/info"
+	usersList             = "users/list"
 	generateInvites       = "users/invites"
 	getChargePoints       = "chp"
 	getChargePointsSearch = "chp/:search"
@@ -110,6 +111,7 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.POST(route(userAuthenticate), s.authenticateUser)
 	router.POST(route(userRegister), s.registerUser)
 	router.GET(route(userInfo), s.userInfo)
+	router.GET(route(usersList), s.usersList)
 	router.GET(route(generateInvites), s.generateInvites)
 	router.POST(route(centralSystemCommand), s.centralSystemCommand)
 	router.GET(route(getChargePoints), s.getChargePoints)
@@ -232,6 +234,15 @@ func (s *Server) registerUser(w http.ResponseWriter, r *http.Request, _ httprout
 func (s *Server) userInfo(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ac := &Call{
 		CallType: UserInfo,
+		Remote:   r.RemoteAddr,
+		Token:    s.getToken(r),
+	}
+	s.handleApiRequest(w, ac)
+}
+
+func (s *Server) usersList(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	ac := &Call{
+		CallType: UsersList,
 		Remote:   r.RemoteAddr,
 		Token:    s.getToken(r),
 	}
@@ -460,7 +471,7 @@ func (s *Server) authorizeRequest(r *http.Request) *models.User {
 	if token == "" {
 		return nil
 	}
-	user, err := s.auth.GetUser(token)
+	user, err := s.auth.AuthenticateByToken(token)
 	if err != nil {
 		s.logger.Error("authorize request", err)
 		return nil
@@ -597,7 +608,7 @@ func (c *Client) readPump() {
 			continue
 		}
 
-		user, err := c.auth.GetUser(userRequest.Token)
+		user, err := c.auth.AuthenticateByToken(userRequest.Token)
 		if err != nil {
 			c.sendResponse(models.Error, fmt.Sprintf("check token: %v", err))
 			continue

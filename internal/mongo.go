@@ -145,6 +145,26 @@ func (m *MongoDB) GetUser(username string) (*models.User, error) {
 	return &userData, nil
 }
 
+func (m *MongoDB) GetUsers() ([]*models.User, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+	collection := connection.Database(m.database).Collection(collectionUsers)
+	filter := bson.D{}
+	projection := bson.M{"password": 0, "token": 0}
+	var users []*models.User
+	cursor, err := collection.Find(m.ctx, filter, options.Find().SetProjection(projection))
+	if err != nil {
+		return nil, err
+	}
+	if err = cursor.All(m.ctx, &users); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 func (m *MongoDB) GetUserById(userId string) (*models.User, error) {
 	connection, err := m.connect()
 	if err != nil {
