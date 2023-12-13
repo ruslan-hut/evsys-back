@@ -11,9 +11,10 @@ import (
 
 type CallType string
 
+//type LogType string
+
 const (
-	ReadSysLog           CallType = "ReadSysLog"
-	ReadBackLog          CallType = "ReadBackLog"
+	ReadLog              CallType = "ReadLog"
 	AuthenticateUser     CallType = "AuthenticateUser"
 	RegisterUser         CallType = "RegisterUser"
 	UserInfo             CallType = "UserInfo"
@@ -27,6 +28,9 @@ const (
 	TransactionBill      CallType = "TransactionBill"
 	GenerateInvites      CallType = "GenerateInvites"
 	PaymentMethods       CallType = "PaymentMethods"
+	//CentralSystemLog     LogType  = "sys"
+	//BackendLog           LogType  = "back"
+	//PaymentLog           LogType  = "pay"
 )
 
 type Call struct {
@@ -90,17 +94,11 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 	}
 
 	switch ac.CallType {
-	case ReadSysLog:
-		data, err = h.database.ReadSystemLog()
+	case ReadLog:
+		data, err = h.database.ReadLog(string(ac.Payload))
 		if err != nil {
-			h.logger.Error("read system log", err)
-			status = http.StatusInternalServerError
-		}
-	case ReadBackLog:
-		data, err = h.database.ReadBackLog()
-		if err != nil {
-			h.logger.Error("read back log", err)
-			status = http.StatusInternalServerError
+			h.logger.Error("read log", err)
+			status = http.StatusNoContent
 		}
 	case AuthenticateUser:
 		userData, err := h.unmarshallUserData(ac.Payload)

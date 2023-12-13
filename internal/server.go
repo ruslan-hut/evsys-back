@@ -18,8 +18,7 @@ import (
 
 const (
 	apiVersion            = "v1"
-	readSystemLogEndpoint = "syslog"
-	readBackLogEndpoint   = "backlog"
+	readLog               = "log/:log"
 	userAuthenticate      = "users/authenticate"
 	userRegister          = "users/register"
 	userInfo              = "users/info"
@@ -106,8 +105,7 @@ func (s *Server) SetLogger(logger services.LogHandler) {
 }
 
 func (s *Server) Register(router *httprouter.Router) {
-	router.GET(route(readSystemLogEndpoint), s.readSystemLog)
-	router.GET(route(readBackLogEndpoint), s.readBackLog)
+	router.GET(route(readLog), s.readLog)
 	router.POST(route(userAuthenticate), s.authenticateUser)
 	router.POST(route(userRegister), s.registerUser)
 	router.GET(route(userInfo), s.userInfo)
@@ -176,20 +174,12 @@ func (s *Server) transactionBill(w http.ResponseWriter, r *http.Request, _ httpr
 	s.handleApiRequest(w, ac)
 }
 
-func (s *Server) readSystemLog(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (s *Server) readLog(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	ac := &Call{
-		CallType: ReadSysLog,
+		CallType: ReadLog,
 		Remote:   r.RemoteAddr,
 		Token:    s.getToken(r),
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) readBackLog(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	ac := &Call{
-		CallType: ReadBackLog,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
+		Payload:  []byte(p.ByName("log")),
 	}
 	s.handleApiRequest(w, ac)
 }

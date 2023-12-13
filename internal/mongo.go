@@ -19,6 +19,7 @@ import (
 const (
 	collectionSysLog         = "sys_log"
 	collectionBackLog        = "back_log"
+	collectionPaymentLog     = "payment_log"
 	collectionUsers          = "users"
 	collectionUserTags       = "user_tags"
 	collectionChargePoints   = "charge_points"
@@ -97,12 +98,53 @@ func (m *MongoDB) WriteLogMessage(data services.Data) error {
 	return err
 }
 
-func (m *MongoDB) ReadSystemLog() (interface{}, error) {
-	return m.read(collectionSysLog, services.FeatureMessageType)
+func (m *MongoDB) read(table, dataType string) (interface{}, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	var logMessages interface{}
+	timeFieldName := "timestamp"
+
+	switch dataType {
+	case services.FeatureMessageType:
+		logMessages = []services.FeatureMessage{}
+	case services.LogMessageType:
+		logMessages = []services.LogMessage{}
+		timeFieldName = "time"
+	default:
+		return nil, fmt.Errorf("unknown data type: %s", dataType)
+	}
+
+	collection := connection.Database(m.database).Collection(table)
+	filter := bson.D{}
+	opts := options.Find().SetSort(bson.D{{timeFieldName, -1}})
+	if m.logRecordsNumber > 0 {
+		opts.SetLimit(m.logRecordsNumber)
+	}
+	cursor, err := collection.Find(m.ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	if err = cursor.All(m.ctx, &logMessages); err != nil {
+		return nil, err
+	}
+	return logMessages, nil
 }
 
-func (m *MongoDB) ReadBackLog() (interface{}, error) {
-	return m.read(collectionBackLog, services.LogMessageType)
+func (m *MongoDB) ReadLog(logName string) (interface{}, error) {
+	switch logName {
+	case "sys":
+		return m.read(collectionSysLog, services.FeatureMessageType)
+	case "back":
+		return m.read(collectionBackLog, services.LogMessageType)
+	case "pay":
+		return m.read(collectionPaymentLog, services.LogMessageType)
+	default:
+		return nil, fmt.Errorf("unknown log name: %s", logName)
+	}
 }
 
 // ReadLogAfter returns array of log messages in a normal , filtered by timeStart
@@ -294,42 +336,6 @@ func (m *MongoDB) CheckToken(token string) (*models.User, error) {
 		return nil, err
 	}
 	return &userData, nil
-}
-
-func (m *MongoDB) read(table, dataType string) (interface{}, error) {
-	connection, err := m.connect()
-	if err != nil {
-		return nil, err
-	}
-	defer m.disconnect(connection)
-
-	var logMessages interface{}
-	timeFieldName := "timestamp"
-
-	switch dataType {
-	case services.FeatureMessageType:
-		logMessages = []services.FeatureMessage{}
-	case services.LogMessageType:
-		logMessages = []services.LogMessage{}
-		timeFieldName = "time"
-	default:
-		return nil, fmt.Errorf("unknown data type: %s", dataType)
-	}
-
-	collection := connection.Database(m.database).Collection(table)
-	filter := bson.D{}
-	opts := options.Find().SetSort(bson.D{{timeFieldName, -1}})
-	if m.logRecordsNumber > 0 {
-		opts.SetLimit(m.logRecordsNumber)
-	}
-	cursor, err := collection.Find(m.ctx, filter, opts)
-	if err != nil {
-		return nil, err
-	}
-	if err = cursor.All(m.ctx, &logMessages); err != nil {
-		return nil, err
-	}
-	return logMessages, nil
 }
 
 func (m *MongoDB) GetChargePoints(searchTerm string) ([]*models.ChargePoint, error) {
