@@ -429,6 +429,17 @@ func (m *MongoDB) UpdateChargePoint(chargePoint *models.ChargePoint) error {
 		{"location.longitude", chargePoint.Location.Longitude},
 	}}
 	_, err = collection.UpdateOne(m.ctx, filter, update)
+
+	// update connectors data
+	collection = connection.Database(m.database).Collection(collectionConnectors)
+	for _, connector := range chargePoint.Connectors {
+		filter = bson.D{{"charge_point_id", chargePoint.Id}, {"connector_id", connector.Id}}
+		update = bson.M{"$set": bson.D{
+			{"type", connector.Type},
+			{"power", connector.Power},
+		}}
+		_, err = collection.UpdateOne(m.ctx, filter, update)
+	}
 	return err
 }
 
