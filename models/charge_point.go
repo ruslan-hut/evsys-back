@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -33,4 +34,13 @@ func (cp *ChargePoint) GetConnector(id int) (*Connector, error) {
 		}
 	}
 	return nil, fmt.Errorf("connector %d not found", id)
+}
+
+func GetChargePointFromPayload(payload []byte) (*ChargePoint, error) {
+	var cp ChargePoint
+	err := json.Unmarshal(payload, &cp)
+	if err != nil {
+		return nil, err
+	}
+	return &cp, nil
 }

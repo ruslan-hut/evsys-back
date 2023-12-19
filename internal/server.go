@@ -115,6 +115,7 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.GET(route(getChargePoints), s.getChargePoints)
 	router.GET(route(getChargePointsSearch), s.getChargePoints)
 	router.GET(route(chargePointInfo), s.getChargePointInfo)
+	router.POST(route(chargePointInfo), s.updateChargePoint)
 	router.GET(route(activeTransactions), s.activeTransactions)
 	router.GET(route(transactionInfo), s.transactionInfo)
 	router.GET(route(transactionList), s.transactionList)
@@ -270,6 +271,21 @@ func (s *Server) getChargePointInfo(w http.ResponseWriter, r *http.Request, ps h
 		Remote:   r.RemoteAddr,
 		Token:    s.getToken(r),
 		Payload:  []byte(ps.ByName("id")),
+	}
+	s.handleApiRequest(w, ac)
+}
+
+func (s *Server) updateChargePoint(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.logger.Error("get body while update charge point", err)
+		return
+	}
+	ac := &Call{
+		CallType: ChargePointUpdate,
+		Remote:   r.RemoteAddr,
+		Token:    s.getToken(r),
+		Payload:  body,
 	}
 	s.handleApiRequest(w, ac)
 }

@@ -21,6 +21,7 @@ const (
 	UsersList            CallType = "UsersList"
 	GetChargePoints      CallType = "GetChargePoints"
 	ChargePointInfo      CallType = "ChargePointInfo"
+	ChargePointUpdate    CallType = "ChargePointUpdate"
 	CentralSystemCommand CallType = "CentralSystemCommand"
 	ActiveTransactions   CallType = "ActiveTransactions"
 	TransactionInfo      CallType = "TransactionInfo"
@@ -151,6 +152,23 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		data, err = h.database.GetChargePoint(id)
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("not found charge point: %s", id))
+			status = http.StatusNoContent
+		}
+	case ChargePointUpdate:
+		chp, err := models.GetChargePointFromPayload(ac.Payload)
+		if err != nil {
+			h.logger.Error("decoding charge point", err)
+			status = http.StatusUnsupportedMediaType
+		} else {
+			err = h.database.UpdateChargePoint(chp)
+			if err != nil {
+				h.logger.Error("update charge point", err)
+				status = http.StatusInternalServerError
+			}
+		}
+		data, err = h.database.GetChargePoint(chp.Id)
+		if err != nil {
+			h.logger.Warn(fmt.Sprintf("not found charge point: %s", chp.Id))
 			status = http.StatusNoContent
 		}
 	case PaymentMethods:

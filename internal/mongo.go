@@ -412,6 +412,26 @@ func (m *MongoDB) GetChargePoint(id string) (*models.ChargePoint, error) {
 	return &chargePoint, nil
 }
 
+func (m *MongoDB) UpdateChargePoint(chargePoint *models.ChargePoint) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionChargePoints)
+	filter := bson.D{{"charge_point_id", chargePoint.Id}}
+	update := bson.M{"$set": bson.D{
+		{"title", chargePoint.Title},
+		{"description", chargePoint.Description},
+		{"address", chargePoint.Address},
+		{"location.latitude", chargePoint.Location.Latitude},
+		{"location.longitude", chargePoint.Location.Longitude},
+	}}
+	_, err = collection.UpdateOne(m.ctx, filter, update)
+	return err
+}
+
 func (m *MongoDB) GetConnector(chargePointId string, connectorId int) (*models.Connector, error) {
 	connection, err := m.connect()
 	if err != nil {
