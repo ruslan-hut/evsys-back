@@ -155,6 +155,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			status = http.StatusNoContent
 		}
 	case ChargePointUpdate:
+		h.logger.Info(fmt.Sprintf("update charge point: %s", ac.Payload))
 		chp, err := models.GetChargePointFromPayload(ac.Payload)
 		if err != nil {
 			h.logger.Error("decoding charge point", err)
