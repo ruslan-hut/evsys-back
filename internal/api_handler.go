@@ -182,6 +182,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		}
 	case ActiveTransactions:
 		data, err = h.database.GetActiveTransactions(userId)
+		h.logger.Info(fmt.Sprintf("active transactions for %s: %v", user.Username, data))
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("no active transactions for %s", user.Username))
 			status = http.StatusNoContent
