@@ -417,7 +417,9 @@ func (s *Server) options(w http.ResponseWriter, r *http.Request, _ httprouter.Pa
 }
 
 func (s *Server) handleApiRequest(w http.ResponseWriter, ac *Call) {
-	s.logger.Info(fmt.Sprintf("call %s from remote %s", ac.CallType, ac.Remote))
+	if ac.CallType != ReadLog {
+		s.logger.Info(fmt.Sprintf("call %s from remote %s", ac.CallType, ac.Remote))
+	}
 	if s.apiHandler != nil {
 		data, status := s.apiHandler(ac)
 		s.sendApiResponse(w, data, status)
