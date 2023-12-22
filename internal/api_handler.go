@@ -185,7 +185,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("no active transactions for %s", user.Username))
 			status = http.StatusNoContent
-			data = []models.Transaction{}
+			data = []models.ChargeState{}
 		}
 	case TransactionList:
 		data, err = h.database.GetTransactions(userId, string(ac.Payload))
@@ -234,6 +234,9 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 
 	if err != nil {
 		return nil, status
+	}
+	if data == nil {
+		data = []models.ChargeState{}
 	}
 	byteData, err := json.Marshal(data)
 	if err != nil {
