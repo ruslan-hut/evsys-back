@@ -133,6 +133,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("get users: %s", err))
 			status = http.StatusNoContent
+			data = []models.User{}
 		}
 	case GenerateInvites:
 		data, err = h.auth.GenerateInvites(5)
@@ -177,18 +178,21 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("no payment methods for %s", user.Username))
 			status = http.StatusNoContent
+			data = []models.PaymentMethod{}
 		}
 	case ActiveTransactions:
 		data, err = h.database.GetActiveTransactions(userId)
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("no active transactions for %s", user.Username))
 			status = http.StatusNoContent
+			data = []models.Transaction{}
 		}
 	case TransactionList:
 		data, err = h.database.GetTransactions(userId, string(ac.Payload))
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("no transactions data for %s", user.Username))
 			status = http.StatusNoContent
+			data = []models.Transaction{}
 		}
 	case TransactionBill:
 		//data, err = h.database.GetTransactionsToBill(userId)
