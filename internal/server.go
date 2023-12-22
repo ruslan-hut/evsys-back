@@ -430,6 +430,11 @@ func (s *Server) sendApiResponse(w http.ResponseWriter, data []byte, status int)
 	if status >= 400 {
 		w.WriteHeader(status)
 	} else {
+
+		if status == http.StatusNoContent {
+			data = []byte("[]")
+		}
+
 		_, err := w.Write(data)
 		if err != nil {
 			s.logger.Error("send api response", err)

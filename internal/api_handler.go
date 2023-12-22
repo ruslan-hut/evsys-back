@@ -183,16 +183,14 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 	case ActiveTransactions:
 		data, err = h.database.GetActiveTransactions(userId)
 		if err != nil {
-			h.logger.Warn(fmt.Sprintf("no active transactions for %s: %s", user.Username, err))
+			h.logger.Warn(fmt.Sprintf("active transactions for %s: %s", user.Username, err))
 			status = http.StatusNoContent
-			data = []models.ChargeState{}
 		}
 	case TransactionList:
 		data, err = h.database.GetTransactions(userId, string(ac.Payload))
 		if err != nil {
-			h.logger.Warn(fmt.Sprintf("no transactions data for %s", user.Username))
+			h.logger.Warn(fmt.Sprintf("transactions data for %s: %s", user.Username, err))
 			status = http.StatusNoContent
-			data = []models.Transaction{}
 		}
 	case TransactionBill:
 		//data, err = h.database.GetTransactionsToBill(userId)
@@ -202,6 +200,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		//}
 		//**************************************************
 		// billing transactions is disabled for client app
+		status = http.StatusNoContent
 		data = []models.Transaction{}
 		//**************************************************
 	case TransactionInfo:
@@ -234,9 +233,6 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 
 	if err != nil {
 		return nil, status
-	}
-	if data == nil {
-		data = []models.ChargeState{}
 	}
 	byteData, err := json.Marshal(data)
 	if err != nil {
