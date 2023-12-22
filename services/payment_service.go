@@ -5,7 +5,7 @@ import "evsys-back/models"
 type Payments interface {
 	Notify(data []byte) error
 	SavePaymentMethod(user *models.User, data []byte) error
-	UpdatePaymentMethod(data []byte) error
-	DeletePaymentMethod(data []byte) error
+	UpdatePaymentMethod(user *models.User, data []byte) error
+	DeletePaymentMethod(user *models.User, data []byte) error
 	SetOrder(user *models.User, data []byte) (*models.PaymentOrder, error)
 }

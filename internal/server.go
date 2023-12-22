@@ -329,7 +329,7 @@ func (s *Server) paymentUpdateMethod(w http.ResponseWriter, r *http.Request, _ h
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	err = s.payments.UpdatePaymentMethod(body)
+	err = s.payments.UpdatePaymentMethod(user, body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -348,7 +348,7 @@ func (s *Server) paymentDeleteMethod(w http.ResponseWriter, r *http.Request, _ h
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	err = s.payments.DeletePaymentMethod(body)
+	err = s.payments.DeletePaymentMethod(user, body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

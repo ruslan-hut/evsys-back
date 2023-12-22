@@ -180,7 +180,7 @@ func (p *Payments) SavePaymentMethod(user *models.User, data []byte) error {
 	return nil
 }
 
-func (p *Payments) UpdatePaymentMethod(data []byte) error {
+func (p *Payments) UpdatePaymentMethod(user *models.User, data []byte) error {
 	p.Lock()
 	defer p.Unlock()
 
@@ -189,9 +189,7 @@ func (p *Payments) UpdatePaymentMethod(data []byte) error {
 		p.logger.Error("method: unmarshal json", err)
 		return err
 	}
-	if paymentMethod.UserId == "" {
-		return fmt.Errorf("empty user id")
-	}
+	paymentMethod.UserId = user.UserId
 
 	err = p.database.UpdatePaymentMethod(paymentMethod)
 	if err != nil {
@@ -201,7 +199,7 @@ func (p *Payments) UpdatePaymentMethod(data []byte) error {
 	return nil
 }
 
-func (p *Payments) DeletePaymentMethod(data []byte) error {
+func (p *Payments) DeletePaymentMethod(user *models.User, data []byte) error {
 	p.Lock()
 	defer p.Unlock()
 
@@ -210,14 +208,11 @@ func (p *Payments) DeletePaymentMethod(data []byte) error {
 		p.logger.Error("delete method: unmarshal json", err)
 		return err
 	}
-	if paymentMethod.UserId == "" {
-		p.logger.Warn("delete method: empty user id")
-		return fmt.Errorf("empty user id")
-	}
 	if paymentMethod.Identifier == "" {
 		p.logger.Warn("method: empty identifier")
 		return fmt.Errorf("empty identifier")
 	}
+	paymentMethod.UserId = user.UserId
 
 	err = p.database.DeletePaymentMethod(paymentMethod)
 	if err != nil {
