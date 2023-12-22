@@ -602,6 +602,9 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]*models.ChargeState, e
 	if err = cursor.All(m.ctx, &transactions); err != nil {
 		return nil, err
 	}
+	if len(transactions) == 0 {
+		return nil, fmt.Errorf("no data")
+	}
 
 	var chargeStates []*models.ChargeState
 	for _, transaction := range transactions {
