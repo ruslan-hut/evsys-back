@@ -207,11 +207,16 @@ func (p *Payments) DeletePaymentMethod(data []byte) error {
 
 	paymentMethod, err := p.unmarshallPaymentMethod(data)
 	if err != nil {
-		p.logger.Error("method: unmarshal json", err)
+		p.logger.Error("delete method: unmarshal json", err)
 		return err
 	}
 	if paymentMethod.UserId == "" {
+		p.logger.Warn("delete method: empty user id")
 		return fmt.Errorf("empty user id")
+	}
+	if paymentMethod.Identifier == "" {
+		p.logger.Warn("method: empty identifier")
+		return fmt.Errorf("empty identifier")
 	}
 
 	err = p.database.DeletePaymentMethod(paymentMethod)
