@@ -798,10 +798,7 @@ func (m *MongoDB) SavePaymentResult(paymentParameters *models.PaymentParameters)
 
 	collection := connection.Database(m.database).Collection(collectionPayment)
 	_, err = collection.InsertOne(m.ctx, paymentParameters)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 // GetPaymentParameters get payment parameters by order id

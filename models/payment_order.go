@@ -16,4 +16,6 @@ type PaymentOrder struct {
 	Date          string    `json:"date" bson:"date"`
 	TimeOpened    time.Time `json:"time_opened" bson:"time_opened"`
 	TimeClosed    time.Time `json:"time_closed" bson:"time_closed"`
+	RefundAmount  int       `json:"refund_amount" bson:"refund_amount"`
+	RefundTime    time.Time `json:"refund_time" bson:"refund_time"`
 }

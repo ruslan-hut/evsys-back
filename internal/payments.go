@@ -84,6 +84,7 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 		return
 	}
 
+	p.logger.Info(fmt.Sprintf("notify type: %s; result: %s; order: %s; amount: %s", params.TransactionType, params.Response, params.Order, params.Amount))
 	err = p.database.SavePaymentResult(&params)
 	if err != nil {
 		p.logger.Error("save payment result", err)
@@ -104,23 +105,36 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 		p.logger.Error("get payment order", err)
 		return
 	}
-	order.Amount = amount
-	order.IsCompleted = true
-	order.Result = params.Response
-	order.TimeClosed = time.Now()
-	order.Currency = params.Currency
-	order.Date = fmt.Sprintf("%s %s", params.Date, params.Hour)
+	if !order.IsCompleted {
+		order.Amount = amount
+		order.IsCompleted = true
+		order.Result = params.Response
+		order.TimeClosed = time.Now()
+		order.Currency = params.Currency
+		order.Date = fmt.Sprintf("%s %s", params.Date, params.Hour)
 
-	err = p.database.SavePaymentOrder(order)
-	if err != nil {
-		p.logger.Error("save payment order", err)
+		err = p.database.SavePaymentOrder(order)
+		if err != nil {
+			p.logger.Error("save payment order", err)
+		}
 	}
 
-	if params.Response != "0000" {
-		p.logger.Info(fmt.Sprintf("error result: %s; order: %s; amount: %s", params.Response, params.Order, params.Amount))
+	err = p.checkPaymentResult(&params)
+	if err != nil {
+		p.logger.Warn(fmt.Sprintf("error %s; transaction %v; order %s; amount %s", params.Response, order.TransactionId, params.Order, params.Amount))
 		return
 	}
-	p.logger.Info(fmt.Sprintf("order: %s; amount: %s", params.Order, params.Amount))
+
+	// if transaction type is 3, then it is a refund
+	if params.TransactionType == "3" {
+		order.RefundAmount = amount
+		order.RefundTime = time.Now()
+		err = p.database.SavePaymentOrder(order)
+		if err != nil {
+			p.logger.Error("save payment order", err)
+		}
+		return
+	}
 
 	if order.TransactionId > 0 {
 
@@ -157,6 +171,22 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 
 	}
 
+}
+
+func (p *Payments) checkPaymentResult(result *models.PaymentParameters) error {
+	if result.TransactionType == "0" {
+		if result.Response != "0000" {
+			return fmt.Errorf("code %s", result.Response)
+		}
+		return nil
+	}
+	if result.TransactionType == "3" {
+		if result.Response != "0900" {
+			return fmt.Errorf("code %s", result.Response)
+		}
+		return nil
+	}
+	return fmt.Errorf("code %s; transaction type %s", result.Response, result.TransactionType)
 }
 
 func (p *Payments) SavePaymentMethod(user *models.User, data []byte) error {
