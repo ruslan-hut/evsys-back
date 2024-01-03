@@ -437,6 +437,7 @@ func (m *MongoDB) UpdateChargePoint(chargePoint *models.ChargePoint) error {
 		update = bson.M{"$set": bson.D{
 			{"type", connector.Type},
 			{"power", connector.Power},
+			{"connector_id_name", connector.IdName},
 		}}
 		_, err = collection.UpdateOne(m.ctx, filter, update)
 	}

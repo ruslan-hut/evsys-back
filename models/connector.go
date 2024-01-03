@@ -4,6 +4,7 @@ import "time"
 
 type Connector struct {
 	Id            int       `json:"connector_id" bson:"connector_id"`
+	IdName        string    `json:"connector_id_name" bson:"connector_id_name"`
 	ChargePointId string    `json:"charge_point_id" bson:"charge_point_id"`
 	Type          string    `json:"type" bson:"type"`
 	Status        string    `json:"status" bson:"status"`
