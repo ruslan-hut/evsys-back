@@ -879,6 +879,12 @@ func (m *MongoDB) DeletePaymentMethod(paymentMethod *models.PaymentMethod) error
 	}
 	defer m.disconnect(connection)
 
+	pm, err := m.GetPaymentMethod(paymentMethod.Identifier, paymentMethod.UserId)
+	if err != nil {
+		return err
+	}
+	isDefault := pm.IsDefault
+
 	collection := connection.Database(m.database).Collection(collectionPaymentMethods)
 	filter := bson.D{{"identifier", paymentMethod.Identifier}, {"user_id", paymentMethod.UserId}}
 	_, err = collection.DeleteOne(m.ctx, filter)
@@ -886,10 +892,9 @@ func (m *MongoDB) DeletePaymentMethod(paymentMethod *models.PaymentMethod) error
 		return err
 	}
 
-	var method models.PaymentMethod
-	filter = bson.D{{"is_default", paymentMethod.Identifier}, {"user_id", paymentMethod.UserId}}
-	err = collection.FindOne(m.ctx, filter).Decode(&method)
-	if err != nil {
+	// if we deleted default method, then set first method to default
+	if isDefault {
+		var method models.PaymentMethod
 		filter = bson.D{{"user_id", paymentMethod.UserId}}
 		err = collection.FindOne(m.ctx, filter).Decode(&method)
 		if err == nil {
