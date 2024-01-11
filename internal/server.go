@@ -938,12 +938,16 @@ func (s *Server) listenForUpdates() {
 			if len(messages) > 0 {
 				lastMessageTime = messages[len(messages)-1].Timestamp
 				for _, message := range messages {
-					s.pool.chpEvent <- &models.WsResponse{
-						Status: models.Success,
-						Stage:  models.Event,
-						Data:   message.ChargePointId,
-						Info:   message.Text,
+
+					if len(message.ChargePointId) > 1 {
+						s.pool.chpEvent <- &models.WsResponse{
+							Status: models.Success,
+							Stage:  models.Event,
+							Data:   message.ChargePointId,
+							Info:   message.Text,
+						}
 					}
+
 					data, err := json.Marshal(message)
 					if err != nil {
 						s.logger.Error("marshal log message", err)
@@ -955,6 +959,7 @@ func (s *Server) listenForUpdates() {
 						Data:   string(data),
 						Info:   message.Text,
 					}
+
 				}
 			}
 		}
