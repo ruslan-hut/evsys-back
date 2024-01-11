@@ -12,4 +12,5 @@ const (
 	Start   ResponseStage  = "start"
 	Stop    ResponseStage  = "stop"
 	Info    ResponseStage  = "info"
+	Event   ResponseStage  = "event"
 )

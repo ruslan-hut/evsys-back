@@ -33,6 +33,7 @@ type FeatureMessage struct {
 	ChargePointId string    `json:"id" bson:"charge_point_id"`
 	Text          string    `json:"text" bson:"text"`
 	Timestamp     time.Time `json:"timestamp" bson:"timestamp"`
+	Importance    string    `json:"importance" bson:"importance"`
 }
 
 func (fm *FeatureMessage) MessageType() string {

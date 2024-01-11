@@ -452,6 +452,9 @@ func (s *Server) Start() error {
 	s.pool = NewPool(s.logger)
 	go s.pool.Start()
 
+	// start listening for log updates, if update received, send it to all subscribed clients
+	go s.listenForUpdates()
+
 	serverAddress := fmt.Sprintf("%s:%s", s.conf.Listen.BindIP, s.conf.Listen.Port)
 	s.logger.Info(fmt.Sprintf("starting on %s", serverAddress))
 	listener, err := net.Listen("tcp", serverAddress)
@@ -494,8 +497,9 @@ func (s *Server) authorizeRequest(r *http.Request) *models.User {
 type SubscriptionType string
 
 const (
-	Broadcast SubscriptionType = "broadcast"
-	//UserEvent SubscriptionType = "user-event"
+	Broadcast        SubscriptionType = "broadcast"
+	LogEvent         SubscriptionType = "log-event"
+	ChargePointEvent SubscriptionType = "charge-point-event"
 )
 
 type Pool struct {
@@ -504,7 +508,8 @@ type Pool struct {
 	unregister chan *Client
 	clients    map[*Client]bool
 	broadcast  chan []byte
-	userEvent  chan *models.WsResponse
+	logEvent   chan *models.WsResponse
+	chpEvent   chan *models.WsResponse
 	logger     services.LogHandler
 }
 
@@ -515,7 +520,8 @@ func NewPool(logger services.LogHandler) *Pool {
 		unregister: make(chan *Client),
 		clients:    make(map[*Client]bool),
 		broadcast:  make(chan []byte),
-		userEvent:  make(chan *models.WsResponse),
+		logEvent:   make(chan *models.WsResponse),
+		chpEvent:   make(chan *models.WsResponse),
 		logger:     logger,
 	}
 }
@@ -541,10 +547,16 @@ func (p *Pool) Start() {
 					client.send <- message
 				}
 			}
-		case message := <-p.userEvent:
+		case message := <-p.logEvent:
 			for client := range p.clients {
-				if client.id == message.UserId {
-					client.sendResponse(message.Status, message.Info)
+				if client.subscription == LogEvent {
+					client.wsResponse(message)
+				}
+			}
+		case message := <-p.chpEvent:
+			for client := range p.clients {
+				if client.subscription == ChargePointEvent {
+					client.wsResponse(message)
 				}
 			}
 		}
@@ -673,12 +685,20 @@ func (c *Client) readPump() {
 			delete(c.listeners, userRequest.TransactionId)
 			c.mux.Unlock()
 		case models.ListenLog:
-			go c.listenForLogUpdates()
+			c.setSubscription(LogEvent)
+		case models.ListenChargePoints:
+			c.setSubscription(ChargePointEvent)
 		default:
 			c.sendResponse(models.Success, "request handled")
 		}
 
 	}
+}
+
+func (c *Client) setSubscription(subscription SubscriptionType) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	c.subscription = subscription
 }
 
 func (c *Client) restoreUserState(userState *models.UserStatus) {
@@ -730,7 +750,7 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 				continue
 			}
 			if transaction.TransactionId > -1 {
-				c.wsResponse(models.WsResponse{
+				c.wsResponse(&models.WsResponse{
 					Status: models.Success,
 					Stage:  models.Start,
 					Info:   fmt.Sprintf("transaction started: %v", transaction.TransactionId),
@@ -739,7 +759,7 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 			} else {
 				seconds := int(time.Since(timeStart).Seconds())
 				progress := seconds * 100 / maxTimeout
-				c.wsResponse(models.WsResponse{
+				c.wsResponse(&models.WsResponse{
 					Status:   models.Waiting,
 					Stage:    models.Start,
 					Info:     fmt.Sprintf("waiting %vs; %v%%", seconds, progress),
@@ -785,7 +805,7 @@ func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int
 				continue
 			}
 			if transaction.IsFinished {
-				c.wsResponse(models.WsResponse{
+				c.wsResponse(&models.WsResponse{
 					Status: models.Success,
 					Stage:  models.Stop,
 					Info:   fmt.Sprintf("transaction stopped: %v", transaction.TransactionId),
@@ -794,7 +814,7 @@ func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int
 			} else {
 				seconds := int(time.Since(timeStart).Seconds())
 				progress := seconds * 100 / maxTimeout
-				c.wsResponse(models.WsResponse{
+				c.wsResponse(&models.WsResponse{
 					Status:   models.Waiting,
 					Stage:    models.Stop,
 					Info:     fmt.Sprintf("waiting %vs; %v%%", seconds, progress),
@@ -840,7 +860,7 @@ func (c *Client) listenForTransactionState(transactionId int) {
 				continue
 			}
 			errorCounter = 0
-			c.wsResponse(models.WsResponse{
+			c.wsResponse(&models.WsResponse{
 				Status:   models.Value,
 				Stage:    models.Info,
 				Info:     fmt.Sprintf("transaction %v: %v %s", transactionId, value.Value, value.Unit),
@@ -856,7 +876,7 @@ func (c *Client) listenForTransactionState(transactionId int) {
 func (c *Client) listenForLogUpdates() {
 
 	lastMessageTime := time.Now()
-	errorCounter := 0
+	//errorCounter := 0
 	waitStep := 5
 	ticker := time.NewTicker(time.Duration(waitStep) * time.Second)
 
@@ -872,10 +892,10 @@ func (c *Client) listenForLogUpdates() {
 			}
 			messages, err := c.statusReader.ReadLogAfter(lastMessageTime)
 			if err != nil {
-				errorCounter++
-				if errorCounter > 10 {
-					return
-				}
+				//errorCounter++
+				//if errorCounter > 10 {
+				//	return
+				//}
 				continue
 			}
 			if len(messages) > 0 {
@@ -886,7 +906,7 @@ func (c *Client) listenForLogUpdates() {
 						c.logger.Error("marshal message", err)
 						continue
 					}
-					c.wsResponse(models.WsResponse{
+					c.wsResponse(&models.WsResponse{
 						Status: models.Success,
 						Stage:  models.Info,
 						Data:   string(data),
@@ -897,8 +917,52 @@ func (c *Client) listenForLogUpdates() {
 	}
 }
 
+func (s *Server) listenForUpdates() {
+
+	lastMessageTime := time.Now()
+	waitStep := 5
+	ticker := time.NewTicker(time.Duration(waitStep) * time.Second)
+
+	defer func() {
+		ticker.Stop()
+	}()
+
+	for {
+		select {
+		case <-ticker.C:
+			messages, err := s.statusReader.ReadLogAfter(lastMessageTime)
+			if err != nil {
+				s.logger.Error("reading log", err)
+				continue
+			}
+			if len(messages) > 0 {
+				lastMessageTime = messages[len(messages)-1].Timestamp
+				for _, message := range messages {
+					s.pool.chpEvent <- &models.WsResponse{
+						Status: models.Success,
+						Stage:  models.Event,
+						Data:   message.ChargePointId,
+						Info:   message.Text,
+					}
+					data, err := json.Marshal(message)
+					if err != nil {
+						s.logger.Error("marshal log message", err)
+						continue
+					}
+					s.pool.logEvent <- &models.WsResponse{
+						Status: models.Success,
+						Stage:  models.Event,
+						Data:   string(data),
+						Info:   message.Text,
+					}
+				}
+			}
+		}
+	}
+}
+
 func (c *Client) sendResponse(status models.ResponseStatus, info string) {
-	response := models.WsResponse{
+	response := &models.WsResponse{
 		Status: status,
 		Info:   info,
 		Stage:  models.Info,
@@ -906,7 +970,7 @@ func (c *Client) sendResponse(status models.ResponseStatus, info string) {
 	c.wsResponse(response)
 }
 
-func (c *Client) wsResponse(response models.WsResponse) {
+func (c *Client) wsResponse(response *models.WsResponse) {
 	if c.isClosed {
 		return
 	}
