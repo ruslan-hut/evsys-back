@@ -548,14 +548,12 @@ func (p *Pool) Start() {
 				}
 			}
 		case message := <-p.logEvent:
-			//p.logger.Info(fmt.Sprintf("pool: log event: %s", message.Info))
 			for client := range p.clients {
 				if client.subscription == LogEvent {
 					client.wsResponse(message)
 				}
 			}
 		case message := <-p.chpEvent:
-			p.logger.Info(fmt.Sprintf("pool: chp event: %s %s", message.Data, message.Info))
 			for client := range p.clients {
 				if client.subscription == ChargePointEvent {
 					client.wsResponse(message)
@@ -670,14 +668,6 @@ func (c *Client) readPump() {
 			userState, ok := c.statusReader.GetStatus(tag)
 			if ok {
 				c.restoreUserState(userState)
-			}
-			if userRequest.ChargePointId != "" {
-				c.wsResponse(&models.WsResponse{
-					Status: models.Event,
-					Stage:  models.ChargePointEvent,
-					Data:   userRequest.ChargePointId,
-					Info:   fmt.Sprintf("test charge point event: %s", userRequest.ChargePointId),
-				})
 			}
 		case models.ListenTransaction:
 			_, err := c.statusReader.SaveStatus(tag, models.StageListen, userRequest.TransactionId)
@@ -992,7 +982,6 @@ func (c *Client) wsResponse(response *models.WsResponse) {
 	}
 	data, err := json.Marshal(response)
 	if err == nil {
-		println(string(data))
 		c.send <- data
 	} else {
 		c.logger.Error("send response", err)
