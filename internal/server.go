@@ -671,6 +671,14 @@ func (c *Client) readPump() {
 			if ok {
 				c.restoreUserState(userState)
 			}
+			if userRequest.ChargePointId != "" {
+				c.wsResponse(&models.WsResponse{
+					Status: models.Event,
+					Stage:  models.ChargePointEvent,
+					Data:   userRequest.ChargePointId,
+					Info:   fmt.Sprintf("test charge point event: %s", userRequest.ChargePointId),
+				})
+			}
 		case models.ListenTransaction:
 			_, err := c.statusReader.SaveStatus(tag, models.StageListen, userRequest.TransactionId)
 			if err != nil {
