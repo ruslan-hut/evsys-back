@@ -1010,7 +1010,7 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.P
 		logger:         s.logger,
 		pool:           s.pool,
 		id:             "",
-		subscription:   Broadcast,
+		subscription:   ChargePointEvent,
 		requestHandler: s.wsHandler,
 		listeners:      make(map[int]string),
 		mux:            &sync.Mutex{},
