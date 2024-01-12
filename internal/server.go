@@ -548,12 +548,14 @@ func (p *Pool) Start() {
 				}
 			}
 		case message := <-p.logEvent:
+			//p.logger.Info(fmt.Sprintf("pool: log event: %s", message.Info))
 			for client := range p.clients {
 				if client.subscription == LogEvent {
 					client.wsResponse(message)
 				}
 			}
 		case message := <-p.chpEvent:
+			p.logger.Info(fmt.Sprintf("pool: chp event: %s %s", message.Data, message.Info))
 			for client := range p.clients {
 				if client.subscription == ChargePointEvent {
 					client.wsResponse(message)
@@ -941,8 +943,8 @@ func (s *Server) listenForUpdates() {
 
 					if len(message.ChargePointId) > 1 {
 						s.pool.chpEvent <- &models.WsResponse{
-							Status: models.Success,
-							Stage:  models.Event,
+							Status: models.Event,
+							Stage:  models.ChargePointEvent,
 							Data:   message.ChargePointId,
 							Info:   message.Text,
 						}
@@ -954,8 +956,8 @@ func (s *Server) listenForUpdates() {
 						continue
 					}
 					s.pool.logEvent <- &models.WsResponse{
-						Status: models.Success,
-						Stage:  models.Event,
+						Status: models.Event,
+						Stage:  models.LogEvent,
 						Data:   string(data),
 						Info:   message.Text,
 					}
