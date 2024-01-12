@@ -673,8 +673,8 @@ func (c *Client) readPump() {
 			}
 			if userRequest.ChargePointId != "" {
 				c.wsResponse(&models.WsResponse{
-					Status: models.Event,
-					Stage:  models.ChargePointEvent,
+					Status: models.Ping,
+					Stage:  models.Info,
 					Data:   userRequest.ChargePointId,
 					Info:   fmt.Sprintf("test charge point event: %s", userRequest.ChargePointId),
 				})
