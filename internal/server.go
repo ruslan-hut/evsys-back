@@ -606,7 +606,7 @@ func (c *Client) readPump() {
 		_, message, err := c.ws.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived) {
-				c.logger.Error("read message", err)
+				c.logger.Warn(fmt.Sprintf("read pump: unexpected close %s", c.id))
 			}
 			break
 		}
