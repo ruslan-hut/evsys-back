@@ -992,6 +992,7 @@ func (c *Client) wsResponse(response *models.WsResponse) {
 	}
 	data, err := json.Marshal(response)
 	if err == nil {
+		println(string(data))
 		c.send <- data
 	} else {
 		c.logger.Error("send response", err)
