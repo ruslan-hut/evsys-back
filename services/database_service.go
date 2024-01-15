@@ -21,13 +21,13 @@ type Database interface {
 	AddUserTag(userTag *models.UserTag) error
 	UpdateTagLastSeen(userTag *models.UserTag) error
 
-	GetChargePoints(searchTerm string) ([]*models.ChargePoint, error)
-	GetChargePoint(id string) (*models.ChargePoint, error)
-	UpdateChargePoint(chargePoint *models.ChargePoint) error
+	GetChargePoints(level int, searchTerm string) ([]*models.ChargePoint, error)
+	GetChargePoint(level int, id string) (*models.ChargePoint, error)
+	UpdateChargePoint(level int, chargePoint *models.ChargePoint) error
 
 	GetTransaction(id int) (*models.Transaction, error)
 	GetTransactionByTag(idTag string, timeStart time.Time) (*models.Transaction, error)
-	GetTransactionState(id int) (*models.ChargeState, error)
+	GetTransactionState(level int, id int) (*models.ChargeState, error)
 	GetActiveTransactions(userId string) ([]*models.ChargeState, error)
 	GetTransactions(userId string, period string) ([]*models.Transaction, error)
 	GetTransactionsToBill(userId string) ([]*models.Transaction, error)

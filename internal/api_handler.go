@@ -143,14 +143,14 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		}
 	case GetChargePoints:
 		search := string(ac.Payload)
-		data, err = h.database.GetChargePoints(search)
+		data, err = h.database.GetChargePoints(user.AccessLevel, search)
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("no data by search: %s", search))
 			status = http.StatusNoContent
 		}
 	case ChargePointInfo:
 		id := string(ac.Payload)
-		data, err = h.database.GetChargePoint(id)
+		data, err = h.database.GetChargePoint(user.AccessLevel, id)
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("not found charge point: %s", id))
 			status = http.StatusNoContent
@@ -162,13 +162,13 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			h.logger.Info(fmt.Sprintf("%s", ac.Payload))
 			status = http.StatusUnsupportedMediaType
 		} else {
-			err = h.database.UpdateChargePoint(chp)
+			err = h.database.UpdateChargePoint(user.AccessLevel, chp)
 			if err != nil {
 				h.logger.Error("update charge point", err)
 				status = http.StatusInternalServerError
 			}
 		}
-		data, err = h.database.GetChargePoint(chp.Id)
+		data, err = h.database.GetChargePoint(user.AccessLevel, chp.Id)
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("not found charge point: %s", chp.Id))
 			status = http.StatusNoContent
@@ -209,7 +209,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			h.logger.Error("decoding transaction id", err)
 			status = http.StatusBadRequest
 		} else {
-			data, err = h.database.GetTransactionState(id)
+			data, err = h.database.GetTransactionState(user.AccessLevel, id)
 			if err != nil {
 				h.logger.Error("get transaction", err)
 				status = http.StatusInternalServerError

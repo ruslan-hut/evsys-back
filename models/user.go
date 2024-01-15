@@ -7,6 +7,8 @@ type User struct {
 	Password       string    `json:"password" bson:"password"`
 	Name           string    `json:"name" bson:"name"`
 	Role           string    `json:"role" bson:"role"`
+	AccessLevel    int       `json:"access_level" bson:"access_level"`
+	Email          string    `json:"email" bson:"email"`
 	PaymentPlan    string    `json:"payment_plan" bson:"payment_plan"`
 	Token          string    `json:"token" bson:"token"`
 	UserId         string    `json:"user_id" bson:"user_id"`

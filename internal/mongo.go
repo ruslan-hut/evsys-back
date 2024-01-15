@@ -338,7 +338,7 @@ func (m *MongoDB) CheckToken(token string) (*models.User, error) {
 	return &userData, nil
 }
 
-func (m *MongoDB) GetChargePoints(searchTerm string) ([]*models.ChargePoint, error) {
+func (m *MongoDB) GetChargePoints(level int, searchTerm string) ([]*models.ChargePoint, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -349,11 +349,16 @@ func (m *MongoDB) GetChargePoints(searchTerm string) ([]*models.ChargePoint, err
 
 	pipeline := mongo.Pipeline{
 		{
-			{"$match", bson.M{"$or": []bson.M{
-				{"description": searchRegex},
-				{"title": searchRegex},
-				{"address": searchRegex},
-			}}},
+			{"$match", bson.M{
+				"$and": []bson.M{
+					{"$or": []bson.M{
+						{"description": searchRegex},
+						{"title": searchRegex},
+						{"address": searchRegex},
+					}},
+					{"access_level": bson.M{"$lte": level}},
+				},
+			}},
 		},
 		{{"$lookup", bson.M{
 			"from":         collectionConnectors,
@@ -377,7 +382,7 @@ func (m *MongoDB) GetChargePoints(searchTerm string) ([]*models.ChargePoint, err
 	return chargePoints, nil
 }
 
-func (m *MongoDB) GetChargePoint(id string) (*models.ChargePoint, error) {
+func (m *MongoDB) GetChargePoint(level int, id string) (*models.ChargePoint, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -385,7 +390,7 @@ func (m *MongoDB) GetChargePoint(id string) (*models.ChargePoint, error) {
 	defer m.disconnect(connection)
 
 	collection := connection.Database(m.database).Collection(collectionChargePoints)
-	filter := bson.D{{"charge_point_id", id}}
+	filter := bson.M{"$and": []bson.M{{"charge_point_id": id}, {"access_level": bson.M{"$lte": level}}}}
 
 	pipeline := mongo.Pipeline{
 		bson.D{{"$match", filter}}, // Match the charge point
@@ -412,7 +417,7 @@ func (m *MongoDB) GetChargePoint(id string) (*models.ChargePoint, error) {
 	return &chargePoint, nil
 }
 
-func (m *MongoDB) UpdateChargePoint(chargePoint *models.ChargePoint) error {
+func (m *MongoDB) UpdateChargePoint(level int, chargePoint *models.ChargePoint) error {
 	connection, err := m.connect()
 	if err != nil {
 		return err
@@ -420,20 +425,31 @@ func (m *MongoDB) UpdateChargePoint(chargePoint *models.ChargePoint) error {
 	defer m.disconnect(connection)
 
 	collection := connection.Database(m.database).Collection(collectionChargePoints)
-	filter := bson.D{{"charge_point_id", chargePoint.Id}}
+	filter := bson.M{"$and": []bson.M{
+		{"charge_point_id": chargePoint.Id},
+		{"access_level": bson.M{"$lte": level}},
+	}}
 	update := bson.M{"$set": bson.D{
 		{"title", chargePoint.Title},
 		{"description", chargePoint.Description},
 		{"address", chargePoint.Address},
+		{"access_type", chargePoint.AccessType},
+		{"access_level", chargePoint.AccessLevel},
 		{"location.latitude", chargePoint.Location.Latitude},
 		{"location.longitude", chargePoint.Location.Longitude},
 	}}
-	_, err = collection.UpdateOne(m.ctx, filter, update)
+	result, err := collection.UpdateOne(m.ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("update charge point: %v", err)
+	}
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("no charge point found")
+	}
 
 	// update connectors data
 	collection = connection.Database(m.database).Collection(collectionConnectors)
 	for _, connector := range chargePoint.Connectors {
-		filter = bson.D{{"charge_point_id", chargePoint.Id}, {"connector_id", connector.Id}}
+		filter = bson.M{"charge_point_id": chargePoint.Id, "connector_id": connector.Id}
 		update = bson.M{"$set": bson.D{
 			{"type", connector.Type},
 			{"power", connector.Power},
@@ -460,7 +476,7 @@ func (m *MongoDB) GetConnector(chargePointId string, connectorId int) (*models.C
 	return &connector, nil
 }
 
-func (m *MongoDB) getTransactionState(transaction *models.Transaction) (*models.ChargeState, error) {
+func (m *MongoDB) getTransactionState(level int, transaction *models.Transaction) (*models.ChargeState, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -469,7 +485,7 @@ func (m *MongoDB) getTransactionState(transaction *models.Transaction) (*models.
 
 	var chargeState models.ChargeState
 
-	chargePoint, err := m.GetChargePoint(transaction.ChargePointId)
+	chargePoint, err := m.GetChargePoint(level, transaction.ChargePointId)
 	if err != nil {
 		return nil, fmt.Errorf("get charge point: %v", err)
 	}
@@ -514,7 +530,7 @@ func (m *MongoDB) getTransactionState(transaction *models.Transaction) (*models.
 	return &chargeState, nil
 }
 
-func (m *MongoDB) GetTransactionState(id int) (*models.ChargeState, error) {
+func (m *MongoDB) GetTransactionState(level int, id int) (*models.ChargeState, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -525,7 +541,7 @@ func (m *MongoDB) GetTransactionState(id int) (*models.ChargeState, error) {
 	if err != nil {
 		return nil, err
 	}
-	chargeState, err := m.getTransactionState(transaction)
+	chargeState, err := m.getTransactionState(level, transaction)
 	if err != nil {
 		return nil, err
 	}
@@ -577,9 +593,14 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]*models.ChargeState, e
 	}
 	defer m.disconnect(connection)
 
+	user, err := m.GetUserById(userId)
+	if err != nil {
+		return nil, fmt.Errorf("get user: %v", err)
+	}
+
 	tags, err := m.GetUserTags(userId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get user tags: %v", err)
 	}
 	if len(tags) == 0 {
 		return nil, nil
@@ -609,7 +630,7 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]*models.ChargeState, e
 
 	var chargeStates []*models.ChargeState
 	for _, transaction := range transactions {
-		chargeState, err := m.getTransactionState(&transaction)
+		chargeState, err := m.getTransactionState(user.AccessLevel, &transaction)
 		if err != nil {
 			return nil, err
 		}
