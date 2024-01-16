@@ -5,6 +5,7 @@ import (
 	"evsys-back/config"
 	"evsys-back/models"
 	"evsys-back/services"
+	"evsys-back/utility"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/julienschmidt/httprouter"
@@ -417,9 +418,6 @@ func (s *Server) options(w http.ResponseWriter, r *http.Request, _ httprouter.Pa
 }
 
 func (s *Server) handleApiRequest(w http.ResponseWriter, ac *Call) {
-	if ac.CallType != ReadLog {
-		s.logger.Info(fmt.Sprintf("call %s from remote %s", ac.CallType, ac.Remote))
-	}
 	if s.apiHandler != nil {
 		data, status := s.apiHandler(ac)
 		s.sendApiResponse(w, data, status)
@@ -532,12 +530,10 @@ func (p *Pool) Start() {
 		case client := <-p.register:
 			p.clients[client] = true
 			client.sendResponse(models.Ping, "new connection")
-			p.logger.Info(fmt.Sprintf("pool: registered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
 		case client := <-p.unregister:
 			if _, ok := p.clients[client]; ok {
 				delete(p.clients, client)
 				close(client.send)
-				p.logger.Info(fmt.Sprintf("pool: unregistered %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
 			} else {
 				p.logger.Warn(fmt.Sprintf("pool: unregistered unknown %s: total connections: %v", client.ws.RemoteAddr(), len(p.clients)))
 			}
@@ -586,7 +582,7 @@ func (c *Client) writePump() {
 		select {
 		case message, ok := <-c.send:
 			if !ok {
-				c.logger.Warn(fmt.Sprintf("write pump: channel closed %s", c.id))
+				c.logger.Warn(fmt.Sprintf("write pump: channel closed %s", utility.Secret(c.id)))
 				_ = c.ws.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
@@ -607,7 +603,7 @@ func (c *Client) readPump() {
 		_, message, err := c.ws.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived) {
-				c.logger.Warn(fmt.Sprintf("read pump: unexpected close %s", c.id))
+				c.logger.Warn(fmt.Sprintf("read pump: unexpected close %s", utility.Secret(c.id)))
 			}
 			break
 		}

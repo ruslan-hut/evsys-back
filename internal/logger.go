@@ -71,6 +71,10 @@ func (l *Logger) internalError(event string, err error) {
 
 func (l *Logger) logEvent(level Importance, text string) {
 
+	if level == Raw && !l.debugMode {
+		return
+	}
+
 	message := &services.LogMessage{
 		Time:      logTime(time.Now()),
 		Timestamp: time.Now(),
@@ -104,9 +108,6 @@ func (l *Logger) writeToDatabase(message *services.LogMessage) {
 }
 
 func (l *Logger) logLine(importance, text string) {
-	if importance == string(Raw) {
-		return
-	}
 	if importance == string(Info) && !l.debugMode && l.database != nil {
 		return
 	}

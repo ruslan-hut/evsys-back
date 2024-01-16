@@ -32,6 +32,7 @@ const (
 	//CentralSystemLog     LogType  = "sys"
 	//BackendLog           LogType  = "back"
 	//PaymentLog           LogType  = "pay"
+	MaxAccessLevel int = 10
 )
 
 type Call struct {
@@ -119,6 +120,9 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			h.logger.Error("decoding user", err)
 			status = http.StatusUnsupportedMediaType
 		} else {
+			if userData.AccessLevel > MaxAccessLevel {
+				userData.AccessLevel = MaxAccessLevel
+			}
 			err = h.auth.RegisterUser(userData)
 			if err != nil {
 				h.logger.Error("user registration", err)
@@ -162,6 +166,9 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			h.logger.Info(fmt.Sprintf("%s", ac.Payload))
 			status = http.StatusUnsupportedMediaType
 		} else {
+			if chp.AccessLevel > MaxAccessLevel {
+				chp.AccessLevel = MaxAccessLevel
+			}
 			err = h.database.UpdateChargePoint(user.AccessLevel, chp)
 			if err != nil {
 				h.logger.Error("update charge point", err)
