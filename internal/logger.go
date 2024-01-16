@@ -72,10 +72,11 @@ func (l *Logger) internalError(event string, err error) {
 func (l *Logger) logEvent(level Importance, text string) {
 
 	message := &services.LogMessage{
-		Time:     logTime(time.Now()),
-		Text:     text,
-		Category: l.category,
-		Level:    string(level),
+		Time:      logTime(time.Now()),
+		Timestamp: time.Now(),
+		Text:      text,
+		Category:  l.category,
+		Level:     string(level),
 	}
 
 	messageText := fmt.Sprintf("%s: %s", message.Category, message.Text)
