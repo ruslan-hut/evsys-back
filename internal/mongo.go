@@ -209,7 +209,7 @@ func (m *MongoDB) GetUserInfo(level int, username string) (*models.UserInfo, err
 			"from":         collectionPaymenPlans,
 			"localField":   "payment_plan",
 			"foreignField": "plan_id",
-			"as":           "PaymentPlans",
+			"as":           "payment_plans",
 		}}},
 		{{"$lookup", bson.M{
 			"from":         collectionPaymentMethods,
@@ -221,13 +221,13 @@ func (m *MongoDB) GetUserInfo(level int, username string) (*models.UserInfo, err
 			"from":         collectionUserTags,
 			"localField":   "username",
 			"foreignField": "username",
-			"as":           "UserTags",
+			"as":           "user_tags",
 		}}},
-		//{{"$project", bson.M{
-		//	"PaymentMethods.identifier": "***",
-		//	"PaymentMethods.user_id":    "***",
-		//	"UserTags.user_id":          "***",
-		//}}},
+		{{"$project", bson.M{
+			"payment_methods.identifier": "***",
+			"payment_methods.user_id":    "***",
+			"user_tags.user_id":          "***",
+		}}},
 	}
 	collection := connection.Database(m.database).Collection(collectionUsers)
 	var info models.UserInfo
