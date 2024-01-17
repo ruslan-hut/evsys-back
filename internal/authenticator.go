@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"evsys-back/models"
 	"evsys-back/services"
+	"evsys-back/utility"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
 	"strings"
@@ -87,6 +88,37 @@ func (a *Authenticator) AuthenticateByToken(token string) (*models.User, error) 
 		}
 	}
 	return nil, fmt.Errorf("token check failed")
+}
+
+func (a *Authenticator) GetUserById(userId string) (*models.User, error) {
+	user, _ := a.database.GetUserById(userId)
+
+	if user == nil {
+
+		// generating unique username for new user
+		nameLength := 5
+		username := fmt.Sprintf("user_%s", a.generateKey(nameLength))
+		for a.database.CheckUsername(username) != nil {
+			nameLength++
+			username = fmt.Sprintf("user_%s", a.generateKey(nameLength))
+		}
+
+		user = &models.User{
+			Username:       username,
+			Name:           "Firebase user",
+			UserId:         userId,
+			DateRegistered: time.Now(),
+		}
+
+		err := a.database.AddUser(user)
+		if err != nil {
+			return nil, fmt.Errorf("adding user: %s", err)
+		}
+		a.logger.Info(fmt.Sprintf("new user registered: %s; %s", username, utility.Secret(userId)))
+	}
+
+	_ = a.updateLastSeen(user)
+	return user, nil
 }
 
 // update user last seen

@@ -321,6 +321,24 @@ func (m *MongoDB) AddUser(user *models.User) error {
 	return err
 }
 
+// CheckUsername check unique username
+func (m *MongoDB) CheckUsername(username string) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionUsers)
+	filter := bson.D{{"username", username}}
+	var userData models.User
+	err = collection.FindOne(m.ctx, filter).Decode(&userData)
+	if err == nil {
+		return fmt.Errorf("username %s already exists", username)
+	}
+	return nil
+}
+
 func (m *MongoDB) CheckToken(token string) (*models.User, error) {
 	connection, err := m.connect()
 	if err != nil {

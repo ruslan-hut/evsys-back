@@ -15,6 +15,7 @@ type Database interface {
 	GetUserById(userId string) (*models.User, error)
 	UpdateLastSeen(user *models.User) error
 	AddUser(user *models.User) error
+	CheckUsername(username string) error
 	CheckToken(token string) (*models.User, error)
 
 	GetUserTags(userId string) ([]models.UserTag, error)
