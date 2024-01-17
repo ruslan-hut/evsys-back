@@ -22,7 +22,7 @@ const (
 	readLog               = "log/:log"
 	userAuthenticate      = "users/authenticate"
 	userRegister          = "users/register"
-	userInfo              = "users/info"
+	userInfo              = "users/info/:name"
 	usersList             = "users/list"
 	generateInvites       = "users/invites"
 	getChargePoints       = "chp"
@@ -223,11 +223,12 @@ func (s *Server) registerUser(w http.ResponseWriter, r *http.Request, _ httprout
 	s.handleApiRequest(w, ac)
 }
 
-func (s *Server) userInfo(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (s *Server) userInfo(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	ac := &Call{
 		CallType: UserInfo,
 		Remote:   r.RemoteAddr,
 		Token:    s.getToken(r),
+		Payload:  []byte(p.ByName("name")),
 	}
 	s.handleApiRequest(w, ac)
 }

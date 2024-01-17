@@ -130,8 +130,11 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			}
 		}
 	case UserInfo:
-		// user data is already loaded by token check
-		data = user
+		data, err = h.database.GetUserInfo(user.AccessLevel, string(ac.Payload))
+		if err != nil {
+			h.logger.Error("get user info", err)
+			status = http.StatusNoContent
+		}
 	case UsersList:
 		data, err = h.auth.GetUsers(user.Role)
 		if err != nil {

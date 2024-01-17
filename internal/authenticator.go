@@ -13,7 +13,10 @@ import (
 	"time"
 )
 
-const tokenLength = 32
+const (
+	tokenLength        = 32
+	defaultPaymentPlan = "default"
+)
 
 type Authenticator struct {
 	logger   services.LogHandler
@@ -107,6 +110,7 @@ func (a *Authenticator) GetUserById(userId string) (*models.User, error) {
 			Username:       username,
 			Name:           "Firebase user",
 			UserId:         userId,
+			PaymentPlan:    defaultPaymentPlan,
 			DateRegistered: time.Now(),
 		}
 
@@ -263,6 +267,9 @@ func (a *Authenticator) RegisterUser(user *models.User) error {
 	user.Password = a.generatePasswordHash(user.Password)
 	if user.Password == "" {
 		return fmt.Errorf("empty password hash")
+	}
+	if user.PaymentPlan == "" {
+		user.PaymentPlan = defaultPaymentPlan
 	}
 	user.DateRegistered = time.Now()
 	err := a.database.AddUser(user)

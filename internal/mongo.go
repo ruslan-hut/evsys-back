@@ -30,6 +30,7 @@ const (
 	collectionPayment        = "payment"
 	collectionPaymentMethods = "payment_methods"
 	collectionPaymentOrders  = "payment_orders"
+	collectionPaymenPlans    = "payment_plans"
 )
 
 type MongoDB struct {
@@ -185,6 +186,64 @@ func (m *MongoDB) GetUser(username string) (*models.User, error) {
 		return nil, err
 	}
 	return &userData, nil
+}
+
+// GetUserInfo get user info: data of a user, merged with tags, payment methods, payment plans
+func (m *MongoDB) GetUserInfo(level int, username string) (*models.UserInfo, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	pipeline := mongo.Pipeline{
+		{
+			{"$match", bson.M{
+				"$and": []bson.M{
+					{"username": username},
+					{"access_level": bson.M{"$lte": level}},
+				},
+			}},
+		},
+		{{"$lookup", bson.M{
+			"from":         collectionPaymenPlans,
+			"localField":   "payment_plan",
+			"foreignField": "plan_id",
+			"as":           "PaymentPlans",
+		}}},
+		{{"$lookup", bson.M{
+			"from":         collectionPaymentMethods,
+			"localField":   "username",
+			"foreignField": "user_name",
+			"as":           "PaymentMethods",
+		}}},
+		{{"$lookup", bson.M{
+			"from":         collectionUserTags,
+			"localField":   "username",
+			"foreignField": "username",
+			"as":           "UserTags",
+		}}},
+		{{"$project", bson.M{
+			"PaymentMethods.identifier": "***",
+			"PaymentMethods.user_id":    "***",
+			"UserTags.user_id":          "***",
+		}}},
+	}
+	collection := connection.Database(m.database).Collection(collectionUsers)
+	var userInfo models.UserInfo
+	cursor, err := collection.Aggregate(m.ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	if cursor.Next(m.ctx) {
+		if err := cursor.Decode(&userInfo); err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, fmt.Errorf("no user found")
+	}
+
+	return &userInfo, nil
 }
 
 func (m *MongoDB) GetUsers() ([]*models.User, error) {
