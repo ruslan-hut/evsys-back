@@ -198,12 +198,13 @@ func (m *MongoDB) GetUserInfo(level int, username string) (*models.UserInfo, err
 
 	pipeline := mongo.Pipeline{
 		{
-			{"$match", bson.M{
-				"$and": []bson.M{
-					{"username": username},
-					{"access_level": bson.M{"$lte": level}},
-				},
-			}},
+			{"$match", bson.M{"username": username}},
+			//{"$match", bson.M{
+			//	"$and": []bson.M{
+			//		{"username": username},
+			//		{"access_level": bson.M{"$lte": level}},
+			//	},
+			//}},
 		},
 		{{"$lookup", bson.M{
 			"from":         collectionPaymenPlans,
