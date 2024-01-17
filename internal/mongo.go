@@ -223,11 +223,11 @@ func (m *MongoDB) GetUserInfo(level int, username string) (*models.UserInfo, err
 			"foreignField": "username",
 			"as":           "UserTags",
 		}}},
-		{{"$project", bson.M{
-			"PaymentMethods.identifier": "***",
-			"PaymentMethods.user_id":    "***",
-			"UserTags.user_id":          "***",
-		}}},
+		//{{"$project", bson.M{
+		//	"PaymentMethods.identifier": "***",
+		//	"PaymentMethods.user_id":    "***",
+		//	"UserTags.user_id":          "***",
+		//}}},
 	}
 	collection := connection.Database(m.database).Collection(collectionUsers)
 	var info models.UserInfo
