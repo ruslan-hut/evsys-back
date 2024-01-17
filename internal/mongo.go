@@ -198,13 +198,12 @@ func (m *MongoDB) GetUserInfo(level int, username string) (*models.UserInfo, err
 
 	pipeline := mongo.Pipeline{
 		{
-			{"$match", bson.M{"username": username}},
-			//{"$match", bson.M{
-			//	"$and": []bson.M{
-			//		{"username": username},
-			//		{"access_level": bson.M{"$lte": level}},
-			//	},
-			//}},
+			{"$match", bson.M{
+				"$and": []bson.M{
+					{"username": username},
+					{"access_level": bson.M{"$lte": level}},
+				},
+			}},
 		},
 		{{"$lookup", bson.M{
 			"from":         collectionPaymenPlans,
@@ -231,20 +230,20 @@ func (m *MongoDB) GetUserInfo(level int, username string) (*models.UserInfo, err
 		}}},
 	}
 	collection := connection.Database(m.database).Collection(collectionUsers)
-	var userInfo models.UserInfo
+	var info models.UserInfo
 	cursor, err := collection.Aggregate(m.ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}
 	if cursor.Next(m.ctx) {
-		if err := cursor.Decode(&userInfo); err != nil {
+		if err := cursor.Decode(&info); err != nil {
 			return nil, err
 		}
 	} else {
 		return nil, fmt.Errorf("no user found")
 	}
 
-	return &userInfo, nil
+	return &info, nil
 }
 
 func (m *MongoDB) GetUsers() ([]*models.User, error) {
