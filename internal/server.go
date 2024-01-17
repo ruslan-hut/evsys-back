@@ -583,7 +583,6 @@ func (c *Client) writePump() {
 		select {
 		case message, ok := <-c.send:
 			if !ok {
-				c.logger.Warn(fmt.Sprintf("write pump: channel closed %s", utility.Secret(c.id)))
 				_ = c.ws.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
