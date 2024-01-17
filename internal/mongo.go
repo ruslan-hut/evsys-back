@@ -189,7 +189,7 @@ func (m *MongoDB) GetUser(username string) (*models.User, error) {
 }
 
 // GetUserInfo get user info: data of a user, merged with tags, payment methods, payment plans
-func (m *MongoDB) GetUserInfo(level int, username string) (*models.UserInfo, error) {
+func (m *MongoDB) GetUserInfo(_ int, username string) (*models.UserInfo, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -198,12 +198,12 @@ func (m *MongoDB) GetUserInfo(level int, username string) (*models.UserInfo, err
 
 	pipeline := mongo.Pipeline{
 		{
-			{"$match", bson.M{
-				"$and": []bson.M{
-					{"username": username},
-					{"access_level": bson.M{"$lte": level}},
-				},
-			}},
+			{"$match", bson.M{"username": username}},
+			//	"$and": []bson.M{
+			//		{"username": username},
+			//		{"access_level": bson.M{"$lte": level}},
+			//	},
+			//}},
 		},
 		{{"$lookup", bson.M{
 			"from":         collectionPaymenPlans,
@@ -224,9 +224,9 @@ func (m *MongoDB) GetUserInfo(level int, username string) (*models.UserInfo, err
 			"as":           "user_tags",
 		}}},
 		{{"$project", bson.M{
-			"payment_methods.identifier": 0,
-			"payment_methods.user_id":    0,
-			"user_tags.user_id":          0,
+			//"payment_methods.identifier": 0,
+			"payment_methods.user_id": 0,
+			"user_tags.user_id":       0,
 		}}},
 	}
 	collection := connection.Database(m.database).Collection(collectionUsers)

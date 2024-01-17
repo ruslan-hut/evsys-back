@@ -130,10 +130,16 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			}
 		}
 	case UserInfo:
-		data, err = h.database.GetUserInfo(user.AccessLevel, string(ac.Payload))
-		if err != nil {
-			h.logger.Error("get user info", err)
-			status = http.StatusNoContent
+		username := string(ac.Payload)
+		if user.AccessLevel < 10 && username != user.Username {
+			h.logger.Warn(fmt.Sprintf("user %s tries to get info about %s", user.Username, username))
+			status = http.StatusUnauthorized
+		} else {
+			data, err = h.database.GetUserInfo(user.AccessLevel, username)
+			if err != nil {
+				h.logger.Error("get user info", err)
+				status = http.StatusNoContent
+			}
 		}
 	case UsersList:
 		data, err = h.auth.GetUsers(user.Role)
