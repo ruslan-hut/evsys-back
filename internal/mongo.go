@@ -215,7 +215,7 @@ func (m *MongoDB) GetUserInfo(level int, username string) (*models.UserInfo, err
 			"from":         collectionPaymentMethods,
 			"localField":   "username",
 			"foreignField": "user_name",
-			"as":           "PaymentMethods",
+			"as":           "payment_methods",
 		}}},
 		{{"$lookup", bson.M{
 			"from":         collectionUserTags,
