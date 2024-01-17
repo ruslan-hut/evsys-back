@@ -232,7 +232,7 @@ func (m *MongoDB) GetUserTags(userId string) ([]models.UserTag, error) {
 	defer m.disconnect(connection)
 
 	collection := connection.Database(m.database).Collection(collectionUserTags)
-	filter := bson.D{{"user_id", userId}}
+	filter := bson.M{"$and": []bson.M{{"user_id": userId}, {"is_enabled": true}}}
 	var userTags []models.UserTag
 	cursor, err := collection.Find(m.ctx, filter)
 	if err != nil {
@@ -274,6 +274,24 @@ func (m *MongoDB) AddUserTag(userTag *models.UserTag) error {
 	collection := connection.Database(m.database).Collection(collectionUserTags)
 	_, err = collection.InsertOne(m.ctx, userTag)
 	return err
+}
+
+// CheckUserTag check unique of idTag
+func (m *MongoDB) CheckUserTag(idTag string) error {
+	connection, err := m.connect()
+	if err != nil {
+		return err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionUserTags)
+	filter := bson.D{{"id_tag", idTag}}
+	var userTag models.UserTag
+	err = collection.FindOne(m.ctx, filter).Decode(&userTag)
+	if err == nil {
+		return fmt.Errorf("user tag %s already exists", userTag.IdTag)
+	}
+	return nil
 }
 
 func (m *MongoDB) UpdateTagLastSeen(userTag *models.UserTag) error {

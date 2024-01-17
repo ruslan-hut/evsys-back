@@ -20,6 +20,7 @@ type Database interface {
 
 	GetUserTags(userId string) ([]models.UserTag, error)
 	AddUserTag(userTag *models.UserTag) error
+	CheckUserTag(idTag string) error
 	UpdateTagLastSeen(userTag *models.UserTag) error
 
 	GetChargePoints(level int, searchTerm string) ([]*models.ChargePoint, error)
