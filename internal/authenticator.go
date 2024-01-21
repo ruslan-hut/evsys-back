@@ -71,29 +71,16 @@ func (a *Authenticator) AuthenticateByToken(token string) (*models.User, error) 
 		if err != nil {
 			return nil, fmt.Errorf("firebase token check: %s", err)
 		}
-		if userId != "" {
-			user, _ = a.database.GetUserById(userId)
-			if user == nil {
-				username := fmt.Sprintf("user_%s", a.generateKey(5))
-				user = &models.User{
-					Username:       username,
-					Name:           "Firebase user",
-					UserId:         userId,
-					DateRegistered: time.Now(),
-				}
-				err = a.database.AddUser(user)
-				if err != nil {
-					return nil, fmt.Errorf("adding firebase user: %s", err)
-				}
-			}
-			_ = a.updateLastSeen(user)
-			return user, nil
-		}
+		return a.GetUserById(userId)
 	}
 	return nil, fmt.Errorf("token check failed")
 }
 
 func (a *Authenticator) GetUserById(userId string) (*models.User, error) {
+	if userId == "" {
+		return nil, fmt.Errorf("empty user id")
+	}
+
 	user, _ := a.database.GetUserById(userId)
 
 	if user == nil {
@@ -183,7 +170,8 @@ func (a *Authenticator) GetUserTag(user *models.User) (string, error) {
 			Username:       user.Username,
 			IdTag:          newIdTag,
 			IsEnabled:      true,
-			Note:           "api: added by request",
+			Source:         "AP",
+			Note:           "",
 			DateRegistered: time.Now(),
 		}
 
