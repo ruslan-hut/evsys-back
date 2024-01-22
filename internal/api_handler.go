@@ -108,7 +108,11 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			h.logger.Error("decoding user", err)
 			status = http.StatusUnsupportedMediaType
 		} else {
-			data, err = h.auth.AuthenticateUser(userData.Username, userData.Password)
+			if userData.Username == "" {
+				data, err = h.auth.AuthenticateByToken(userData.Password)
+			} else {
+				data, err = h.auth.AuthenticateUser(userData.Username, userData.Password)
+			}
 			if err != nil {
 				h.logger.Error("user authentication", err)
 				status = http.StatusUnauthorized
