@@ -20,6 +20,7 @@ import (
 const (
 	apiVersion            = "v1"
 	readLog               = "log/:log"
+	getConfig             = "config/:name"
 	userAuthenticate      = "users/authenticate"
 	userRegister          = "users/register"
 	userInfo              = "users/info/:name"
@@ -107,6 +108,7 @@ func (s *Server) SetLogger(logger services.LogHandler) {
 
 func (s *Server) Register(router *httprouter.Router) {
 	router.GET(route(readLog), s.readLog)
+	router.GET(route(getConfig), s.getConfig)
 	router.POST(route(userAuthenticate), s.authenticateUser)
 	router.POST(route(userRegister), s.registerUser)
 	router.GET(route(userInfo), s.userInfo)
@@ -172,6 +174,16 @@ func (s *Server) transactionBill(w http.ResponseWriter, r *http.Request, _ httpr
 		CallType: TransactionBill,
 		Remote:   r.RemoteAddr,
 		Token:    s.getToken(r),
+	}
+	s.handleApiRequest(w, ac)
+}
+
+func (s *Server) getConfig(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	ac := &Call{
+		CallType: GetConfig,
+		Remote:   r.RemoteAddr,
+		Token:    s.getToken(r),
+		Payload:  []byte(p.ByName("name")),
 	}
 	s.handleApiRequest(w, ac)
 }

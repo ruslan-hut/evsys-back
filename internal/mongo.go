@@ -20,6 +20,7 @@ const (
 	collectionSysLog         = "sys_log"
 	collectionBackLog        = "back_log"
 	collectionPaymentLog     = "payment_log"
+	collectionConfig         = "config"
 	collectionUsers          = "users"
 	collectionUserTags       = "user_tags"
 	collectionChargePoints   = "charge_points"
@@ -30,7 +31,7 @@ const (
 	collectionPayment        = "payment"
 	collectionPaymentMethods = "payment_methods"
 	collectionPaymentOrders  = "payment_orders"
-	collectionPaymenPlans    = "payment_plans"
+	collectionPaymentPlans   = "payment_plans"
 )
 
 type MongoDB struct {
@@ -172,6 +173,23 @@ func (m *MongoDB) ReadLogAfter(timeStart time.Time) ([]*services.FeatureMessage,
 	return result, nil
 }
 
+func (m *MongoDB) GetConfig(name string) (interface{}, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	collection := connection.Database(m.database).Collection(collectionConfig)
+	filter := bson.D{{"name", name}}
+	var configData interface{}
+	err = collection.FindOne(m.ctx, filter).Decode(&configData)
+	if err != nil {
+		return nil, err
+	}
+	return configData, nil
+}
+
 func (m *MongoDB) GetUser(username string) (*models.User, error) {
 	connection, err := m.connect()
 	if err != nil {
@@ -206,7 +224,7 @@ func (m *MongoDB) GetUserInfo(_ int, username string) (*models.UserInfo, error) 
 			//}},
 		},
 		{{"$lookup", bson.M{
-			"from":         collectionPaymenPlans,
+			"from":         collectionPaymentPlans,
 			"localField":   "payment_plan",
 			"foreignField": "plan_id",
 			"as":           "payment_plans",

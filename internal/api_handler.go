@@ -29,6 +29,7 @@ const (
 	TransactionBill      CallType = "TransactionBill"
 	GenerateInvites      CallType = "GenerateInvites"
 	PaymentMethods       CallType = "PaymentMethods"
+	GetConfig            CallType = "GetConfig"
 	//CentralSystemLog     LogType  = "sys"
 	//BackendLog           LogType  = "back"
 	//PaymentLog           LogType  = "pay"
@@ -86,7 +87,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 	var err error
 	status := http.StatusOK
 
-	if ac.CallType != AuthenticateUser && ac.CallType != RegisterUser {
+	if ac.CallType != AuthenticateUser && ac.CallType != RegisterUser && ac.CallType != GetConfig {
 		user, err = h.auth.AuthenticateByToken(ac.Token)
 		if err != nil {
 			h.logger.Error("token check failed", err)
@@ -100,6 +101,12 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		data, err = h.database.ReadLog(string(ac.Payload))
 		if err != nil {
 			h.logger.Error("read log", err)
+			status = http.StatusNoContent
+		}
+	case GetConfig:
+		data, err = h.database.GetConfig(string(ac.Payload))
+		if err != nil {
+			h.logger.Error("get config", err)
 			status = http.StatusNoContent
 		}
 	case AuthenticateUser:

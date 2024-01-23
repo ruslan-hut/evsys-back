@@ -9,6 +9,7 @@ type Database interface {
 	WriteLogMessage(data Data) error
 	ReadLog(logName string) (interface{}, error)
 	ReadLogAfter(timeStart time.Time) ([]*FeatureMessage, error)
+	GetConfig(name string) (interface{}, error)
 
 	GetUser(username string) (*models.User, error)
 	GetUserInfo(level int, userId string) (*models.UserInfo, error)
