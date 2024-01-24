@@ -71,7 +71,13 @@ func (a *Authenticator) AuthenticateByToken(token string) (*models.User, error) 
 		if err != nil {
 			return nil, fmt.Errorf("firebase token check: %s", err)
 		}
-		return a.GetUserById(userId)
+		user, err = a.GetUserById(userId)
+		if err != nil {
+			return nil, fmt.Errorf("getting user by id: %s", err)
+		}
+		// put token to user data, frontend uses it for further requests
+		user.Token = token
+		return user, nil
 	}
 	return nil, fmt.Errorf("token check failed")
 }
