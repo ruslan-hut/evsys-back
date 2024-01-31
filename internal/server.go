@@ -574,6 +574,7 @@ func (p *Pool) Start() {
 
 type Client struct {
 	ws             *websocket.Conn
+	user           *models.User
 	auth           services.Auth
 	statusReader   services.StatusReader // user state holder and transaction state reader
 	send           chan []byte           // served by writePump, sending messages to client
@@ -641,19 +642,21 @@ func (c *Client) readPump() {
 			continue
 		}
 
-		user, err := c.auth.AuthenticateByToken(userRequest.Token)
-		if err != nil {
-			c.sendResponse(models.Error, fmt.Sprintf("check token: %v", err))
-			continue
+		if c.user == nil {
+			c.user, err = c.auth.AuthenticateByToken(userRequest.Token)
+			if err != nil {
+				c.sendResponse(models.Error, fmt.Sprintf("check token: %v", err))
+				continue
+			}
+
+			c.id, err = c.auth.GetUserTag(c.user)
+			if err != nil {
+				c.sendResponse(models.Error, fmt.Sprintf("get user tag: %v", err))
+				continue
+			}
 		}
 
-		tag, err := c.auth.GetUserTag(user)
-		if err != nil {
-			c.sendResponse(models.Error, fmt.Sprintf("get user tag: %v", err))
-			continue
-		}
-		c.id = tag
-		userRequest.Token = tag
+		userRequest.Token = c.id
 
 		err = c.requestHandler(&userRequest)
 		if err != nil {
@@ -663,29 +666,29 @@ func (c *Client) readPump() {
 
 		switch userRequest.Command {
 		case models.StartTransaction:
-			timeStart, err := c.statusReader.SaveStatus(tag, models.StageStart, -1)
+			timeStart, err := c.statusReader.SaveStatus(c.id, models.StageStart, -1)
 			if err == nil {
 				go c.listenForTransactionStart(timeStart)
 			}
 		case models.StopTransaction:
-			timeStart, err := c.statusReader.SaveStatus(tag, models.StageStop, userRequest.TransactionId)
+			timeStart, err := c.statusReader.SaveStatus(c.id, models.StageStop, userRequest.TransactionId)
 			if err == nil {
 				go c.listenForTransactionStop(timeStart, userRequest.TransactionId)
 			}
 		case models.CheckStatus:
-			userState, ok := c.statusReader.GetStatus(tag)
+			userState, ok := c.statusReader.GetStatus(c.id)
 			if ok {
 				c.restoreUserState(userState)
 			}
 		case models.ListenTransaction:
-			_, err := c.statusReader.SaveStatus(tag, models.StageListen, userRequest.TransactionId)
+			_, err := c.statusReader.SaveStatus(c.id, models.StageListen, userRequest.TransactionId)
 			if err != nil {
 				c.logger.Error("read pump: save status Listen", err)
 			}
 			_, ok := c.listeners[userRequest.TransactionId]
 			if !ok {
 				c.mux.Lock()
-				c.listeners[userRequest.TransactionId] = tag
+				c.listeners[userRequest.TransactionId] = c.id
 				c.mux.Unlock()
 				go c.listenForTransactionState(userRequest.TransactionId)
 			}
@@ -697,6 +700,8 @@ func (c *Client) readPump() {
 			c.setSubscription(LogEvent)
 		case models.ListenChargePoints:
 			c.setSubscription(ChargePointEvent)
+		case models.PingConnection:
+			c.sendResponse(models.Success, fmt.Sprintf("ping %s", utility.Secret(c.id)))
 		default:
 			c.sendResponse(models.Success, "request handled")
 		}

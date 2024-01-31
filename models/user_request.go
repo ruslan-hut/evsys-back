@@ -10,6 +10,7 @@ const (
 	StopListenTransaction CommandName = "StopListenTransaction"
 	ListenChargePoints    CommandName = "ListenChargePoints"
 	ListenLog             CommandName = "ListenLog"
+	PingConnection        CommandName = "PingConnection"
 )
 
 type UserRequest struct {
