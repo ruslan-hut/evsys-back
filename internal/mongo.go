@@ -880,6 +880,27 @@ func (m *MongoDB) GetLastMeterValue(transactionId int) (*models.TransactionMeter
 	return &value, nil
 }
 
+func (m *MongoDB) GetMeterValues(transactionId int) ([]models.TransactionMeter, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	filter := bson.D{{"transaction_id", transactionId}}
+	collection := connection.Database(m.database).Collection(collectionMeterValues)
+	opts := options.Find().SetSort(bson.D{{"timestamp", 1}})
+	cursor, err := collection.Find(m.ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	var meterValues []models.TransactionMeter
+	if err = cursor.All(m.ctx, &meterValues); err != nil {
+		return nil, err
+	}
+	return meterValues, nil
+}
+
 func (m *MongoDB) AddInviteCode(invite *models.Invite) error {
 	connection, err := m.connect()
 	if err != nil {
