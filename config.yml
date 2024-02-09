@@ -1,6 +1,7 @@
 ---
 
 is_debug: true
+time_zone: America/New_York
 log_records: 1000
 firebase_key: c:/cert/firebase.json
 listen:
@@ -14,12 +15,6 @@ central_system:
   enabled: false
   url: https://example.com/api
   token: 1234567890
-pusher:
-  enabled: false
-  app_id:
-  key:
-  secret:
-  cluster: eu
 mongo:
   enabled: false
   host: 127.0.0.1

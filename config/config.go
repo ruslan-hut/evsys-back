@@ -8,6 +8,7 @@ import (
 
 type Config struct {
 	IsDebug     bool   `yaml:"is_debug" env-default:"false"`
+	TimeZone    string `yaml:"time_zone" env-default:"UTC"`
 	LogRecords  int64  `yaml:"log_records" env-default:"0"`
 	FirebaseKey string `yaml:"firebase_key" env-default:""`
 	Listen      struct {
@@ -23,13 +24,6 @@ type Config struct {
 		Url     string `yaml:"url" env-default:""`
 		Token   string `yaml:"token" env-default:""`
 	} `yaml:"central_system"`
-	Pusher struct {
-		Enabled bool   `yaml:"enabled" env-default:"false"`
-		AppID   string `yaml:"app_id" env-default:""`
-		Key     string `yaml:"key" env-default:""`
-		Secret  string `yaml:"secret" env-default:""`
-		Cluster string `yaml:"cluster" env-default:"eu"`
-	} `yaml:"pusher"`
 	Mongo struct {
 		Enabled  bool   `yaml:"enabled" env-default:"false"`
 		Host     string `yaml:"host" env-default:"127.0.0.1"`

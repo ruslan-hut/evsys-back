@@ -1,0 +1,24 @@
+---
+
+is_debug: false
+time_zone: ${TIME_ZONE}
+log_records: 5000
+firebase_key: ${FIREBASE_KEY}
+listen:
+  type: port
+  bind_ip: 0.0.0.0
+  port: ${PORT}
+  tls_enabled: ${TLS_ENABLED}
+  cert_file: ${CERT_FILE}
+  key_file: ${KEY_FILE}
+central_system:
+  enabled: true
+  url: ${CENTRAL_SYSTEM_URL}
+  token: ${CENTRAL_SYSTEM_TOKEN}
+mongo:
+  enabled: true
+  host: ${MONGO_HOST}
+  port: ${MONGO_PORT}
+  user: ${MONGO_USER}
+  password: ${MONGO_PASS}
+  database: ${MONGO_DB}
