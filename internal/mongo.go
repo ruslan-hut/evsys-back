@@ -607,15 +607,31 @@ func (m *MongoDB) getTransactionState(level int, transaction *models.Transaction
 		return nil, fmt.Errorf("get connector: %v", err)
 	}
 
-	consumed := 0
-	price := 0
-	meterValue, _ := m.GetLastMeterValue(transaction.TransactionId)
-	if meterValue != nil {
-		consumed = meterValue.Value - transaction.MeterStart
-		price = meterValue.Price
-	} else {
-		consumed = transaction.MeterStop - transaction.MeterStart
-		price = transaction.PaymentAmount
+	//consumed := 0
+	//price := 0
+	//meterValue, _ := m.GetLastMeterValue(transaction.TransactionId)
+	//if meterValue != nil {
+	//	consumed = meterValue.Value - transaction.MeterStart
+	//	price = meterValue.Price
+	//} else {
+	//	consumed = transaction.MeterStop - transaction.MeterStart
+	//	price = transaction.PaymentAmount
+	//}
+
+	consumed := transaction.MeterStop - transaction.MeterStart
+	price := transaction.PaymentAmount
+
+	meterValues, err := m.GetMeterValues(transaction.TransactionId)
+	if meterValues != nil {
+		chargeState.MeterValues = meterValues
+		// read last value
+		if len(meterValues) > 0 {
+			mv := meterValues[len(meterValues)-1]
+			if mv.Value > transaction.MeterStart {
+				consumed = mv.Value - transaction.MeterStart
+			}
+			price = mv.Price
+		}
 	}
 
 	duration := int(time.Since(transaction.TimeStart).Seconds())
@@ -638,6 +654,7 @@ func (m *MongoDB) getTransactionState(level int, transaction *models.Transaction
 		Status:             connector.Status,
 		IsCharging:         transaction.IsFinished == false,
 		CanStop:            false,
+		MeterValues:        meterValues,
 	}
 
 	return &chargeState, nil
@@ -745,7 +762,7 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]*models.ChargeState, e
 	for _, transaction := range transactions {
 		chargeState, err := m.getTransactionState(user.AccessLevel, &transaction)
 		if err != nil {
-			return nil, err
+			continue
 		}
 		chargeState.CanStop = true
 		chargeStates = append(chargeStates, chargeState)
