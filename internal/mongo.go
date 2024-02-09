@@ -607,17 +607,6 @@ func (m *MongoDB) getTransactionState(level int, transaction *models.Transaction
 		return nil, fmt.Errorf("get connector: %v", err)
 	}
 
-	//consumed := 0
-	//price := 0
-	//meterValue, _ := m.GetLastMeterValue(transaction.TransactionId)
-	//if meterValue != nil {
-	//	consumed = meterValue.Value - transaction.MeterStart
-	//	price = meterValue.Price
-	//} else {
-	//	consumed = transaction.MeterStop - transaction.MeterStart
-	//	price = transaction.PaymentAmount
-	//}
-
 	consumed := transaction.MeterStop - transaction.MeterStart
 	price := transaction.PaymentAmount
 
@@ -632,6 +621,8 @@ func (m *MongoDB) getTransactionState(level int, transaction *models.Transaction
 			}
 			price = mv.Price
 		}
+	} else {
+		meterValues = []*models.TransactionMeter{}
 	}
 
 	duration := int(time.Since(transaction.TimeStart).Seconds())
@@ -897,7 +888,7 @@ func (m *MongoDB) GetLastMeterValue(transactionId int) (*models.TransactionMeter
 	return &value, nil
 }
 
-func (m *MongoDB) GetMeterValues(transactionId int) ([]models.TransactionMeter, error) {
+func (m *MongoDB) GetMeterValues(transactionId int) ([]*models.TransactionMeter, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -911,7 +902,7 @@ func (m *MongoDB) GetMeterValues(transactionId int) ([]models.TransactionMeter, 
 	if err != nil {
 		return nil, err
 	}
-	var meterValues []models.TransactionMeter
+	var meterValues []*models.TransactionMeter
 	if err = cursor.All(m.ctx, &meterValues); err != nil {
 		return nil, err
 	}
