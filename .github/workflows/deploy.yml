@@ -1,0 +1,83 @@
+name: Deploy to wattbrews.me
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    name: Build and Deploy
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare configuration file
+        run: |
+          sed -i 's|${TIME_ZONE}|'"$TIME_ZONE"'|g' back.yml
+          sed -i 's|${FIREBASE_KEY}|'"$FIREBASE_KEY"'|g' back.yml
+          sed -i 's|${PORT}|'"$PORT"'|g' back.yml
+          sed -i 's|${TLS_ENABLED}|'"$TLS_ENABLED"'|g' back.yml
+          sed -i 's|${CERT_FILE}|'"$CERT_FILE"'|g' back.yml
+          sed -i 's|${KEY_FILE}|'"$KEY_FILE"'|g' back.yml
+          sed -i 's|${CENTRAL_SYSTEM_URL}|'"$CENTRAL_SYSTEM_URL"'|g' back.yml
+          sed -i 's|${CENTRAL_SYSTEM_TOKEN}|'"$CENTRAL_SYSTEM_TOKEN"'|g' back.yml
+          sed -i 's|${MONGO_HOST}|'"$MONGO_HOST"'|g' back.yml
+          sed -i 's|${MONGO_PORT}|'"$MONGO_PORT"'|g' back.yml
+          sed -i 's|${MONGO_USER}|'"$MONGO_USER"'|g' back.yml
+          sed -i 's|${MONGO_PASS}|'"$MONGO_PASS"'|g' back.yml
+          sed -i 's|${MONGO_DB}|'"$MONGO_DB"'|g' back.yml
+
+        env:
+          TIME_ZONE: ${{ vars.TIME_ZONE }}
+          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
+          PORT: ${{ vars.PORT }}
+          TLS_ENABLED: ${{ vars.TLS_ENABLED }}
+          CERT_FILE: ${{ vars.CERT_FILE }}
+          KEY_FILE: ${{ vars.KEY_FILE }}
+          CENTRAL_SYSTEM_URL: ${{ secrets.CENTRAL_SYSTEM_URL }}
+          CENTRAL_SYSTEM_TOKEN: ${{ secrets.CENTRAL_SYSTEM_TOKEN }}
+          MONGO_HOST: ${{ vars.MONGO_HOST }}
+          MONGO_PORT: ${{ vars.MONGO_PORT }}
+          MONGO_USER: ${{ secrets.MONGO_USER }}
+          MONGO_PASS: ${{ secrets.MONGO_PASS }}
+          MONGO_DB: ${{ vars.MONGO_DB }}
+
+      - name: Copy Configuration to Server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "back.yml"
+          target: "/etc/conf/"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build Go application
+        run: |
+          go build -v -o evsys-back
+
+      - name: Deploy to server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          source: "evsys-back"
+          target: "/usr/local/bin/"
+
+      - name: Restart Application
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            systemctl restart evsys-back.service 
