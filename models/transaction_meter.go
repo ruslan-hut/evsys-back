@@ -7,6 +7,7 @@ type TransactionMeter struct {
 	Value           int       `json:"value" bson:"value"`
 	Price           int       `json:"price" bson:"price"`
 	Time            time.Time `json:"time" bson:"time"`
+	Timestamp       int64     `json:"timestamp" bson:"timestamp"` // value not present in database, but used for clients
 	Minute          int64     `json:"minute" bson:"minute"`
 	Unit            string    `json:"unit" bson:"unit"`
 	Measurand       string    `json:"measurand" bson:"measurand"`

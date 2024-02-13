@@ -80,11 +80,11 @@ func (sr *StatusReader) ClearStatus(userId string) {
 	delete(sr.status, userId)
 }
 
-func (sr *StatusReader) GetLastMeterValue(transactionId int) (*models.TransactionMeter, error) {
+func (sr *StatusReader) GetLastMeterValues(transactionId int, from time.Time) ([]*models.TransactionMeter, error) {
 	if sr.database == nil {
 		return nil, fmt.Errorf("database is not set for status reader")
 	}
-	meter, err := sr.database.GetLastMeterValue(transactionId)
+	meter, err := sr.database.GetMeterValues(transactionId, from)
 	if err != nil {
 		return nil, err
 	}

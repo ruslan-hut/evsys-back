@@ -38,7 +38,7 @@ type Database interface {
 	UpdateTransaction(transaction *models.Transaction) error
 
 	GetLastMeterValue(transactionId int) (*models.TransactionMeter, error)
-	GetMeterValues(transactionId int) ([]*models.TransactionMeter, error)
+	GetMeterValues(transactionId int, from time.Time) ([]*models.TransactionMeter, error)
 
 	AddInviteCode(invite *models.Invite) error
 	CheckInviteCode(code string) (bool, error)

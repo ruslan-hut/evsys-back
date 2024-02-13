@@ -610,7 +610,7 @@ func (m *MongoDB) getTransactionState(level int, transaction *models.Transaction
 	consumed := transaction.MeterStop - transaction.MeterStart
 	price := transaction.PaymentAmount
 
-	meterValues, err := m.GetMeterValues(transaction.TransactionId)
+	meterValues, err := m.GetMeterValues(transaction.TransactionId, transaction.TimeStart)
 	if meterValues != nil {
 		chargeState.MeterValues = meterValues
 		// read last value
@@ -888,16 +888,16 @@ func (m *MongoDB) GetLastMeterValue(transactionId int) (*models.TransactionMeter
 	return &value, nil
 }
 
-func (m *MongoDB) GetMeterValues(transactionId int) ([]*models.TransactionMeter, error) {
+func (m *MongoDB) GetMeterValues(transactionId int, from time.Time) ([]*models.TransactionMeter, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
 	}
 	defer m.disconnect(connection)
 
-	filter := bson.D{{"transaction_id", transactionId}}
+	filter := bson.D{{"transaction_id", transactionId}, {"time", bson.D{{"$gte", from}}}}
 	collection := connection.Database(m.database).Collection(collectionMeterValues)
-	opts := options.Find().SetSort(bson.D{{"timestamp", 1}})
+	opts := options.Find().SetSort(bson.D{{"time", 1}})
 	cursor, err := collection.Find(m.ctx, filter, opts)
 	if err != nil {
 		return nil, err

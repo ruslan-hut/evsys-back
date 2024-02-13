@@ -847,6 +847,7 @@ func (c *Client) listenForTransactionState(transactionId int) {
 		return
 	}
 
+	lastMeterValue := time.Now()
 	errorCounter := 0
 	waitStep := 5
 	ticker := time.NewTicker(time.Duration(waitStep) * time.Second)
@@ -865,7 +866,7 @@ func (c *Client) listenForTransactionState(transactionId int) {
 			if !ok {
 				return
 			}
-			value, err := c.statusReader.GetLastMeterValue(transactionId)
+			values, err := c.statusReader.GetLastMeterValues(transactionId, lastMeterValue)
 			if err != nil {
 				errorCounter++
 				if errorCounter > 10 {
@@ -874,18 +875,24 @@ func (c *Client) listenForTransactionState(transactionId int) {
 				continue
 			}
 			errorCounter = 0
-			c.wsResponse(&models.WsResponse{
-				Status:          models.Value,
-				Stage:           models.Info,
-				Info:            value.Unit,
-				Progress:        value.Value, // for compatibility with old clients
-				Power:           value.Value,
-				Price:           value.Price,
-				Minute:          value.Minute,
-				Id:              transactionId,
-				ConnectorId:     value.ConnectorId,
-				ConnectorStatus: value.ConnectorStatus,
-			})
+			for _, value := range values {
+				value.Timestamp = value.Time.Unix()
+				c.wsResponse(&models.WsResponse{
+					Status:          models.Value,
+					Stage:           models.Info,
+					Info:            value.Unit,
+					Progress:        value.Value, // for compatibility with old clients
+					Power:           value.Value,
+					Price:           value.Price,
+					Minute:          value.Minute,
+					Id:              transactionId,
+					ConnectorId:     value.ConnectorId,
+					ConnectorStatus: value.ConnectorStatus,
+					MeterValue:      value,
+				})
+				lastMeterValue = value.Time
+				time.Sleep(1 * time.Second)
+			}
 		}
 	}
 }
