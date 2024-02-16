@@ -610,17 +610,18 @@ func (m *MongoDB) getTransactionState(level int, transaction *models.Transaction
 	consumed := transaction.MeterStop - transaction.MeterStart
 	price := transaction.PaymentAmount
 
-	meterValues, err := m.GetMeterValues(transaction.TransactionId, transaction.TimeStart)
+	lastMeter, _ := m.GetLastMeterValue(transaction.TransactionId)
+	if lastMeter != nil {
+		if lastMeter.Value > transaction.MeterStart {
+			consumed = lastMeter.Value - transaction.MeterStart
+		}
+		price = lastMeter.Price
+	}
+
+	hourAgo := lastMeter.Time.Add(-time.Hour) // limit meter values with 1 hour
+	meterValues, err := m.GetMeterValues(transaction.TransactionId, hourAgo)
 	if meterValues != nil {
 		chargeState.MeterValues = meterValues
-		// read last value
-		if len(meterValues) > 0 {
-			mv := meterValues[len(meterValues)-1]
-			if mv.Value > transaction.MeterStart {
-				consumed = mv.Value - transaction.MeterStart
-			}
-			price = mv.Price
-		}
 	} else {
 		meterValues = []*models.TransactionMeter{}
 	}
