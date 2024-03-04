@@ -616,15 +616,14 @@ func (m *MongoDB) getTransactionState(level int, transaction *models.Transaction
 			consumed = lastMeter.Value - transaction.MeterStart
 		}
 		price = lastMeter.Price
+
 	}
 
-	hourAgo := lastMeter.Time.Add(-time.Hour) // limit meter values with 1 hour
-	meterValues, err := m.GetMeterValues(transaction.TransactionId, hourAgo)
-	if meterValues != nil {
-		chargeState.MeterValues = meterValues
-	} else {
-		meterValues = []*models.TransactionMeter{}
+	hourAgo := time.Now().Add(-time.Hour) // limit meter values with 1 hour
+	if lastMeter != nil {
+		hourAgo = lastMeter.Time.Add(-time.Hour)
 	}
+	meterValues, err := m.GetMeterValues(transaction.TransactionId, hourAgo)
 
 	duration := int(time.Since(transaction.TimeStart).Seconds())
 	if transaction.IsFinished {
