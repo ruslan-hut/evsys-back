@@ -81,19 +81,25 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		return nil, http.StatusInternalServerError
 	}
 
-	var user *models.User
 	userId := ""
+	username := ""
+	userRole := ""
+	accessLevel := 0
+
 	var data interface{}
 	var err error
 	status := http.StatusOK
 
 	if ac.CallType != AuthenticateUser && ac.CallType != RegisterUser && ac.CallType != GetConfig {
-		user, err = h.auth.AuthenticateByToken(ac.Token)
-		if err != nil {
-			h.logger.Error("token check failed", err)
+		user, e := h.auth.AuthenticateByToken(ac.Token)
+		if e != nil {
+			h.logger.Error("token check failed", e)
 			return nil, http.StatusUnauthorized
 		}
+		accessLevel = user.AccessLevel
 		userId = user.UserId
+		username = user.Username
+		userRole = user.Role
 	}
 
 	switch ac.CallType {
@@ -141,22 +147,22 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			}
 		}
 	case UserInfo:
-		username := string(ac.Payload)
-		if user.AccessLevel < 10 || username == "0000" { // user can get info about himself
-			data, err = h.database.GetUserInfo(user.AccessLevel, user.Username)
+		requestedUserName := string(ac.Payload)
+		if accessLevel < 10 || requestedUserName == "0000" { // user can get info about himself
+			data, err = h.database.GetUserInfo(accessLevel, username)
 			if err != nil {
 				h.logger.Error("get user info", err)
 				status = http.StatusNoContent
 			}
 		} else {
-			data, err = h.database.GetUserInfo(user.AccessLevel, username)
+			data, err = h.database.GetUserInfo(accessLevel, requestedUserName)
 			if err != nil {
 				h.logger.Error("get user info", err)
 				status = http.StatusNoContent
 			}
 		}
 	case UsersList:
-		data, err = h.auth.GetUsers(user.Role)
+		data, err = h.auth.GetUsers(userRole)
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("get users: %s", err))
 			status = http.StatusNoContent
@@ -170,14 +176,14 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		}
 	case GetChargePoints:
 		search := string(ac.Payload)
-		data, err = h.database.GetChargePoints(user.AccessLevel, search)
+		data, err = h.database.GetChargePoints(accessLevel, search)
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("no data by search: %s", search))
 			status = http.StatusNoContent
 		}
 	case ChargePointInfo:
 		id := string(ac.Payload)
-		data, err = h.database.GetChargePoint(user.AccessLevel, id)
+		data, err = h.database.GetChargePoint(accessLevel, id)
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("not found charge point: %s", id))
 			status = http.StatusNoContent
@@ -192,13 +198,13 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			if chp.AccessLevel > MaxAccessLevel {
 				chp.AccessLevel = MaxAccessLevel
 			}
-			err = h.database.UpdateChargePoint(user.AccessLevel, chp)
+			err = h.database.UpdateChargePoint(accessLevel, chp)
 			if err != nil {
 				h.logger.Error("update charge point", err)
 				status = http.StatusInternalServerError
 			}
 		}
-		data, err = h.database.GetChargePoint(user.AccessLevel, chp.Id)
+		data, err = h.database.GetChargePoint(accessLevel, chp.Id)
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("not found charge point: %s", chp.Id))
 			status = http.StatusNoContent
@@ -206,20 +212,20 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 	case PaymentMethods:
 		data, err = h.database.GetPaymentMethods(userId)
 		if err != nil {
-			h.logger.Warn(fmt.Sprintf("no payment methods for %s", user.Username))
+			h.logger.Warn(fmt.Sprintf("no payment methods for %s", username))
 			status = http.StatusNoContent
 			data = []models.PaymentMethod{}
 		}
 	case ActiveTransactions:
 		data, err = h.database.GetActiveTransactions(userId)
 		if err != nil {
-			h.logger.Debug(fmt.Sprintf("active transactions for %s: %s", user.Username, err))
+			h.logger.Debug(fmt.Sprintf("active transactions for %s: %s", username, err))
 			status = http.StatusNoContent
 		}
 	case TransactionList:
 		data, err = h.database.GetTransactions(userId, string(ac.Payload))
 		if err != nil {
-			h.logger.Warn(fmt.Sprintf("transactions data for %s: %s", user.Username, err))
+			h.logger.Warn(fmt.Sprintf("transactions data for %s: %s", username, err))
 			status = http.StatusNoContent
 		}
 	case TransactionBill:
@@ -239,7 +245,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			h.logger.Error("decoding transaction id", err)
 			status = http.StatusBadRequest
 		} else {
-			data, err = h.database.GetTransactionState(user.AccessLevel, id)
+			data, err = h.database.GetTransactionState(accessLevel, id)
 			if err != nil {
 				h.logger.Error("get transaction", err)
 				status = http.StatusInternalServerError

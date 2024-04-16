@@ -607,8 +607,12 @@ func (m *MongoDB) getTransactionState(level int, transaction *models.Transaction
 		return nil, fmt.Errorf("get connector: %v", err)
 	}
 
-	consumed := transaction.MeterStop - transaction.MeterStart
+	consumed := 0
+	if transaction.MeterStop > transaction.MeterStart {
+		consumed = transaction.MeterStop - transaction.MeterStart
+	}
 	price := transaction.PaymentAmount
+	powerRate := 0
 
 	lastMeter, _ := m.GetLastMeterValue(transaction.TransactionId)
 	if lastMeter != nil {
@@ -616,7 +620,7 @@ func (m *MongoDB) getTransactionState(level int, transaction *models.Transaction
 			consumed = lastMeter.Value - transaction.MeterStart
 		}
 		price = lastMeter.Price
-
+		powerRate = lastMeter.PowerRate
 	}
 
 	hourAgo := time.Now().Add(-time.Hour) // limit meter values with 1 hour
@@ -624,6 +628,10 @@ func (m *MongoDB) getTransactionState(level int, transaction *models.Transaction
 		hourAgo = lastMeter.Time.Add(-time.Hour)
 	}
 	meterValues, err := m.GetMeterValues(transaction.TransactionId, hourAgo)
+
+	if len(meterValues) == 0 && lastMeter != nil {
+		meterValues = append(meterValues, lastMeter)
+	}
 
 	duration := int(time.Since(transaction.TimeStart).Seconds())
 	if transaction.IsFinished {
@@ -641,6 +649,7 @@ func (m *MongoDB) getTransactionState(level int, transaction *models.Transaction
 		Duration:           duration,
 		MeterStart:         transaction.MeterStart,
 		Consumed:           consumed,
+		PowerRate:          powerRate,
 		Price:              price,
 		Status:             connector.Status,
 		IsCharging:         transaction.IsFinished == false,

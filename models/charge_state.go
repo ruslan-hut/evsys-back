@@ -13,6 +13,7 @@ type ChargeState struct {
 	MeterStart         int                 `json:"meter_start" bson:"meter_start"`
 	Duration           int                 `json:"duration" bson:"duration"`
 	Consumed           int                 `json:"consumed" bson:"consumed"`
+	PowerRate          int                 `json:"power_rate" bson:"power_rate"`
 	Price              int                 `json:"price" bson:"price"`
 	Status             string              `json:"status" bson:"status"`
 	IsCharging         bool                `json:"is_charging" bson:"is_charging"`
