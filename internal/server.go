@@ -34,8 +34,10 @@ const (
 	transactionList       = "transactions/list"
 	transactionListPeriod = "transactions/list/:period"
 	transactionBill       = "transactions/bill"
-	centralSystemCommand  = "csc"
-	wsEndpoint            = "/ws"
+	locationsList         = "locations"
+
+	centralSystemCommand = "csc"
+	wsEndpoint           = "/ws"
 
 	paymentSuccess = "payment/ok"
 	paymentFail    = "payment/ko"
@@ -124,6 +126,7 @@ func (s *Server) Register(router *httprouter.Router) {
 	router.GET(route(transactionList), s.transactionList)
 	router.GET(route(transactionListPeriod), s.transactionList)
 	router.GET(route(transactionBill), s.transactionBill)
+	router.GET(route(locationsList), s.locations)
 	router.GET(route(paymentSuccess), s.paymentSuccess)
 	router.GET(route(paymentFail), s.paymentFail)
 	router.POST(route(paymentNotify), s.paymentNotify)
@@ -172,6 +175,15 @@ func (s *Server) transactionList(w http.ResponseWriter, r *http.Request, ps http
 func (s *Server) transactionBill(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ac := &Call{
 		CallType: TransactionBill,
+		Remote:   r.RemoteAddr,
+		Token:    s.getToken(r),
+	}
+	s.handleApiRequest(w, ac)
+}
+
+func (s *Server) locations(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	ac := &Call{
+		CallType: Locations,
 		Remote:   r.RemoteAddr,
 		Token:    s.getToken(r),
 	}

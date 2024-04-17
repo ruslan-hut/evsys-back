@@ -11,8 +11,6 @@ import (
 
 type CallType string
 
-//type LogType string
-
 const (
 	ReadLog              CallType = "ReadLog"
 	AuthenticateUser     CallType = "AuthenticateUser"
@@ -30,9 +28,8 @@ const (
 	GenerateInvites      CallType = "GenerateInvites"
 	PaymentMethods       CallType = "PaymentMethods"
 	GetConfig            CallType = "GetConfig"
-	//CentralSystemLog     LogType  = "sys"
-	//BackendLog           LogType  = "back"
-	//PaymentLog           LogType  = "pay"
+	Locations            CallType = "Locations"
+
 	MaxAccessLevel int = 10
 )
 
@@ -249,6 +246,17 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			if err != nil {
 				h.logger.Error("get transaction", err)
 				status = http.StatusInternalServerError
+			}
+		}
+	case Locations:
+		if accessLevel < MaxAccessLevel {
+			err = fmt.Errorf("access denied")
+			status = http.StatusUnauthorized
+		} else {
+			data, err = h.database.GetLocations()
+			if err != nil {
+				h.logger.Error("get locations", err)
+				status = http.StatusNoContent
 			}
 		}
 	case CentralSystemCommand:

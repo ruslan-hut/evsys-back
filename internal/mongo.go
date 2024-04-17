@@ -32,6 +32,7 @@ const (
 	collectionPaymentMethods = "payment_methods"
 	collectionPaymentOrders  = "payment_orders"
 	collectionPaymentPlans   = "payment_plans"
+	collectionLocations      = "locations"
 )
 
 type MongoDB struct {
@@ -1211,4 +1212,77 @@ func parsePeriod(period string) (time1, time2 time.Time, err error) {
 		return time.Time{}, time.Time{}, err
 	}
 	return time1, time2, nil
+}
+
+// GetLocations get all locations with all nested charge points and connectors
+func (m *MongoDB) GetLocations() ([]*models.Location, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	pipeline := bson.A{
+		bson.D{
+			{"$match", bson.M{
+				"roaming": true,
+			}},
+		},
+		bson.D{
+			{"$lookup",
+				bson.D{
+					{"from", collectionChargePoints},
+					{"localField", "id"},
+					{"foreignField", "location_id"},
+					{"as", "evses"},
+				},
+			},
+		},
+		bson.D{{"$unwind", bson.D{{"path", "$evses"}}}},
+		bson.D{
+			{"$lookup",
+				bson.D{
+					{"from", collectionConnectors},
+					{"localField", "evses.charge_point_id"},
+					{"foreignField", "charge_point_id"},
+					{"as", "evses.connectors"},
+				},
+			},
+		},
+		bson.D{
+			{"$group",
+				bson.D{
+					{"_id", "$id"},
+					{"root", bson.D{{"$mergeObjects", "$$ROOT"}}},
+					{"evses", bson.D{{"$push", "$evses"}}},
+				},
+			},
+		},
+		bson.D{
+			{"$replaceRoot",
+				bson.D{
+					{"newRoot",
+						bson.D{
+							{"$mergeObjects",
+								bson.A{
+									"$root",
+									bson.D{{"evses", "$evses"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	collection := connection.Database(m.database).Collection(collectionLocations)
+	cursor, err := collection.Aggregate(m.ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	var locations []*models.Location
+	if err = cursor.All(m.ctx, &locations); err != nil {
+		return nil, err
+	}
+	return locations, nil
 }

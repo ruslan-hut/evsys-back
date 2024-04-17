@@ -25,7 +25,7 @@ type ChargePoint struct {
 	Address         string      `json:"address" bson:"address"`
 	AccessType      string      `json:"access_type" bson:"access_type"`
 	AccessLevel     int         `json:"access_level" bson:"access_level"`
-	Location        Location    `json:"location" bson:"location"`
+	Location        GeoLocation `json:"location" bson:"location"`
 	Connectors      []Connector `json:"connectors" bson:"connectors"`
 }
 

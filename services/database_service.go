@@ -25,6 +25,8 @@ type Database interface {
 	CheckUserTag(idTag string) error
 	UpdateTagLastSeen(userTag *models.UserTag) error
 
+	GetLocations() ([]*models.Location, error)
+
 	GetChargePoints(level int, searchTerm string) ([]*models.ChargePoint, error)
 	GetChargePoint(level int, id string) (*models.ChargePoint, error)
 	UpdateChargePoint(level int, chargePoint *models.ChargePoint) error
