@@ -35,17 +35,21 @@ func (cs *CentralSystem) SendCommand(command *models.CentralSystemCommand) (stri
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
-	if resp != nil {
-		defer func(Body io.ReadCloser) {
-			err := Body.Close()
-			if err != nil {
-				log.Printf("closing response body: %v", err)
-			}
-		}(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("sending command %s: %v", command.FeatureName, err)
 	}
+	if resp == nil {
+		return "", fmt.Errorf("sending command %s: no response", command.FeatureName)
+	}
+	defer func(Body io.ReadCloser) {
+		err = Body.Close()
+		if err != nil {
+			log.Printf("closing response body: %v", err)
+		}
+	}(resp.Body)
 
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("sending command: %v; response status: %v", err, resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("sending command %s: response status %v", command.FeatureName, resp.StatusCode)
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
