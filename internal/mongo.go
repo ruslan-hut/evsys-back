@@ -890,6 +890,7 @@ func (m *MongoDB) GetLastMeterValue(transactionId int) (*models.TransactionMeter
 	collection := connection.Database(m.database).Collection(collectionMeterValues)
 	filter := bson.D{
 		{"transaction_id", transactionId},
+		{"measurand", "Energy.Active.Import.Register"},
 	}
 	var value models.TransactionMeter
 	if err = collection.FindOne(m.ctx, filter, options.FindOne().SetSort(bson.D{{"time", -1}})).Decode(&value); err != nil {
@@ -905,7 +906,11 @@ func (m *MongoDB) GetMeterValues(transactionId int, from time.Time) ([]*models.T
 	}
 	defer m.disconnect(connection)
 
-	filter := bson.D{{"transaction_id", transactionId}, {"time", bson.D{{"$gte", from}}}}
+	filter := bson.D{
+		{"transaction_id", transactionId},
+		{"measurand", "Energy.Active.Import.Register"},
+		{"time", bson.D{{"$gte", from}}},
+	}
 	collection := connection.Database(m.database).Collection(collectionMeterValues)
 	opts := options.Find().SetSort(bson.D{{"time", 1}})
 	cursor, err := collection.Find(m.ctx, filter, opts)
