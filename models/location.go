@@ -11,5 +11,5 @@ type Location struct {
 	Coordinates       GeoLocation    `json:"coordinates" bson:"coordinates" validate:"required"`
 	PowerLimit        int            `json:"power_limit" bson:"power_limit" validate:"required"`
 	DefaultPowerLimit int            `json:"default_power_limit" bson:"default_power_limit" validate:"required"`
-	Evses             []*ChargePoint `json:"evses,omitempty" bson:"evses,omitempty" validate:"omitempty"`
+	ChargePoints      []*ChargePoint `json:"charge_points,omitempty" bson:"charge_points,omitempty" validate:"omitempty"`
 }
