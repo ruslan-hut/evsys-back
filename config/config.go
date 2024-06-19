@@ -3,11 +3,12 @@ package config
 import (
 	"fmt"
 	"github.com/ilyakaznacheev/cleanenv"
+	"log"
 	"sync"
 )
 
 type Config struct {
-	IsDebug     bool   `yaml:"is_debug" env-default:"false"`
+	Env         string `yaml:"env" env-default:"local"`
 	TimeZone    string `yaml:"time_zone" env-default:"UTC"`
 	LogRecords  int64  `yaml:"log_records" env-default:"0"`
 	FirebaseKey string `yaml:"firebase_key" env-default:""`
@@ -37,7 +38,7 @@ type Config struct {
 var instance *Config
 var once sync.Once
 
-func GetConfig(path string) (*Config, error) {
+func GetConfig(path string) *Config {
 	var err error
 	once.Do(func() {
 		instance = &Config{}
@@ -45,7 +46,8 @@ func GetConfig(path string) (*Config, error) {
 			desc, _ := cleanenv.GetDescription(instance, nil)
 			err = fmt.Errorf("%s; %s", err, desc)
 			instance = nil
+			log.Fatalf("config: %v", err)
 		}
 	})
-	return instance, err
+	return instance
 }

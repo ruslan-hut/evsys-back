@@ -1,15 +1,26 @@
-package internal
+package http
 
 import (
 	"encoding/json"
 	"evsys-back/config"
+	"evsys-back/internal"
+	"evsys-back/internal/api/handlers/helper"
+	"evsys-back/internal/api/handlers/locations"
+	"evsys-back/internal/api/handlers/users"
+	"evsys-back/internal/api/middleware/authenticate"
+	"evsys-back/internal/api/middleware/timeout"
+	"evsys-back/internal/lib/sl"
 	"evsys-back/models"
 	"evsys-back/services"
 	"evsys-back/utility"
 	"fmt"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/render"
 	"github.com/gorilla/websocket"
 	"github.com/julienschmidt/httprouter"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -18,21 +29,23 @@ import (
 )
 
 const (
-	apiVersion            = "v1"
-	readLog               = "log/:log"
-	getConfig             = "config/:name"
-	userAuthenticate      = "users/authenticate"
-	userRegister          = "users/register"
-	userInfo              = "users/info/:name"
-	usersList             = "users/list"
-	generateInvites       = "users/invites"
+	apiVersion       = "v1"
+	readLog          = "log/{log}"
+	getConfig        = "config/{name}"
+	userAuthenticate = "users/authenticate"
+	userRegister     = "users/register"
+	userInfo         = "users/info/{name}"
+	usersList        = "users/list"
+	generateInvites  = "users/invites"
+
 	getChargePoints       = "chp"
-	getChargePointsSearch = "chp/:search"
-	chargePointInfo       = "point/:id"
+	getChargePointsSearch = "chp/{search}"
+	chargePointInfo       = "point/{id}"
+
 	activeTransactions    = "transactions/active"
-	transactionInfo       = "transactions/info/:id"
+	transactionInfo       = "transactions/info/{id}"
 	transactionList       = "transactions/list"
-	transactionListPeriod = "transactions/list/:period"
+	transactionListPeriod = "transactions/list/{period}"
 	transactionBill       = "transactions/bill"
 	locationsList         = "locations"
 
@@ -55,18 +68,26 @@ type Server struct {
 	httpServer   *http.Server
 	auth         services.Auth
 	statusReader services.StatusReader
-	apiHandler   func(ac *Call) ([]byte, int)
+	apiHandler   func(ac *internal.Call) ([]byte, int)
 	wsHandler    func(request *models.UserRequest) error
 	payments     services.Payments
-	logger       services.LogHandler
+	log          *slog.Logger
 	upgrader     websocket.Upgrader
 	pool         *Pool
 }
 
-func NewServer(conf *config.Config) *Server {
+type Core interface {
+	helper.Helper
+	authenticate.Authenticate
+	users.Users
+	locations.Locations
+}
+
+func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 
 	server := Server{
 		conf: conf,
+		log:  log.With(sl.Module("api.server")),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				return true
@@ -74,9 +95,32 @@ func NewServer(conf *config.Config) *Server {
 		},
 	}
 
-	// register itself as a router for httpServer handler
-	router := httprouter.New()
-	server.Register(router)
+	router := chi.NewRouter()
+	router.Use(timeout.Timeout(5))
+	router.Use(middleware.RequestID)
+	router.Use(middleware.Recoverer)
+	router.Use(render.SetContentType(render.ContentTypeJSON))
+
+	// requests without authorization token
+	router.Get(route("config/{name}"), helper.Config(log, core))
+	router.Post(route("users/authenticate"), users.Authenticate(log, core))
+	//TODO: check usage, why not use auth token?
+	router.Post(route("users/register"), users.Register(log, core))
+
+	// requests with authorization token
+	router.Group(func(r chi.Router) {
+		router.Use(authenticate.New(log, core))
+
+		router.Get(route("locations"), locations.ListLocations(log, core))
+		router.Get(route("chp"), locations.ListChargePoints(log, core))
+		router.Get(route("chp/{search}"), locations.ListChargePoints(log, core))
+		router.Get(route("point/{id}"), locations.ChargePointRead(log, core))
+		router.Post(route("point/{id}"), locations.ChargePointSave(log, core))
+
+		router.Get(route("users/info/{name}"), users.Info(log, core))
+		router.Get(route("users/list"), users.List(log, core))
+	})
+
 	server.httpServer = &http.Server{
 		Handler: router,
 	}
@@ -88,7 +132,7 @@ func (s *Server) SetAuth(auth services.Auth) {
 	s.auth = auth
 }
 
-func (s *Server) SetApiHandler(handler func(ac *Call) ([]byte, int)) {
+func (s *Server) SetApiHandler(handler func(ac *internal.Call) ([]byte, int)) {
 	s.apiHandler = handler
 }
 
@@ -104,231 +148,39 @@ func (s *Server) SetPaymentsService(payments services.Payments) {
 	s.payments = payments
 }
 
-func (s *Server) SetLogger(logger services.LogHandler) {
-	s.logger = logger
-}
+func (s *Server) Register(router *chi.Mux) {
 
-func (s *Server) Register(router *httprouter.Router) {
-	router.GET(route(readLog), s.readLog)
-	router.GET(route(getConfig), s.getConfig)
-	router.POST(route(userAuthenticate), s.authenticateUser)
-	router.POST(route(userRegister), s.registerUser)
-	router.GET(route(userInfo), s.userInfo)
-	router.GET(route(usersList), s.usersList)
-	router.GET(route(generateInvites), s.generateInvites)
-	router.POST(route(centralSystemCommand), s.centralSystemCommand)
-	router.GET(route(getChargePoints), s.getChargePoints)
-	router.GET(route(getChargePointsSearch), s.getChargePoints)
-	router.GET(route(chargePointInfo), s.getChargePointInfo)
-	router.POST(route(chargePointInfo), s.updateChargePoint)
-	router.GET(route(activeTransactions), s.activeTransactions)
-	router.GET(route(transactionInfo), s.transactionInfo)
-	router.GET(route(transactionList), s.transactionList)
-	router.GET(route(transactionListPeriod), s.transactionList)
-	router.GET(route(transactionBill), s.transactionBill)
-	router.GET(route(locationsList), s.locations)
-	router.GET(route(paymentSuccess), s.paymentSuccess)
-	router.GET(route(paymentFail), s.paymentFail)
-	router.POST(route(paymentNotify), s.paymentNotify)
-	router.GET(route(paymentMethods), s.paymentMethods)
-	router.POST(route(paymentSaveMethod), s.paymentSaveMethod)
-	router.POST(route(paymentUpdate), s.paymentUpdateMethod)
-	router.POST(route(paymentDelete), s.paymentDeleteMethod)
-	router.POST(route(paymentSetOrder), s.paymentSetOrder)
-	router.OPTIONS("/*path", s.options)
-	router.GET(wsEndpoint, s.handleWs)
+	//router.Get(route(readLog), s.readLog)
+	//
+	//router.Get(route(generateInvites), s.generateInvites)
+	//
+	//router.Post(route(centralSystemCommand), s.centralSystemCommand)
+	//
+	//router.Get(route(activeTransactions), s.activeTransactions)
+	//router.Get(route(transactionInfo), s.transactionInfo)
+	//router.Get(route(transactionList), s.transactionList)
+	//router.Get(route(transactionListPeriod), s.transactionList)
+	//router.Get(route(transactionBill), s.transactionBill)
+	//
+	//router.Get(route(paymentSuccess), s.paymentSuccess)
+	//router.Get(route(paymentFail), s.paymentFail)
+	//router.Post(route(paymentNotify), s.paymentNotify)
+	//router.Get(route(paymentMethods), s.paymentMethods)
+	//router.Post(route(paymentSaveMethod), s.paymentSaveMethod)
+	//router.Post(route(paymentUpdate), s.paymentUpdateMethod)
+	//router.Post(route(paymentDelete), s.paymentDeleteMethod)
+	//router.Post(route(paymentSetOrder), s.paymentSetOrder)
+	//router.Options("/*path", s.options)
+	//router.Get(wsEndpoint, s.handleWs)
 }
 
 func route(path string) string {
 	return fmt.Sprintf("/api/%s/%s", apiVersion, path)
 }
 
-func (s *Server) activeTransactions(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	ac := &Call{
-		CallType: ActiveTransactions,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) transactionInfo(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	ac := &Call{
-		CallType: TransactionInfo,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-		Payload:  []byte(ps.ByName("id")),
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) transactionList(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	ac := &Call{
-		CallType: TransactionList,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-		Payload:  []byte(ps.ByName("period")),
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) transactionBill(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	ac := &Call{
-		CallType: TransactionBill,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) locations(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	ac := &Call{
-		CallType: Locations,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) getConfig(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	ac := &Call{
-		CallType: GetConfig,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-		Payload:  []byte(p.ByName("name")),
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) readLog(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	ac := &Call{
-		CallType: ReadLog,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-		Payload:  []byte(p.ByName("log")),
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) generateInvites(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	ac := &Call{
-		CallType: GenerateInvites,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) authenticateUser(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		s.logger.Error("get body while authenticate user", err)
-		return
-	}
-	ac := &Call{
-		CallType: AuthenticateUser,
-		Remote:   r.RemoteAddr,
-		Payload:  body,
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) registerUser(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		s.logger.Error("get body while register user", err)
-		return
-	}
-	ac := &Call{
-		CallType: RegisterUser,
-		Remote:   r.RemoteAddr,
-		Payload:  body,
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) userInfo(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	ac := &Call{
-		CallType: UserInfo,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-		Payload:  []byte(p.ByName("name")),
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) usersList(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	ac := &Call{
-		CallType: UsersList,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) centralSystemCommand(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		s.logger.Error("get body while central system command", err)
-		return
-	}
-	ac := &Call{
-		CallType: CentralSystemCommand,
-		Token:    s.getToken(r),
-		Remote:   r.RemoteAddr,
-		Payload:  body,
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) getChargePoints(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	ac := &Call{
-		CallType: GetChargePoints,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-		Payload:  []byte(ps.ByName("search")),
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) getChargePointInfo(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	ac := &Call{
-		CallType: ChargePointInfo,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-		Payload:  []byte(ps.ByName("id")),
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) updateChargePoint(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		s.logger.Error("get body while update charge point", err)
-		return
-	}
-	ac := &Call{
-		CallType: ChargePointUpdate,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-		Payload:  body,
-	}
-	s.handleApiRequest(w, ac)
-}
-
-func (s *Server) paymentMethods(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	ac := &Call{
-		CallType: PaymentMethods,
-		Remote:   r.RemoteAddr,
-		Token:    s.getToken(r),
-	}
-	s.handleApiRequest(w, ac)
-}
-
 func (s *Server) paymentSaveMethod(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		s.logger.Error("get body while payment save method", err)
 		return
 	}
 	user := s.authorizeRequest(r)
@@ -347,7 +199,6 @@ func (s *Server) paymentSaveMethod(w http.ResponseWriter, r *http.Request, _ htt
 func (s *Server) paymentUpdateMethod(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		s.logger.Error("get body while payment update method", err)
 		return
 	}
 	user := s.authorizeRequest(r)
@@ -366,7 +217,6 @@ func (s *Server) paymentUpdateMethod(w http.ResponseWriter, r *http.Request, _ h
 func (s *Server) paymentDeleteMethod(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		s.logger.Error("get body while payment delete method", err)
 		return
 	}
 	user := s.authorizeRequest(r)
@@ -385,7 +235,6 @@ func (s *Server) paymentDeleteMethod(w http.ResponseWriter, r *http.Request, _ h
 func (s *Server) paymentSetOrder(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		s.logger.Error("get body while payment set order", err)
 		return
 	}
 	user := s.authorizeRequest(r)
@@ -400,21 +249,16 @@ func (s *Server) paymentSetOrder(w http.ResponseWriter, r *http.Request, _ httpr
 	}
 	err = json.NewEncoder(w).Encode(order)
 	if err != nil {
-		s.logger.Error("payment set order: encode order", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 
 func (s *Server) paymentSuccess(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	s.logger.Info("payment OK")
 	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) paymentFail(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	err := s.payments.Notify([]byte(r.URL.RawQuery))
-	if err != nil {
-		s.logger.Error("payment KO", err)
-	}
+	_ = s.payments.Notify([]byte(r.URL.RawQuery))
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -422,7 +266,6 @@ func (s *Server) paymentNotify(w http.ResponseWriter, r *http.Request, _ httprou
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		s.logger.Error("payment notify: get body", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -442,7 +285,7 @@ func (s *Server) options(w http.ResponseWriter, r *http.Request, _ httprouter.Pa
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleApiRequest(w http.ResponseWriter, ac *Call) {
+func (s *Server) handleApiRequest(w http.ResponseWriter, ac *internal.Call) {
 	if s.apiHandler != nil {
 		data, status := s.apiHandler(ac)
 		s.sendApiResponse(w, data, status)
@@ -462,7 +305,7 @@ func (s *Server) sendApiResponse(w http.ResponseWriter, data []byte, status int)
 
 		_, err := w.Write(data)
 		if err != nil {
-			s.logger.Error("send api response", err)
+			s.log.Error("send api response", err)
 		}
 	}
 }
@@ -472,24 +315,24 @@ func (s *Server) Start() error {
 		return fmt.Errorf("configuration not loaded")
 	}
 
-	s.pool = NewPool(s.logger)
+	s.pool = NewPool(s.log)
 	go s.pool.Start()
 
 	// start listening for log updates, if update received, send it to all subscribed clients
 	go s.listenForUpdates()
 
 	serverAddress := fmt.Sprintf("%s:%s", s.conf.Listen.BindIP, s.conf.Listen.Port)
-	s.logger.Info(fmt.Sprintf("starting on %s", serverAddress))
+	s.log.Info(fmt.Sprintf("starting on %s", serverAddress))
 	listener, err := net.Listen("tcp", serverAddress)
 	if err != nil {
 		return err
 	}
 
 	if s.conf.Listen.TLS {
-		s.logger.Info("starting https TLS")
+		s.log.Info("starting https TLS")
 		err = s.httpServer.ServeTLS(listener, s.conf.Listen.CertFile, s.conf.Listen.KeyFile)
 	} else {
-		s.logger.Info("starting http")
+		s.log.Info("starting http")
 		err = s.httpServer.Serve(listener)
 	}
 
@@ -511,7 +354,7 @@ func (s *Server) authorizeRequest(r *http.Request) *models.User {
 	}
 	user, err := s.auth.AuthenticateByToken(token)
 	if err != nil {
-		s.logger.Error("authorize request", err)
+		s.log.Error("authorize request", err)
 		return nil
 	}
 	return user
@@ -533,10 +376,10 @@ type Pool struct {
 	broadcast  chan []byte
 	logEvent   chan *models.WsResponse
 	chpEvent   chan *models.WsResponse
-	logger     services.LogHandler
+	logger     *slog.Logger
 }
 
-func NewPool(logger services.LogHandler) *Pool {
+func NewPool(logger *slog.Logger) *Pool {
 	//logger := NewLogger("pool", false, nil)
 	return &Pool{
 		register:   make(chan *Client),
@@ -590,7 +433,7 @@ type Client struct {
 	auth           services.Auth
 	statusReader   services.StatusReader // user state holder and transaction state reader
 	send           chan []byte           // served by writePump, sending messages to client
-	logger         services.LogHandler
+	logger         *slog.Logger
 	pool           *Pool          // tracking client connect and disconnect, stored active clients array
 	id             string         // replaced with idTag after user authorization
 	listeners      map[int]string // map of transaction state listeners, key is transaction id, value is user idTag
@@ -754,11 +597,11 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 		return
 	}
 	ticker := time.NewTicker(time.Duration(waitStep) * time.Second)
-	timeout := time.NewTimer(time.Duration(duration) * time.Second)
+	pause := time.NewTimer(time.Duration(duration) * time.Second)
 
 	defer func() {
 		ticker.Stop()
-		timeout.Stop()
+		pause.Stop()
 		if !c.isClosed {
 			c.statusReader.ClearStatus(c.id)
 		}
@@ -792,7 +635,7 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 					Progress: progress,
 				})
 			}
-		case <-timeout.C:
+		case <-pause.C:
 			c.sendResponse(models.Error, "timeout")
 			return
 		}
@@ -809,11 +652,11 @@ func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int
 		return
 	}
 	ticker := time.NewTicker(time.Duration(waitStep) * time.Second)
-	timeout := time.NewTimer(time.Duration(duration) * time.Second)
+	pause := time.NewTimer(time.Duration(duration) * time.Second)
 
 	defer func() {
 		ticker.Stop()
-		timeout.Stop()
+		pause.Stop()
 		if !c.isClosed {
 			c.statusReader.ClearStatus(c.id)
 		}
@@ -847,7 +690,7 @@ func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int
 					Progress: progress,
 				})
 			}
-		case <-timeout.C:
+		case <-pause.C:
 			c.sendResponse(models.Error, "timeout")
 			return
 		}
@@ -968,7 +811,7 @@ func (s *Server) listenForUpdates() {
 		case <-ticker.C:
 			messages, err := s.statusReader.ReadLogAfter(lastMessageTime)
 			if err != nil {
-				s.logger.Error("reading log", err)
+				s.log.Error("reading log", err)
 				continue
 			}
 			if len(messages) > 0 {
@@ -986,7 +829,7 @@ func (s *Server) listenForUpdates() {
 
 					data, err := json.Marshal(message)
 					if err != nil {
-						s.logger.Error("marshal log message", err)
+						s.log.Error("marshal log message", err)
 						continue
 					}
 					s.pool.logEvent <- &models.WsResponse{
@@ -1034,7 +877,7 @@ func (c *Client) close() {
 func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ws, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		s.logger.Error("upgrade http to websocket", err)
+		s.log.Error("upgrade http to websocket", err)
 		return
 	}
 
@@ -1043,7 +886,7 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.P
 		auth:           s.auth,
 		statusReader:   s.statusReader,
 		send:           make(chan []byte, 256),
-		logger:         s.logger,
+		logger:         s.log,
 		pool:           s.pool,
 		id:             "",
 		subscription:   ChargePointEvent,

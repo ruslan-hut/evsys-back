@@ -1,6 +1,6 @@
 ---
 
-is_debug: true
+env: local
 time_zone: America/New_York
 log_records: 1000
 firebase_key: c:/cert/firebase.json
