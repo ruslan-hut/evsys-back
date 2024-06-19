@@ -101,24 +101,28 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 	router.Use(middleware.Recoverer)
 	router.Use(render.SetContentType(render.ContentTypeJSON))
 
-	// requests without authorization token
-	router.Get(route("config/{name}"), helper.Config(log, core))
-	router.Post(route("users/authenticate"), users.Authenticate(log, core))
-	//TODO: check usage, why not use auth token?
-	router.Post(route("users/register"), users.Register(log, core))
+	router.Route("/api/v1", func(r chi.Router) {
+		// requests with authorization token
+		r.Group(func(r chi.Router) {
+			r.Use(authenticate.New(log, core))
 
-	// requests with authorization token
-	router.Group(func(r chi.Router) {
-		router.Use(authenticate.New(log, core))
+			r.Get("/locations", locations.ListLocations(log, core))
+			r.Get("/chp", locations.ListChargePoints(log, core))
+			r.Get("/chp/{search}", locations.ListChargePoints(log, core))
+			r.Get("/point/{id}", locations.ChargePointRead(log, core))
+			r.Post("/point/{id}", locations.ChargePointSave(log, core))
 
-		router.Get(route("locations"), locations.ListLocations(log, core))
-		router.Get(route("chp"), locations.ListChargePoints(log, core))
-		router.Get(route("chp/{search}"), locations.ListChargePoints(log, core))
-		router.Get(route("point/{id}"), locations.ChargePointRead(log, core))
-		router.Post(route("point/{id}"), locations.ChargePointSave(log, core))
+			r.Get("/users/info/{name}", users.Info(log, core))
+			r.Get("/users/list", users.List(log, core))
+		})
 
-		router.Get(route("users/info/{name}"), users.Info(log, core))
-		router.Get(route("users/list"), users.List(log, core))
+		// requests without authorization token
+		r.Group(func(r chi.Router) {
+			r.Get("/config/{name}", helper.Config(log, core))
+			r.Post("/users/authenticate", users.Authenticate(log, core))
+			//TODO: check usage, why not use auth token?
+			r.Post("/users/register", users.Register(log, core))
+		})
 	})
 
 	server.httpServer = &http.Server{

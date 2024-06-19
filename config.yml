@@ -3,7 +3,7 @@
 env: local
 time_zone: America/New_York
 log_records: 1000
-firebase_key: c:/cert/firebase.json
+firebase_key:
 listen:
   type: port
   bind_ip: 0.0.0.0

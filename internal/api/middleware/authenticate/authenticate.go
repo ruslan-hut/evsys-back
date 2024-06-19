@@ -65,6 +65,12 @@ func New(log *slog.Logger, auth Authenticate) func(next http.Handler) http.Handl
 				return
 			}
 			logger = logger.With(sl.Secret("token", token))
+
+			if auth == nil {
+				authFailed(ww, r, "Unauthorized: authentication not enabled")
+				return
+			}
+
 			user, err := auth.AuthenticateByToken(token)
 			if err != nil {
 				logger = logger.With(sl.Err(err))
