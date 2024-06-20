@@ -254,3 +254,45 @@ func (c *Core) SetOrder(user *entity.User, order *entity.PaymentOrder) (*entity.
 	}
 	return order, nil
 }
+
+// WsRequest handler for requests made via websocket
+func (c *Core) WsRequest(request *entity.UserRequest) error {
+	if c.cs == nil {
+		return fmt.Errorf("central system is not connected")
+	}
+
+	command := entity.CentralSystemCommand{
+		ChargePointId: request.ChargePointId,
+		ConnectorId:   request.ConnectorId,
+	}
+
+	switch request.Command {
+	case entity.StartTransaction:
+		command.FeatureName = "RemoteStartTransaction"
+		command.Payload = request.Token
+	case entity.StopTransaction:
+		command.FeatureName = "RemoteStopTransaction"
+		command.Payload = fmt.Sprintf("%d", request.TransactionId)
+	case entity.CheckStatus:
+		return nil
+	case entity.ListenTransaction:
+		return nil
+	case entity.StopListenTransaction:
+		return nil
+	case entity.ListenChargePoints:
+		return nil
+	case entity.ListenLog:
+		return nil
+	case entity.PingConnection:
+		return nil
+	default:
+		return fmt.Errorf("unknown command %s", request.Command)
+	}
+
+	response := c.cs.SendCommand(&command)
+	if response.IsError() {
+		return fmt.Errorf("sending command to central system: %s", response.Info)
+	}
+
+	return nil
+}

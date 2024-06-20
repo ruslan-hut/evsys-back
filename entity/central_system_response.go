@@ -15,14 +15,11 @@ func NewCentralSystemResponse(chargePointId string, connectorId int) *CentralSys
 	}
 }
 
-func NewErrorResponse(info string) *CentralSystemResponse {
-	return &CentralSystemResponse{
-		Status: Error,
-		Info:   info,
-	}
-}
-
 func (r *CentralSystemResponse) SetError(info string) {
 	r.Status = Error
 	r.Info = info
+}
+
+func (r *CentralSystemResponse) IsError() bool {
+	return r.Status == Error
 }

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"evsys-back/config"
 	"evsys-back/entity"
-	"evsys-back/internal"
 	"evsys-back/internal/api/handlers/central-system"
 	"evsys-back/internal/api/handlers/helper"
 	"evsys-back/internal/api/handlers/locations"
@@ -33,8 +32,6 @@ type Server struct {
 	httpServer   *http.Server
 	core         Core
 	statusReader services.StatusReader
-	apiHandler   func(ac *internal.Call) ([]byte, int)
-	wsHandler    func(request *entity.UserRequest) error
 	payments     services.Payments
 	log          *slog.Logger
 	upgrader     websocket.Upgrader
@@ -51,6 +48,7 @@ type Core interface {
 	payments.Payments
 
 	UserTag(user *entity.User) (string, error)
+	WsRequest(request *entity.UserRequest) error
 }
 
 func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
@@ -235,20 +233,19 @@ func (p *Pool) Start() {
 }
 
 type Client struct {
-	ws             *websocket.Conn
-	user           *entity.User
-	auth           services.Auth
-	core           Core
-	statusReader   services.StatusReader // user state holder and transaction state reader
-	send           chan []byte           // served by writePump, sending messages to client
-	logger         *slog.Logger
-	pool           *Pool          // tracking client connect and disconnect, stored active clients array
-	id             string         // replaced with idTag after user authorization
-	listeners      map[int]string // map of transaction state listeners, key is transaction id, value is user idTag
-	subscription   SubscriptionType
-	isClosed       bool
-	requestHandler func(request *entity.UserRequest) error
-	mux            *sync.Mutex
+	ws           *websocket.Conn
+	user         *entity.User
+	auth         services.Auth
+	core         Core
+	statusReader services.StatusReader // user state holder and transaction state reader
+	send         chan []byte           // served by writePump, sending messages to client
+	logger       *slog.Logger
+	pool         *Pool          // tracking client connect and disconnect, stored active clients array
+	id           string         // replaced with idTag after user authorization
+	listeners    map[int]string // map of transaction state listeners, key is transaction id, value is user idTag
+	subscription SubscriptionType
+	isClosed     bool
+	mux          *sync.Mutex
 }
 
 func (c *Client) writePump() {
@@ -316,7 +313,7 @@ func (c *Client) readPump() {
 
 		userRequest.Token = c.id
 
-		err = c.requestHandler(&userRequest)
+		err = c.core.WsRequest(&userRequest)
 		if err != nil {
 			c.logger.Error("read pump: handle request", err)
 			continue
@@ -685,17 +682,16 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &Client{
-		ws:             ws,
-		core:           s.core,
-		statusReader:   s.statusReader,
-		send:           make(chan []byte, 256),
-		logger:         s.log,
-		pool:           s.pool,
-		id:             "",
-		subscription:   ChargePointEvent,
-		requestHandler: s.wsHandler,
-		listeners:      make(map[int]string),
-		mux:            &sync.Mutex{},
+		ws:           ws,
+		core:         s.core,
+		statusReader: s.statusReader,
+		send:         make(chan []byte, 256),
+		logger:       s.log,
+		pool:         s.pool,
+		id:           "",
+		subscription: ChargePointEvent,
+		listeners:    make(map[int]string),
+		mux:          &sync.Mutex{},
 	}
 	s.pool.register <- client
 
