@@ -36,6 +36,7 @@ func ListLocations(logger *slog.Logger, handler Locations) http.HandlerFunc {
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get locations: %v", err)))
 			return
 		}
+		log.Info("list locations")
 
 		render.JSON(w, r, data)
 	}
@@ -60,6 +61,7 @@ func ListChargePoints(logger *slog.Logger, handler Locations) http.HandlerFunc {
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get charge points: %v", err)))
 			return
 		}
+		log.Info("list charge points")
 
 		render.JSON(w, r, data)
 	}
@@ -84,6 +86,7 @@ func ChargePointRead(logger *slog.Logger, handler Locations) http.HandlerFunc {
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get charge point: %v", err)))
 			return
 		}
+		log.Info("charge point info")
 
 		render.JSON(w, r, data)
 	}
@@ -116,6 +119,7 @@ func ChargePointSave(logger *slog.Logger, handler Locations) http.HandlerFunc {
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to save charge point: %v", err)))
 			return
 		}
+		log.Info("charge point updated")
 
 		render.JSON(w, r, &chargePoint)
 	}

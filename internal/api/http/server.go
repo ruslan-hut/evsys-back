@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"evsys-back/config"
 	"evsys-back/internal"
+	central_system "evsys-back/internal/api/handlers/central-system"
 	"evsys-back/internal/api/handlers/helper"
 	"evsys-back/internal/api/handlers/locations"
+	"evsys-back/internal/api/handlers/transactions"
 	"evsys-back/internal/api/handlers/users"
 	"evsys-back/internal/api/middleware/authenticate"
 	"evsys-back/internal/api/middleware/timeout"
@@ -81,6 +83,8 @@ type Core interface {
 	authenticate.Authenticate
 	users.Users
 	locations.Locations
+	central_system.CentralSystem
+	transactions.Transactions
 }
 
 func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
@@ -114,6 +118,23 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 
 			r.Get("/users/info/{name}", users.Info(log, core))
 			r.Get("/users/list", users.List(log, core))
+
+			r.Post("/csc", central_system.Command(log, core))
+
+			r.Get("/transactions/active", transactions.ListActive(log, core))
+			r.Get("/transactions/list", transactions.List(log, core))
+			r.Get("/transactions/list/{period}", transactions.List(log, core))
+			r.Get("/transactions/info/{id}", transactions.Get(log, core))
+			//router.Get(route(transactionBill), s.transactionBill)
+
+			//router.Get(route(paymentSuccess), s.paymentSuccess)
+			//router.Get(route(paymentFail), s.paymentFail)
+			//router.Post(route(paymentNotify), s.paymentNotify)
+			//router.Get(route(paymentMethods), s.paymentMethods)
+			//router.Post(route(paymentSaveMethod), s.paymentSaveMethod)
+			//router.Post(route(paymentUpdate), s.paymentUpdateMethod)
+			//router.Post(route(paymentDelete), s.paymentDeleteMethod)
+			//router.Post(route(paymentSetOrder), s.paymentSetOrder)
 		})
 
 		// requests without authorization token
@@ -158,22 +179,7 @@ func (s *Server) Register(router *chi.Mux) {
 	//
 	//router.Get(route(generateInvites), s.generateInvites)
 	//
-	//router.Post(route(centralSystemCommand), s.centralSystemCommand)
-	//
-	//router.Get(route(activeTransactions), s.activeTransactions)
-	//router.Get(route(transactionInfo), s.transactionInfo)
-	//router.Get(route(transactionList), s.transactionList)
-	//router.Get(route(transactionListPeriod), s.transactionList)
-	//router.Get(route(transactionBill), s.transactionBill)
-	//
-	//router.Get(route(paymentSuccess), s.paymentSuccess)
-	//router.Get(route(paymentFail), s.paymentFail)
-	//router.Post(route(paymentNotify), s.paymentNotify)
-	//router.Get(route(paymentMethods), s.paymentMethods)
-	//router.Post(route(paymentSaveMethod), s.paymentSaveMethod)
-	//router.Post(route(paymentUpdate), s.paymentUpdateMethod)
-	//router.Post(route(paymentDelete), s.paymentDeleteMethod)
-	//router.Post(route(paymentSetOrder), s.paymentSetOrder)
+
 	//router.Options("/*path", s.options)
 	//router.Get(wsEndpoint, s.handleWs)
 }

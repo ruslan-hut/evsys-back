@@ -33,6 +33,7 @@ func Config(logger *slog.Logger, handler Helper) http.HandlerFunc {
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get config: %v", err)))
 			return
 		}
+		log.Info("get config success")
 
 		render.JSON(w, r, data)
 	}

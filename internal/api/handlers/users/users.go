@@ -52,6 +52,7 @@ func Authenticate(logger *slog.Logger, handler Users) http.HandlerFunc {
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Not authorized: %v", err)))
 			return
 		}
+		log.Info("user authorized")
 
 		render.JSON(w, r, data)
 	}
@@ -80,6 +81,7 @@ func Register(logger *slog.Logger, handler Users) http.HandlerFunc {
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to save user: %v", err)))
 			return
 		}
+		log.Info("user registered")
 
 		render.JSON(w, r, data)
 	}
@@ -106,6 +108,7 @@ func Info(logger *slog.Logger, handler Users) http.HandlerFunc {
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get user: %v", err)))
 			return
 		}
+		log.Info("user info")
 
 		render.JSON(w, r, data)
 	}
@@ -130,6 +133,7 @@ func List(logger *slog.Logger, handler Users) http.HandlerFunc {
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get users: %v", err)))
 			return
 		}
+		log.Info("users list")
 
 		render.JSON(w, r, data)
 	}
