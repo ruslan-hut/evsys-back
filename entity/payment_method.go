@@ -14,7 +14,7 @@ type PaymentMethod struct {
 	CardCountry string `json:"card_country,omitempty" bson:"card_country" validate:"omitempty"`
 	ExpiryDate  string `json:"expiry_date,omitempty" bson:"expiry_date" validate:"omitempty"`
 	IsDefault   bool   `json:"is_default" bson:"is_default"`
-	UserId      string `json:"user_id" bson:"user_id" validate:"required"`
+	UserId      string `json:"user_id" bson:"user_id" validate:"omitempty"`
 	UserName    string `json:"user_name" bson:"user_name" validate:"omitempty"`
 	FailCount   int    `json:"fail_count" bson:"fail_count" validate:"omitempty"`
 }
