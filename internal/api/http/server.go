@@ -72,6 +72,11 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 	router.Use(middleware.Recoverer)
 	router.Use(render.SetContentType(render.ContentTypeJSON))
 
+	// websocket connection
+	router.Route("/", func(r chi.Router) {
+		r.Get("/ws", server.handleWs)
+	})
+
 	router.Route("/api/v1", func(r chi.Router) {
 		// requests with authorization token
 		r.Group(func(r chi.Router) {
@@ -111,7 +116,6 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 
 		// requests without authorization token
 		r.Group(func(r chi.Router) {
-			r.Get("/ws", server.handleWs)
 			r.Get("/config/{name}", helper.Config(log, core))
 			r.Post("/users/authenticate", users.Authenticate(log, core))
 			r.Post("/users/register", users.Register(log, core))
