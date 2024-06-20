@@ -1,9 +1,9 @@
-package central_system
+package centralsystem
 
 import (
+	"evsys-back/entity"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
-	"evsys-back/models"
 	"fmt"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
@@ -12,7 +12,7 @@ import (
 )
 
 type CentralSystem interface {
-	SendCommand(command *models.CentralSystemCommand) (interface{}, error)
+	SendCommand(command *entity.CentralSystemCommand) (interface{}, error)
 }
 
 func Command(logger *slog.Logger, handler CentralSystem) http.HandlerFunc {
@@ -23,7 +23,7 @@ func Command(logger *slog.Logger, handler CentralSystem) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
-		var command models.CentralSystemCommand
+		var command entity.CentralSystemCommand
 		if err := render.Bind(r, &command); err != nil {
 			log.Error("bind", sl.Err(err))
 			render.Status(r, 400)

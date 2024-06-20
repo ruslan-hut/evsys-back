@@ -1,11 +1,11 @@
 package services
 
-import "evsys-back/models"
+import "evsys-back/entity"
 
 type Payments interface {
 	Notify(data []byte) error
-	SavePaymentMethod(user *models.User, data []byte) error
-	UpdatePaymentMethod(user *models.User, data []byte) error
-	DeletePaymentMethod(user *models.User, data []byte) error
-	SetOrder(user *models.User, data []byte) (*models.PaymentOrder, error)
+	SavePaymentMethod(user *entity.User, data []byte) error
+	UpdatePaymentMethod(user *entity.User, data []byte) error
+	DeletePaymentMethod(user *entity.User, data []byte) error
+	SetOrder(user *entity.User, data []byte) (*entity.PaymentOrder, error)
 }

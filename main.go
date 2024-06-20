@@ -2,13 +2,21 @@ package main
 
 import (
 	"evsys-back/config"
-	"evsys-back/internal"
+	"evsys-back/impl/authenticator"
+	"evsys-back/impl/central-system"
+	"evsys-back/impl/core"
+	"evsys-back/impl/database"
+	statusreader "evsys-back/impl/status-reader"
 	"evsys-back/internal/api/http"
+	"evsys-back/internal/firebase"
 	"evsys-back/internal/lib/logger"
 	"evsys-back/internal/lib/sl"
-	"evsys-back/services"
 	"flag"
+	"log/slog"
 )
+
+var mongo *database.MongoDB
+var mockDb *database.MockDB
 
 func main() {
 
@@ -19,62 +27,69 @@ func main() {
 	conf := config.GetConfig(*configPath)
 	log := logger.SetupLogger(conf.Env, *logPath)
 
-	var mongo services.Database
 	var err error
 	if conf.Mongo.Enabled {
-		mongo, err = internal.NewMongoClient(conf)
+		log.With(
+			slog.String("host", conf.Mongo.Host),
+			slog.String("db", conf.Mongo.Database),
+		).Info("connecting to mongo")
+		mongo, err = database.NewMongoClient(conf)
 		if err != nil {
-			log.Error("mongo client failed", sl.Err(err))
+			log.Error("mongo client", sl.Err(err))
 			return
 		}
+	} else {
+		log.Info("using mock db")
+		mockDb = database.NewMockDB()
 	}
 
-	var cs services.CentralSystemService
+	var cs *centralsystem.CentralSystem
 	if conf.CentralSystem.Enabled {
-		cs = internal.NewCentralSystem(conf.CentralSystem.Url, conf.CentralSystem.Token)
-		log.Info("central system initialized")
+		log.With(
+			slog.String("url", conf.CentralSystem.Url),
+			sl.Secret("token", conf.CentralSystem.Token),
+		).Info("connecting to central system")
+		cs = centralsystem.NewCentralSystem(conf.CentralSystem.Url, conf.CentralSystem.Token)
 	}
 
-	auth := internal.NewAuthenticator()
-	auth.SetLogger(internal.NewLogger("auth", false, mongo))
-	auth.SetDatabase(mongo)
+	var auth *authenticator.Authenticator
+	if conf.Mongo.Enabled {
+		auth = authenticator.New(log, mongo)
+	} else {
+		auth = authenticator.New(log, mockDb)
+	}
 
-	var firebase *internal.Firebase
+	var fb *firebase.Firebase
 	if conf.FirebaseKey != "" {
-		firebase, err = internal.NewFirebase(conf.FirebaseKey)
+		log.Info("firebase enabled")
+		fb, err = firebase.New(log, conf.FirebaseKey)
 		if err != nil {
-			log.Error("firebase client", err)
+			log.Error("firebase client", sl.Err(err))
 			return
 		}
-		firebase.SetLogger(internal.NewLogger("firebase", false, mongo))
-		auth.SetFirebase(firebase)
+		auth.SetFirebase(fb)
 	}
 
-	apiHandler := internal.NewApiHandler()
-	apiHandler.SetLogger(internal.NewLogger("api", false, mongo))
-	apiHandler.SetDatabase(mongo)
-	apiHandler.SetCentralSystem(cs)
-	apiHandler.SetAuth(auth)
+	var coreHandler *core.Core
+	if conf.Mongo.Enabled {
+		coreHandler = core.New(log, mongo)
+	} else {
+		coreHandler = core.New(log, mockDb)
+	}
+	coreHandler.SetAuth(auth)
+	if conf.CentralSystem.Enabled {
+		coreHandler.SetCentralSystem(cs)
+	}
 
-	statusReader := internal.NewStatusReader()
-	statusReader.SetLogger(internal.NewLogger("status", false, mongo))
-	statusReader.SetDatabase(mongo)
-
-	payments := internal.NewPayments()
-	payments.SetLogger(internal.NewLogger("payments", false, mongo))
-	payments.SetDatabase(mongo)
-
-	server := http.NewServer(conf, log, nil)
-	server.SetApiHandler(apiHandler.HandleApiCall)
-	server.SetWsHandler(apiHandler.HandleUserRequest)
-	server.SetAuth(auth)
-	server.SetStatusReader(statusReader)
-	server.SetPaymentsService(payments)
+	server := http.NewServer(conf, log, coreHandler)
+	if conf.Mongo.Enabled {
+		server.SetStatusReader(statusreader.New(log, mongo))
+	} else {
+		server.SetStatusReader(statusreader.New(log, mockDb))
+	}
 
 	err = server.Start()
 	if err != nil {
 		log.Error("server start", err)
-		return
 	}
-
 }

@@ -3,16 +3,17 @@ package http
 import (
 	"encoding/json"
 	"evsys-back/config"
+	"evsys-back/entity"
 	"evsys-back/internal"
-	central_system "evsys-back/internal/api/handlers/central-system"
+	"evsys-back/internal/api/handlers/central-system"
 	"evsys-back/internal/api/handlers/helper"
 	"evsys-back/internal/api/handlers/locations"
+	"evsys-back/internal/api/handlers/payments"
 	"evsys-back/internal/api/handlers/transactions"
 	"evsys-back/internal/api/handlers/users"
 	"evsys-back/internal/api/middleware/authenticate"
 	"evsys-back/internal/api/middleware/timeout"
 	"evsys-back/internal/lib/sl"
-	"evsys-back/models"
 	"evsys-back/services"
 	"evsys-back/utility"
 	"fmt"
@@ -20,58 +21,20 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/gorilla/websocket"
-	"github.com/julienschmidt/httprouter"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
-)
-
-const (
-	apiVersion       = "v1"
-	readLog          = "log/{log}"
-	getConfig        = "config/{name}"
-	userAuthenticate = "users/authenticate"
-	userRegister     = "users/register"
-	userInfo         = "users/info/{name}"
-	usersList        = "users/list"
-	generateInvites  = "users/invites"
-
-	getChargePoints       = "chp"
-	getChargePointsSearch = "chp/{search}"
-	chargePointInfo       = "point/{id}"
-
-	activeTransactions    = "transactions/active"
-	transactionInfo       = "transactions/info/{id}"
-	transactionList       = "transactions/list"
-	transactionListPeriod = "transactions/list/{period}"
-	transactionBill       = "transactions/bill"
-	locationsList         = "locations"
-
-	centralSystemCommand = "csc"
-	wsEndpoint           = "/ws"
-
-	paymentSuccess = "payment/ok"
-	paymentFail    = "payment/ko"
-	paymentNotify  = "payment/notify"
-
-	paymentMethods    = "payment/methods"
-	paymentSaveMethod = "payment/save"
-	paymentUpdate     = "payment/update"
-	paymentDelete     = "payment/delete"
-	paymentSetOrder   = "payment/order"
 )
 
 type Server struct {
 	conf         *config.Config
 	httpServer   *http.Server
-	auth         services.Auth
+	core         Core
 	statusReader services.StatusReader
 	apiHandler   func(ac *internal.Call) ([]byte, int)
-	wsHandler    func(request *models.UserRequest) error
+	wsHandler    func(request *entity.UserRequest) error
 	payments     services.Payments
 	log          *slog.Logger
 	upgrader     websocket.Upgrader
@@ -83,14 +46,18 @@ type Core interface {
 	authenticate.Authenticate
 	users.Users
 	locations.Locations
-	central_system.CentralSystem
+	centralsystem.CentralSystem
 	transactions.Transactions
+	payments.Payments
+
+	UserTag(user *entity.User) (string, error)
 }
 
 func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 
 	server := Server{
 		conf: conf,
+		core: core,
 		log:  log.With(sl.Module("api.server")),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
@@ -118,30 +85,35 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 
 			r.Get("/users/info/{name}", users.Info(log, core))
 			r.Get("/users/list", users.List(log, core))
+			//router.Get("/users/invites", s.generateInvites)
 
-			r.Post("/csc", central_system.Command(log, core))
+			r.Post("/csc", centralsystem.Command(log, core))
 
 			r.Get("/transactions/active", transactions.ListActive(log, core))
 			r.Get("/transactions/list", transactions.List(log, core))
 			r.Get("/transactions/list/{period}", transactions.List(log, core))
 			r.Get("/transactions/info/{id}", transactions.Get(log, core))
-			//router.Get(route(transactionBill), s.transactionBill)
+			//router.Get("/transactions/bill", s.transactionBill)
 
-			//router.Get(route(paymentSuccess), s.paymentSuccess)
-			//router.Get(route(paymentFail), s.paymentFail)
-			//router.Post(route(paymentNotify), s.paymentNotify)
-			//router.Get(route(paymentMethods), s.paymentMethods)
-			//router.Post(route(paymentSaveMethod), s.paymentSaveMethod)
-			//router.Post(route(paymentUpdate), s.paymentUpdateMethod)
-			//router.Post(route(paymentDelete), s.paymentDeleteMethod)
-			//router.Post(route(paymentSetOrder), s.paymentSetOrder)
+			r.Get("/payment/methods", payments.List(log, core))
+			r.Post("/payment/save", payments.Save(log, core))
+			r.Post("/payment/update", payments.Update(log, core))
+			r.Post("/payment/delete", payments.Delete(log, core))
+			r.Post("/payment/order", payments.Order(log, core))
+
+			//router.Get("/payment/ok", s.paymentSuccess)
+			//router.Get("/payment/ko", s.paymentFail)
+			//router.Post("/payment/notify", s.paymentNotify)
+
+			r.Get("/log/{name}", helper.Log(log, core))
+			r.Options("/*", helper.Options())
 		})
 
 		// requests without authorization token
 		r.Group(func(r chi.Router) {
+			r.Get("/ws", server.handleWs)
 			r.Get("/config/{name}", helper.Config(log, core))
 			r.Post("/users/authenticate", users.Authenticate(log, core))
-			//TODO: check usage, why not use auth token?
 			r.Post("/users/register", users.Register(log, core))
 		})
 	})
@@ -153,176 +125,16 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 	return &server
 }
 
-func (s *Server) SetAuth(auth services.Auth) {
-	s.auth = auth
-}
-
-func (s *Server) SetApiHandler(handler func(ac *internal.Call) ([]byte, int)) {
-	s.apiHandler = handler
-}
-
-func (s *Server) SetWsHandler(handler func(request *models.UserRequest) error) {
-	s.wsHandler = handler
-}
-
 func (s *Server) SetStatusReader(statusReader services.StatusReader) {
 	s.statusReader = statusReader
-}
-
-func (s *Server) SetPaymentsService(payments services.Payments) {
-	s.payments = payments
-}
-
-func (s *Server) Register(router *chi.Mux) {
-
-	//router.Get(route(readLog), s.readLog)
-	//
-	//router.Get(route(generateInvites), s.generateInvites)
-	//
-
-	//router.Options("/*path", s.options)
-	//router.Get(wsEndpoint, s.handleWs)
-}
-
-func route(path string) string {
-	return fmt.Sprintf("/api/%s/%s", apiVersion, path)
-}
-
-func (s *Server) paymentSaveMethod(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return
-	}
-	user := s.authorizeRequest(r)
-	if user == nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	err = s.payments.SavePaymentMethod(user, body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) paymentUpdateMethod(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return
-	}
-	user := s.authorizeRequest(r)
-	if user == nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	err = s.payments.UpdatePaymentMethod(user, body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) paymentDeleteMethod(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return
-	}
-	user := s.authorizeRequest(r)
-	if user == nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	err = s.payments.DeletePaymentMethod(user, body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) paymentSetOrder(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return
-	}
-	user := s.authorizeRequest(r)
-	if user == nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	order, err := s.payments.SetOrder(user, body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	err = json.NewEncoder(w).Encode(order)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-}
-
-func (s *Server) paymentSuccess(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) paymentFail(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	_ = s.payments.Notify([]byte(r.URL.RawQuery))
-	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) paymentNotify(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	err = s.payments.Notify(body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) options(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	w.Header().Add("Access-Control-Allow-Origin", r.Header.Get("Origin"))
-	w.Header().Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Add("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) handleApiRequest(w http.ResponseWriter, ac *internal.Call) {
-	if s.apiHandler != nil {
-		data, status := s.apiHandler(ac)
-		s.sendApiResponse(w, data, status)
-	}
-}
-
-func (s *Server) sendApiResponse(w http.ResponseWriter, data []byte, status int) {
-	w.Header().Add("Access-Control-Allow-Origin", "*")
-	w.Header().Add("Content-Type", "application/json; charset=utf-8")
-	if status >= 400 {
-		w.WriteHeader(status)
-	} else {
-
-		if status == http.StatusNoContent {
-			data = []byte("[]")
-		}
-
-		_, err := w.Write(data)
-		if err != nil {
-			s.log.Error("send api response", err)
-		}
-	}
 }
 
 func (s *Server) Start() error {
 	if s.conf == nil {
 		return fmt.Errorf("configuration not loaded")
+	}
+	if s.core == nil {
+		return fmt.Errorf("core handler not set")
 	}
 
 	s.pool = NewPool(s.log)
@@ -332,42 +144,23 @@ func (s *Server) Start() error {
 	go s.listenForUpdates()
 
 	serverAddress := fmt.Sprintf("%s:%s", s.conf.Listen.BindIP, s.conf.Listen.Port)
-	s.log.Info(fmt.Sprintf("starting on %s", serverAddress))
+	s.log.With(
+		slog.String("address", serverAddress),
+		slog.Bool("tls", s.conf.Listen.TLS),
+	).Info("starting server")
+
 	listener, err := net.Listen("tcp", serverAddress)
 	if err != nil {
 		return err
 	}
 
 	if s.conf.Listen.TLS {
-		s.log.Info("starting https TLS")
 		err = s.httpServer.ServeTLS(listener, s.conf.Listen.CertFile, s.conf.Listen.KeyFile)
 	} else {
-		s.log.Info("starting http")
 		err = s.httpServer.Serve(listener)
 	}
 
 	return err
-}
-
-func (s *Server) getToken(r *http.Request) string {
-	header := r.Header.Get("Authorization")
-	if strings.Contains(header, "Bearer") {
-		return strings.Replace(header, "Bearer ", "", 1)
-	}
-	return ""
-}
-
-func (s *Server) authorizeRequest(r *http.Request) *models.User {
-	token := s.getToken(r)
-	if token == "" {
-		return nil
-	}
-	user, err := s.auth.AuthenticateByToken(token)
-	if err != nil {
-		s.log.Error("authorize request", err)
-		return nil
-	}
-	return user
 }
 
 type SubscriptionType string
@@ -384,8 +177,8 @@ type Pool struct {
 	unregister chan *Client
 	clients    map[*Client]bool
 	broadcast  chan []byte
-	logEvent   chan *models.WsResponse
-	chpEvent   chan *models.WsResponse
+	logEvent   chan *entity.WsResponse
+	chpEvent   chan *entity.WsResponse
 	logger     *slog.Logger
 }
 
@@ -396,8 +189,8 @@ func NewPool(logger *slog.Logger) *Pool {
 		unregister: make(chan *Client),
 		clients:    make(map[*Client]bool),
 		broadcast:  make(chan []byte),
-		logEvent:   make(chan *models.WsResponse),
-		chpEvent:   make(chan *models.WsResponse),
+		logEvent:   make(chan *entity.WsResponse),
+		chpEvent:   make(chan *entity.WsResponse),
 		logger:     logger,
 	}
 }
@@ -407,7 +200,7 @@ func (p *Pool) Start() {
 		select {
 		case client := <-p.register:
 			p.clients[client] = true
-			client.sendResponse(models.Ping, "new connection")
+			client.sendResponse(entity.Ping, "new connection")
 		case client := <-p.unregister:
 			if _, ok := p.clients[client]; ok {
 				delete(p.clients, client)
@@ -439,8 +232,9 @@ func (p *Pool) Start() {
 
 type Client struct {
 	ws             *websocket.Conn
-	user           *models.User
+	user           *entity.User
 	auth           services.Auth
+	core           Core
 	statusReader   services.StatusReader // user state holder and transaction state reader
 	send           chan []byte           // served by writePump, sending messages to client
 	logger         *slog.Logger
@@ -449,7 +243,7 @@ type Client struct {
 	listeners      map[int]string // map of transaction state listeners, key is transaction id, value is user idTag
 	subscription   SubscriptionType
 	isClosed       bool
-	requestHandler func(request *models.UserRequest) error
+	requestHandler func(request *entity.UserRequest) error
 	mux            *sync.Mutex
 }
 
@@ -489,34 +283,29 @@ func (c *Client) readPump() {
 			continue
 		}
 
-		var userRequest models.UserRequest
+		var userRequest entity.UserRequest
 		err = json.Unmarshal(message, &userRequest)
 		if err != nil {
 			c.logger.Error("read pump: unmarshal", err)
-			c.sendResponse(models.Error, "invalid request")
-			continue
-		}
-
-		if c.auth == nil {
-			c.sendResponse(models.Error, "authorization not configured")
+			c.sendResponse(entity.Error, "invalid request")
 			continue
 		}
 
 		if userRequest.Token == "" {
-			c.sendResponse(models.Error, "token not found")
+			c.sendResponse(entity.Error, "token not found")
 			continue
 		}
 
 		if c.user == nil {
-			c.user, err = c.auth.AuthenticateByToken(userRequest.Token)
+			c.user, err = c.core.AuthenticateByToken(userRequest.Token)
 			if err != nil {
-				c.sendResponse(models.Error, fmt.Sprintf("check token: %v", err))
+				c.sendResponse(entity.Error, fmt.Sprintf("check token: %v", err))
 				continue
 			}
 
-			c.id, err = c.auth.GetUserTag(c.user)
+			c.id, err = c.core.UserTag(c.user)
 			if err != nil {
-				c.sendResponse(models.Error, fmt.Sprintf("get user tag: %v", err))
+				c.sendResponse(entity.Error, fmt.Sprintf("get user tag: %v", err))
 				continue
 			}
 		}
@@ -530,23 +319,23 @@ func (c *Client) readPump() {
 		}
 
 		switch userRequest.Command {
-		case models.StartTransaction:
-			timeStart, err := c.statusReader.SaveStatus(c.id, models.StageStart, -1)
+		case entity.StartTransaction:
+			timeStart, err := c.statusReader.SaveStatus(c.id, entity.StageStart, -1)
 			if err == nil {
 				go c.listenForTransactionStart(timeStart)
 			}
-		case models.StopTransaction:
-			timeStart, err := c.statusReader.SaveStatus(c.id, models.StageStop, userRequest.TransactionId)
+		case entity.StopTransaction:
+			timeStart, err := c.statusReader.SaveStatus(c.id, entity.StageStop, userRequest.TransactionId)
 			if err == nil {
 				go c.listenForTransactionStop(timeStart, userRequest.TransactionId)
 			}
-		case models.CheckStatus:
+		case entity.CheckStatus:
 			userState, ok := c.statusReader.GetStatus(c.id)
 			if ok {
 				c.restoreUserState(userState)
 			}
-		case models.ListenTransaction:
-			_, err := c.statusReader.SaveStatus(c.id, models.StageListen, userRequest.TransactionId)
+		case entity.ListenTransaction:
+			_, err := c.statusReader.SaveStatus(c.id, entity.StageListen, userRequest.TransactionId)
 			if err != nil {
 				c.logger.Error("read pump: save status Listen", err)
 			}
@@ -557,18 +346,18 @@ func (c *Client) readPump() {
 				c.mux.Unlock()
 				go c.listenForTransactionState(userRequest.TransactionId)
 			}
-		case models.StopListenTransaction:
+		case entity.StopListenTransaction:
 			c.mux.Lock()
 			delete(c.listeners, userRequest.TransactionId)
 			c.mux.Unlock()
-		case models.ListenLog:
+		case entity.ListenLog:
 			c.setSubscription(LogEvent)
-		case models.ListenChargePoints:
+		case entity.ListenChargePoints:
 			c.setSubscription(ChargePointEvent)
-		case models.PingConnection:
-			c.sendResponse(models.Success, fmt.Sprintf("ping %s", utility.Secret(c.id)))
+		case entity.PingConnection:
+			c.sendResponse(entity.Success, fmt.Sprintf("ping %s", utility.Secret(c.id)))
 		default:
-			c.sendResponse(models.Success, "request handled")
+			c.sendResponse(entity.Success, "request handled")
 		}
 
 	}
@@ -580,13 +369,13 @@ func (c *Client) setSubscription(subscription SubscriptionType) {
 	c.subscription = subscription
 }
 
-func (c *Client) restoreUserState(userState *models.UserStatus) {
+func (c *Client) restoreUserState(userState *entity.UserStatus) {
 	switch userState.Stage {
-	case models.StageStart:
+	case entity.StageStart:
 		go c.listenForTransactionStart(userState.Time)
-	case models.StageStop:
+	case entity.StageStop:
 		go c.listenForTransactionStop(userState.Time, userState.TransactionId)
-	case models.StageListen:
+	case entity.StageListen:
 		_, ok := c.listeners[userState.TransactionId]
 		if !ok {
 			c.mux.Lock()
@@ -629,24 +418,24 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 				continue
 			}
 			if transaction.TransactionId > -1 {
-				c.wsResponse(&models.WsResponse{
-					Status: models.Success,
-					Stage:  models.Start,
+				c.wsResponse(&entity.WsResponse{
+					Status: entity.Success,
+					Stage:  entity.Start,
 					Info:   fmt.Sprintf("transaction started: %v", transaction.TransactionId),
 				})
 				return
 			} else {
 				seconds := int(time.Since(timeStart).Seconds())
 				progress := seconds * 100 / maxTimeout
-				c.wsResponse(&models.WsResponse{
-					Status:   models.Waiting,
-					Stage:    models.Start,
+				c.wsResponse(&entity.WsResponse{
+					Status:   entity.Waiting,
+					Stage:    entity.Start,
 					Info:     fmt.Sprintf("waiting %vs; %v%%", seconds, progress),
 					Progress: progress,
 				})
 			}
 		case <-pause.C:
-			c.sendResponse(models.Error, "timeout")
+			c.sendResponse(entity.Error, "timeout")
 			return
 		}
 	}
@@ -684,24 +473,24 @@ func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int
 				continue
 			}
 			if transaction.IsFinished {
-				c.wsResponse(&models.WsResponse{
-					Status: models.Success,
-					Stage:  models.Stop,
+				c.wsResponse(&entity.WsResponse{
+					Status: entity.Success,
+					Stage:  entity.Stop,
 					Info:   fmt.Sprintf("transaction stopped: %v", transaction.TransactionId),
 				})
 				return
 			} else {
 				seconds := int(time.Since(timeStart).Seconds())
 				progress := seconds * 100 / maxTimeout
-				c.wsResponse(&models.WsResponse{
-					Status:   models.Waiting,
-					Stage:    models.Stop,
+				c.wsResponse(&entity.WsResponse{
+					Status:   entity.Waiting,
+					Stage:    entity.Stop,
 					Info:     fmt.Sprintf("waiting %vs; %v%%", seconds, progress),
 					Progress: progress,
 				})
 			}
 		case <-pause.C:
-			c.sendResponse(models.Error, "timeout")
+			c.sendResponse(entity.Error, "timeout")
 			return
 		}
 	}
@@ -742,9 +531,9 @@ func (c *Client) listenForTransactionState(transactionId int) {
 			errorCounter = 0
 			for _, value := range values {
 				value.Timestamp = value.Time.Unix()
-				c.wsResponse(&models.WsResponse{
-					Status:          models.Value,
-					Stage:           models.Info,
+				c.wsResponse(&entity.WsResponse{
+					Status:          entity.Value,
+					Stage:           entity.Info,
 					Info:            value.Unit,
 					Progress:        value.Value, // for compatibility with old clients
 					Power:           value.Value,
@@ -795,9 +584,9 @@ func (c *Client) listenForLogUpdates() {
 						c.logger.Error("marshal message", err)
 						continue
 					}
-					c.wsResponse(&models.WsResponse{
-						Status: models.Success,
-						Stage:  models.Info,
+					c.wsResponse(&entity.WsResponse{
+						Status: entity.Success,
+						Stage:  entity.Info,
 						Data:   string(data),
 					})
 				}
@@ -829,9 +618,9 @@ func (s *Server) listenForUpdates() {
 				for _, message := range messages {
 
 					if len(message.ChargePointId) > 1 {
-						s.pool.chpEvent <- &models.WsResponse{
-							Status: models.Event,
-							Stage:  models.ChargePointEvent,
+						s.pool.chpEvent <- &entity.WsResponse{
+							Status: entity.Event,
+							Stage:  entity.ChargePointEvent,
 							Data:   message.ChargePointId,
 							Info:   message.Text,
 						}
@@ -842,9 +631,9 @@ func (s *Server) listenForUpdates() {
 						s.log.Error("marshal log message", err)
 						continue
 					}
-					s.pool.logEvent <- &models.WsResponse{
-						Status: models.Event,
-						Stage:  models.LogEvent,
+					s.pool.logEvent <- &entity.WsResponse{
+						Status: entity.Event,
+						Stage:  entity.LogEvent,
 						Data:   string(data),
 						Info:   message.Text,
 					}
@@ -855,16 +644,16 @@ func (s *Server) listenForUpdates() {
 	}
 }
 
-func (c *Client) sendResponse(status models.ResponseStatus, info string) {
-	response := &models.WsResponse{
+func (c *Client) sendResponse(status entity.ResponseStatus, info string) {
+	response := &entity.WsResponse{
 		Status: status,
 		Info:   info,
-		Stage:  models.Info,
+		Stage:  entity.Info,
 	}
 	c.wsResponse(response)
 }
 
-func (c *Client) wsResponse(response *models.WsResponse) {
+func (c *Client) wsResponse(response *entity.WsResponse) {
 	if c.isClosed {
 		return
 	}
@@ -884,7 +673,7 @@ func (c *Client) close() {
 	}
 }
 
-func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (s *Server) handleWs(w http.ResponseWriter, r *http.Request) {
 	ws, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		s.log.Error("upgrade http to websocket", err)
@@ -893,7 +682,7 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request, _ httprouter.P
 
 	client := &Client{
 		ws:             ws,
-		auth:           s.auth,
+		core:           s.core,
 		statusReader:   s.statusReader,
 		send:           make(chan []byte, 256),
 		logger:         s.log,

@@ -1,7 +1,7 @@
 package services
 
-import "evsys-back/models"
+import "evsys-back/entity"
 
 type CentralSystemService interface {
-	SendCommand(command *models.CentralSystemCommand) (string, error)
+	SendCommand(command *entity.CentralSystemCommand) (string, error)
 }

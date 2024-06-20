@@ -1,10 +1,10 @@
 package authenticate
 
 import (
+	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
-	"evsys-back/models"
 	"fmt"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
@@ -15,13 +15,13 @@ import (
 )
 
 type Authenticate interface {
-	AuthenticateByToken(token string) (*models.User, error)
+	AuthenticateByToken(token string) (*entity.User, error)
 }
 
 func New(log *slog.Logger, auth Authenticate) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		mod := sl.Module("middleware.authenticate")
-		log.With(mod).Info("authenticate middleware initialized")
+		//log.With(mod).Info("authenticate middleware initialized")
 
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			id := middleware.GetReqID(r.Context())

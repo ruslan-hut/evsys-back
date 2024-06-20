@@ -3,7 +3,7 @@ package internal
 import (
 	"encoding/base64"
 	"encoding/json"
-	"evsys-back/models"
+	"evsys-back/entity"
 	"evsys-back/services"
 	"fmt"
 	"net/url"
@@ -51,7 +51,7 @@ func (p *Payments) Notify(data []byte) error {
 		return err
 	}
 
-	paymentResult := models.PaymentResult{
+	paymentResult := entity.PaymentResult{
 		SignatureVersion: params.Get("Ds_SignatureVersion"),
 		Parameters:       params.Get("Ds_MerchantParameters"),
 		Signature:        params.Get("Ds_Signature"),
@@ -66,7 +66,7 @@ func (p *Payments) Notify(data []byte) error {
 	return nil
 }
 
-func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
+func (p *Payments) processNotifyData(paymentResult *entity.PaymentResult) {
 
 	var jsonBytes, err = base64.StdEncoding.DecodeString(paymentResult.Parameters)
 	if err != nil {
@@ -76,7 +76,7 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 	}
 	//p.logger.Info(fmt.Sprintf("Ds_MerchantParameters: %s", string(jsonBytes)))
 
-	var params models.PaymentParameters
+	var params entity.PaymentParameters
 	err = json.Unmarshal(jsonBytes, &params)
 	if err != nil {
 		p.logger.Error("parameters: unmarshal json", err)
@@ -154,7 +154,7 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 
 	} else {
 
-		paymentMethod := models.PaymentMethod{
+		paymentMethod := entity.PaymentMethod{
 			Description: "**** **** **** ****",
 			Identifier:  params.MerchantIdentifier,
 			CardBrand:   params.CardBrand,
@@ -173,7 +173,7 @@ func (p *Payments) processNotifyData(paymentResult *models.PaymentResult) {
 
 }
 
-func (p *Payments) checkPaymentResult(result *models.PaymentParameters) error {
+func (p *Payments) checkPaymentResult(result *entity.PaymentParameters) error {
 	if result.TransactionType == "0" {
 		if result.Response != "0000" {
 			return fmt.Errorf("code %s", result.Response)
@@ -189,7 +189,7 @@ func (p *Payments) checkPaymentResult(result *models.PaymentParameters) error {
 	return fmt.Errorf("code %s; transaction type %s", result.Response, result.TransactionType)
 }
 
-func (p *Payments) SavePaymentMethod(user *models.User, data []byte) error {
+func (p *Payments) SavePaymentMethod(user *entity.User, data []byte) error {
 	p.Lock()
 	defer p.Unlock()
 
@@ -210,7 +210,7 @@ func (p *Payments) SavePaymentMethod(user *models.User, data []byte) error {
 	return nil
 }
 
-func (p *Payments) UpdatePaymentMethod(user *models.User, data []byte) error {
+func (p *Payments) UpdatePaymentMethod(user *entity.User, data []byte) error {
 	p.Lock()
 	defer p.Unlock()
 
@@ -229,7 +229,7 @@ func (p *Payments) UpdatePaymentMethod(user *models.User, data []byte) error {
 	return nil
 }
 
-func (p *Payments) DeletePaymentMethod(user *models.User, data []byte) error {
+func (p *Payments) DeletePaymentMethod(user *entity.User, data []byte) error {
 	p.Lock()
 	defer p.Unlock()
 
@@ -252,11 +252,11 @@ func (p *Payments) DeletePaymentMethod(user *models.User, data []byte) error {
 	return nil
 }
 
-func (p *Payments) SetOrder(user *models.User, data []byte) (*models.PaymentOrder, error) {
+func (p *Payments) SetOrder(user *entity.User, data []byte) (*entity.PaymentOrder, error) {
 	p.Lock()
 	defer p.Unlock()
 
-	var order models.PaymentOrder
+	var order entity.PaymentOrder
 	err := json.Unmarshal(data, &order)
 	if err != nil {
 		p.logger.Error("order: unmarshal json", err)
@@ -298,8 +298,8 @@ func (p *Payments) SetOrder(user *models.User, data []byte) (*models.PaymentOrde
 }
 
 // unmarshall payment method from bytes
-func (p *Payments) unmarshallPaymentMethod(data []byte) (*models.PaymentMethod, error) {
-	var paymentMethod models.PaymentMethod
+func (p *Payments) unmarshallPaymentMethod(data []byte) (*entity.PaymentMethod, error) {
+	var paymentMethod entity.PaymentMethod
 	err := json.Unmarshal(data, &paymentMethod)
 	if err != nil {
 		p.logger.Info(fmt.Sprintf("method data: %s", string(data)))

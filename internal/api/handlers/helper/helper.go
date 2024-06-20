@@ -13,6 +13,7 @@ import (
 
 type Helper interface {
 	GetConfig(name string) (interface{}, error)
+	GetLog(name string) (interface{}, error)
 }
 
 func Config(logger *slog.Logger, handler Helper) http.HandlerFunc {
@@ -36,5 +37,38 @@ func Config(logger *slog.Logger, handler Helper) http.HandlerFunc {
 		log.Info("get config success")
 
 		render.JSON(w, r, data)
+	}
+}
+
+func Log(logger *slog.Logger, handler Helper) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		name := chi.URLParam(r, "name")
+
+		log := logger.With(
+			sl.Module("handlers.helper"),
+			slog.String("name", name),
+			slog.String("request_id", middleware.GetReqID(r.Context())),
+		)
+
+		data, err := handler.GetLog(name)
+		if err != nil {
+			log.Error("get log", sl.Err(err))
+			render.Status(r, 204)
+			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get log: %v", err)))
+			return
+		}
+		log.Info("get log")
+
+		render.JSON(w, r, data)
+	}
+}
+
+func Options() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+		w.Header().Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Add("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.WriteHeader(http.StatusOK)
 	}
 }

@@ -1,10 +1,10 @@
 package users
 
 import (
+	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
-	"evsys-back/models"
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -14,11 +14,11 @@ import (
 )
 
 type Users interface {
-	AuthenticateByToken(token string) (*models.User, error)
-	AuthenticateUser(username, password string) (*models.User, error)
-	AddUser(user *models.User) (*models.User, error)
-	GetUser(accessLevel int, username string) (*models.User, error)
-	GetUsers(accessLevel int, role string) ([]*models.User, error)
+	AuthenticateByToken(token string) (*entity.User, error)
+	AuthenticateUser(username, password string) (*entity.User, error)
+	AddUser(user *entity.User) (*entity.User, error)
+	GetUser(author *entity.User, username string) (*entity.UserInfo, error)
+	GetUsers(accessLevel int, role string) ([]*entity.User, error)
 }
 
 func Authenticate(logger *slog.Logger, handler Users) http.HandlerFunc {
@@ -28,7 +28,7 @@ func Authenticate(logger *slog.Logger, handler Users) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
-		var user models.User
+		var user entity.User
 		if err := render.Bind(r, &user); err != nil {
 			log.Error("decode user data", sl.Err(err))
 			render.Status(r, 400)
@@ -65,7 +65,7 @@ func Register(logger *slog.Logger, handler Users) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
-		var user models.User
+		var user entity.User
 		if err := render.Bind(r, &user); err != nil {
 			log.Error("decode user data", sl.Err(err))
 			render.Status(r, 400)
@@ -101,7 +101,7 @@ func Info(logger *slog.Logger, handler Users) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
-		data, err := handler.GetUser(user.AccessLevel, name)
+		data, err := handler.GetUser(user, name)
 		if err != nil {
 			log.Error("get user", sl.Err(err))
 			render.Status(r, 400)

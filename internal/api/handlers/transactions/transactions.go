@@ -25,7 +25,7 @@ func ListActive(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 
 		log := logger.With(
 			sl.Module("handlers.transactions"),
-			slog.With("user", user.Username),
+			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
@@ -50,7 +50,7 @@ func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 
 		log := logger.With(
 			sl.Module("handlers.transactions"),
-			slog.With("user", user.Username),
+			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
 			slog.String("period", period),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
@@ -76,7 +76,7 @@ func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 
 		log := logger.With(
 			sl.Module("handlers.transactions"),
-			slog.With("user", user.Username),
+			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
 			slog.Int("access_level", user.AccessLevel),
 			slog.String("id", id),

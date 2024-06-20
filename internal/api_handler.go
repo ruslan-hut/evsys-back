@@ -2,7 +2,7 @@ package internal
 
 import (
 	"encoding/json"
-	"evsys-back/models"
+	"evsys-back/entity"
 	"evsys-back/services"
 	"fmt"
 	"net/http"
@@ -163,7 +163,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("get users: %s", err))
 			status = http.StatusNoContent
-			data = []models.User{}
+			data = []entity.User{}
 		}
 	case GenerateInvites:
 		data, err = h.auth.GenerateInvites(5)
@@ -186,7 +186,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 			status = http.StatusNoContent
 		}
 	case ChargePointUpdate:
-		chp, err := models.GetChargePointFromPayload(ac.Payload)
+		chp, err := entity.GetChargePointFromPayload(ac.Payload)
 		if err != nil {
 			h.logger.Error("decoding charge point", err)
 			h.logger.Info(fmt.Sprintf("%s", ac.Payload))
@@ -211,7 +211,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		if err != nil {
 			h.logger.Warn(fmt.Sprintf("no payment methods for %s", username))
 			status = http.StatusNoContent
-			data = []models.PaymentMethod{}
+			data = []entity.PaymentMethod{}
 		}
 	case ActiveTransactions:
 		data, err = h.database.GetActiveTransactions(userId)
@@ -234,7 +234,7 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 		//**************************************************
 		// billing transactions is disabled for client app
 		status = http.StatusNoContent
-		data = []models.Transaction{}
+		data = []entity.Transaction{}
 		//**************************************************
 	case TransactionInfo:
 		id, err := strconv.Atoi(string(ac.Payload))
@@ -286,8 +286,8 @@ func (h *Handler) HandleApiCall(ac *Call) ([]byte, int) {
 	return byteData, status
 }
 
-func (h *Handler) unmarshallUserData(data []byte) (*models.User, error) {
-	var user models.User
+func (h *Handler) unmarshallUserData(data []byte) (*entity.User, error) {
+	var user entity.User
 	err := json.Unmarshal(data, &user)
 	if err != nil {
 		return nil, err
@@ -295,8 +295,8 @@ func (h *Handler) unmarshallUserData(data []byte) (*models.User, error) {
 	return &user, nil
 }
 
-func (h *Handler) handleCentralSystemCommand(payload []byte) (*models.CentralSystemResponse, error) {
-	var command models.CentralSystemCommand
+func (h *Handler) handleCentralSystemCommand(payload []byte) (*entity.CentralSystemResponse, error) {
+	var command entity.CentralSystemCommand
 	err := json.Unmarshal(payload, &command)
 	if err != nil {
 		return nil, fmt.Errorf("decoding central system command: %s", err)
@@ -304,10 +304,10 @@ func (h *Handler) handleCentralSystemCommand(payload []byte) (*models.CentralSys
 	if h.centralSystem == nil {
 		return nil, fmt.Errorf("central system is not connected")
 	}
-	response := models.NewCentralSystemResponse(command.ChargePointId, command.ConnectorId)
+	response := entity.NewCentralSystemResponse(command.ChargePointId, command.ConnectorId)
 	result, err := h.centralSystem.SendCommand(&command)
 	if err != nil {
-		response.Status = models.Error
+		response.Status = entity.Error
 		response.Info = err.Error()
 		return response, nil
 	}
@@ -316,36 +316,36 @@ func (h *Handler) handleCentralSystemCommand(payload []byte) (*models.CentralSys
 }
 
 // HandleUserRequest handler for requests made via websocket
-func (h *Handler) HandleUserRequest(request *models.UserRequest) error {
+func (h *Handler) HandleUserRequest(request *entity.UserRequest) error {
 	var err error
 
 	if h.centralSystem == nil {
 		return fmt.Errorf("central system is not connected")
 	}
 
-	command := models.CentralSystemCommand{
+	command := entity.CentralSystemCommand{
 		ChargePointId: request.ChargePointId,
 		ConnectorId:   request.ConnectorId,
 	}
 
 	switch request.Command {
-	case models.StartTransaction:
+	case entity.StartTransaction:
 		command.FeatureName = "RemoteStartTransaction"
 		command.Payload = request.Token
-	case models.StopTransaction:
+	case entity.StopTransaction:
 		command.FeatureName = "RemoteStopTransaction"
 		command.Payload = fmt.Sprintf("%d", request.TransactionId)
-	case models.CheckStatus:
+	case entity.CheckStatus:
 		return nil
-	case models.ListenTransaction:
+	case entity.ListenTransaction:
 		return nil
-	case models.StopListenTransaction:
+	case entity.StopListenTransaction:
 		return nil
-	case models.ListenChargePoints:
+	case entity.ListenChargePoints:
 		return nil
-	case models.ListenLog:
+	case entity.ListenLog:
 		return nil
-	case models.PingConnection:
+	case entity.PingConnection:
 		return nil
 	default:
 		return fmt.Errorf("unknown command %s", request.Command)
