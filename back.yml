@@ -1,12 +1,12 @@
 ---
 
-is_debug: false
+env: dev
 time_zone: ${TIME_ZONE}
 log_records: 5000
 firebase_key: ${FIREBASE_KEY}
 listen:
   type: port
-  bind_ip: 0.0.0.0
+  bind_ip: 127.0.0.1
   port: ${PORT}
   tls_enabled: ${TLS_ENABLED}
   cert_file: ${CERT_FILE}
