@@ -32,7 +32,6 @@ type Server struct {
 	httpServer   *http.Server
 	core         Core
 	statusReader services.StatusReader
-	payments     services.Payments
 	log          *slog.Logger
 	upgrader     websocket.Upgrader
 	pool         *Pool
@@ -235,7 +234,6 @@ func (p *Pool) Start() {
 type Client struct {
 	ws           *websocket.Conn
 	user         *entity.User
-	auth         services.Auth
 	core         Core
 	statusReader services.StatusReader // user state holder and transaction state reader
 	send         chan []byte           // served by writePump, sending messages to client

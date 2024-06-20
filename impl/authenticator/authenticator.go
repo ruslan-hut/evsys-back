@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/sl"
-	"evsys-back/services"
 	"evsys-back/utility"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
@@ -37,10 +36,14 @@ type Repository interface {
 	GetUsers() ([]*entity.User, error)
 }
 
+type FirebaseAuth interface {
+	CheckToken(token string) (string, error)
+}
+
 type Authenticator struct {
 	logger   *slog.Logger
 	database Repository
-	firebase services.FirebaseAuth
+	firebase FirebaseAuth
 	mux      *sync.Mutex
 }
 
@@ -52,7 +55,7 @@ func New(log *slog.Logger, repo Repository) *Authenticator {
 	}
 }
 
-func (a *Authenticator) SetFirebase(firebase services.FirebaseAuth) {
+func (a *Authenticator) SetFirebase(firebase FirebaseAuth) {
 	a.firebase = firebase
 }
 
