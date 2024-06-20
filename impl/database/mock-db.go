@@ -13,10 +13,6 @@ func NewMockDB() *MockDB {
 	return &MockDB{}
 }
 
-func (db *MockDB) WriteLogMessage(data services.Data) error {
-	return nil
-}
-
 func (db *MockDB) ReadLog(logName string) (interface{}, error) {
 	return nil, nil
 }

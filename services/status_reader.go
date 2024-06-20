@@ -5,6 +5,9 @@ import (
 	"time"
 )
 
+const LogMessageType = "logMessage"
+const FeatureMessageType = "featureMessage"
+
 type StatusReader interface {
 	GetTransactionAfter(userId string, after time.Time) (*entity.Transaction, error)
 	GetTransaction(transactionId int) (*entity.Transaction, error)
@@ -15,6 +18,14 @@ type StatusReader interface {
 	ClearStatus(userId string)
 
 	ReadLogAfter(timeStart time.Time) ([]*FeatureMessage, error)
+}
+
+type LogMessage struct {
+	Time      string    `json:"time" bson:"time"`
+	Level     string    `json:"level" bson:"level"`
+	Category  string    `json:"category" bson:"category"`
+	Text      string    `json:"text" bson:"text"`
+	Timestamp time.Time `json:"timestamp" bson:"timestamp"`
 }
 
 type FeatureMessage struct {

@@ -79,28 +79,6 @@ func NewMongoClient(conf *config.Config) (*MongoDB, error) {
 	return client, nil
 }
 
-func (m *MongoDB) Write(table string, data services.Data) error {
-	connection, err := m.connect()
-	if err != nil {
-		return err
-	}
-	defer m.disconnect(connection)
-	collection := connection.Database(m.database).Collection(table)
-	_, err = collection.InsertOne(m.ctx, data)
-	return err
-}
-
-func (m *MongoDB) WriteLogMessage(data services.Data) error {
-	connection, err := m.connect()
-	if err != nil {
-		return err
-	}
-	defer m.disconnect(connection)
-	collection := connection.Database(m.database).Collection(collectionBackLog)
-	_, err = collection.InsertOne(m.ctx, data)
-	return err
-}
-
 func (m *MongoDB) read(table, dataType string) (interface{}, error) {
 	connection, err := m.connect()
 	if err != nil {

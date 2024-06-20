@@ -90,6 +90,6 @@ func main() {
 
 	err = server.Start()
 	if err != nil {
-		log.Error("server start", err)
+		log.Error("server start", sl.Err(err))
 	}
 }
