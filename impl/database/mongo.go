@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"errors"
 	"evsys-back/config"
 	"evsys-back/entity"
 	"fmt"
@@ -56,6 +57,13 @@ func (m *MongoDB) disconnect(connection *mongo.Client) {
 	}
 }
 
+func (m *MongoDB) findError(err error) error {
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil
+	}
+	return fmt.Errorf("mongodb find error: %w", err)
+}
+
 func NewMongoClient(conf *config.Config) (*MongoDB, error) {
 	if !conf.Mongo.Enabled {
 		return nil, nil
@@ -106,7 +114,7 @@ func (m *MongoDB) read(table, dataType string) (interface{}, error) {
 	}
 	cursor, err := collection.Find(m.ctx, filter, opts)
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	if err = cursor.All(m.ctx, &logMessages); err != nil {
 		return nil, err
@@ -146,7 +154,7 @@ func (m *MongoDB) ReadLogAfter(timeStart time.Time) ([]*entity.FeatureMessage, e
 	var result []*entity.FeatureMessage
 	err = cursor.All(m.ctx, &result)
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return result, nil
 }
@@ -163,7 +171,7 @@ func (m *MongoDB) GetConfig(name string) (interface{}, error) {
 	var configData interface{}
 	err = collection.FindOne(m.ctx, filter).Decode(&configData)
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return configData, nil
 }
@@ -179,7 +187,7 @@ func (m *MongoDB) GetUser(username string) (*entity.User, error) {
 	var userData entity.User
 	err = collection.FindOne(m.ctx, filter).Decode(&userData)
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return &userData, nil
 }
@@ -229,10 +237,10 @@ func (m *MongoDB) GetUserInfo(_ int, username string) (*entity.UserInfo, error) 
 	var info entity.UserInfo
 	cursor, err := collection.Aggregate(m.ctx, pipeline)
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	if cursor.Next(m.ctx) {
-		if err := cursor.Decode(&info); err != nil {
+		if err = cursor.Decode(&info); err != nil {
 			return nil, err
 		}
 	} else {
@@ -254,7 +262,7 @@ func (m *MongoDB) GetUsers() ([]*entity.User, error) {
 	var users []*entity.User
 	cursor, err := collection.Find(m.ctx, filter, options.Find().SetProjection(projection))
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	if err = cursor.All(m.ctx, &users); err != nil {
 		return nil, err
@@ -274,7 +282,7 @@ func (m *MongoDB) GetUserById(userId string) (*entity.User, error) {
 	var userData entity.User
 	err = collection.FindOne(m.ctx, filter).Decode(&userData)
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return &userData, nil
 }
@@ -291,7 +299,7 @@ func (m *MongoDB) GetUserTags(userId string) ([]entity.UserTag, error) {
 	var userTags []entity.UserTag
 	cursor, err := collection.Find(m.ctx, filter)
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	if err = cursor.All(m.ctx, &userTags); err != nil {
 		return nil, err
@@ -310,7 +318,7 @@ func (m *MongoDB) GetUserTag(idTag string) (*entity.UserTag, error) {
 	filter := bson.D{{"id_tag", idTag}}
 	var userTag entity.UserTag
 	if err = collection.FindOne(m.ctx, filter).Decode(&userTag); err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return &userTag, nil
 }
@@ -464,7 +472,7 @@ func (m *MongoDB) GetChargePoints(level int, searchTerm string) ([]*entity.Charg
 	var chargePoints []*entity.ChargePoint
 	cursor, err := collection.Aggregate(m.ctx, pipeline)
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	if err = cursor.All(m.ctx, &chargePoints); err != nil {
 		return nil, err
@@ -496,10 +504,10 @@ func (m *MongoDB) GetChargePoint(level int, id string) (*entity.ChargePoint, err
 	var chargePoint entity.ChargePoint
 	cursor, err := collection.Aggregate(m.ctx, pipeline)
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	if cursor.Next(m.ctx) {
-		if err := cursor.Decode(&chargePoint); err != nil {
+		if err = cursor.Decode(&chargePoint); err != nil {
 			return nil, err
 		}
 	} else {
@@ -562,7 +570,7 @@ func (m *MongoDB) GetConnector(chargePointId string, connectorId int) (*entity.C
 	filter := bson.D{{"charge_point_id", chargePointId}, {"connector_id", connectorId}}
 	var connector entity.Connector
 	if err = collection.FindOne(m.ctx, filter).Decode(&connector); err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return &connector, nil
 }
@@ -667,7 +675,7 @@ func (m *MongoDB) GetTransaction(id int) (*entity.Transaction, error) {
 	filter := bson.D{{"transaction_id", id}}
 	var transaction entity.Transaction
 	if err = collection.FindOne(m.ctx, filter).Decode(&transaction); err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return &transaction, nil
 }
@@ -727,7 +735,7 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]*entity.ChargeState, e
 	var transactions []entity.Transaction
 	cursor, err := collection.Find(m.ctx, filter)
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	if err = cursor.All(m.ctx, &transactions); err != nil {
 		return nil, err
@@ -778,7 +786,7 @@ func (m *MongoDB) GetTransactionsToBill(userId string) ([]*entity.Transaction, e
 	var transactions []*entity.Transaction
 	cursor, err := collection.Find(m.ctx, filter)
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	if err = cursor.All(m.ctx, &transactions); err != nil {
 		return nil, err
@@ -830,7 +838,7 @@ func (m *MongoDB) GetTransactions(userId string, period string) ([]*entity.Trans
 	}
 
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	if err = cursor.All(m.ctx, &transactions); err != nil {
 		return nil, err
@@ -852,7 +860,7 @@ func (m *MongoDB) GetTransactionByTag(idTag string, timeStart time.Time) (*entit
 	}
 	var transaction entity.Transaction
 	if err = collection.FindOne(m.ctx, filter).Decode(&transaction); err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return &transaction, nil
 }
@@ -871,7 +879,7 @@ func (m *MongoDB) GetLastMeterValue(transactionId int) (*entity.TransactionMeter
 	}
 	var value entity.TransactionMeter
 	if err = collection.FindOne(m.ctx, filter, options.FindOne().SetSort(bson.D{{"time", -1}})).Decode(&value); err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return &value, nil
 }
@@ -896,7 +904,7 @@ func (m *MongoDB) GetMeterValues(transactionId int, from time.Time) ([]*entity.T
 	}
 	var meterValues []*entity.TransactionMeter
 	if err = cursor.All(m.ctx, &meterValues); err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return meterValues, nil
 }
@@ -969,7 +977,7 @@ func (m *MongoDB) GetPaymentParameters(orderId string) (*entity.PaymentParameter
 	filter := bson.D{{"order", orderId}}
 	var paymentParameters entity.PaymentParameters
 	if err = collection.FindOne(m.ctx, filter).Decode(&paymentParameters); err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return &paymentParameters, nil
 }
@@ -1076,7 +1084,7 @@ func (m *MongoDB) GetPaymentMethods(userId string) ([]*entity.PaymentMethod, err
 	var paymentMethods []*entity.PaymentMethod
 	cursor, err := collection.Find(m.ctx, filter)
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	if err = cursor.All(m.ctx, &paymentMethods); err != nil {
 		return nil, err
@@ -1096,7 +1104,7 @@ func (m *MongoDB) GetPaymentMethod(identifier, userId string) (*entity.PaymentMe
 	filter := bson.D{{"identifier", identifier}, {"user_id", userId}}
 	var paymentMethod entity.PaymentMethod
 	if err = collection.FindOne(m.ctx, filter).Decode(&paymentMethod); err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return &paymentMethod, nil
 }
@@ -1112,7 +1120,7 @@ func (m *MongoDB) GetLastOrder() (*entity.PaymentOrder, error) {
 	filter := bson.D{}
 	var order entity.PaymentOrder
 	if err = collection.FindOne(m.ctx, filter, options.FindOne().SetSort(bson.D{{"time_opened", -1}})).Decode(&order); err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return &order, nil
 }
@@ -1145,7 +1153,7 @@ func (m *MongoDB) GetPaymentOrder(id int) (*entity.PaymentOrder, error) {
 	filter := bson.D{{"order", id}}
 	var order entity.PaymentOrder
 	if err = collection.FindOne(m.ctx, filter).Decode(&order); err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	return &order, nil
 }
@@ -1260,7 +1268,7 @@ func (m *MongoDB) GetLocations() ([]*entity.Location, error) {
 	collection := connection.Database(m.database).Collection(collectionLocations)
 	cursor, err := collection.Aggregate(m.ctx, pipeline)
 	if err != nil {
-		return nil, err
+		return nil, m.findError(err)
 	}
 	var locations []*entity.Location
 	if err = cursor.All(m.ctx, &locations); err != nil {
