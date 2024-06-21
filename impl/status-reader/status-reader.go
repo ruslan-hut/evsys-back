@@ -3,7 +3,6 @@ package statusreader
 import (
 	"evsys-back/entity"
 	"evsys-back/internal/lib/sl"
-	"evsys-back/services"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -14,7 +13,7 @@ type Repository interface {
 	GetTransactionByTag(userId string, after time.Time) (*entity.Transaction, error)
 	GetTransaction(transactionId int) (*entity.Transaction, error)
 	GetMeterValues(transactionId int, from time.Time) ([]*entity.TransactionMeter, error)
-	ReadLogAfter(timeStart time.Time) ([]*services.FeatureMessage, error)
+	ReadLogAfter(timeStart time.Time) ([]*entity.FeatureMessage, error)
 }
 
 type StatusReader struct {
@@ -94,7 +93,7 @@ func (sr *StatusReader) GetLastMeterValues(transactionId int, from time.Time) ([
 	return meter, nil
 }
 
-func (sr *StatusReader) ReadLogAfter(timeStart time.Time) ([]*services.FeatureMessage, error) {
+func (sr *StatusReader) ReadLogAfter(timeStart time.Time) ([]*entity.FeatureMessage, error) {
 	if sr.database == nil {
 		return nil, fmt.Errorf("database is not set for status reader")
 	}

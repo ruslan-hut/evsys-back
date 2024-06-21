@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/sl"
-	"evsys-back/utility"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
 	"log/slog"
@@ -48,6 +47,10 @@ type Authenticator struct {
 }
 
 func New(log *slog.Logger, repo Repository) *Authenticator {
+	if repo == nil {
+		log.Error("authenticator init failed: nil repository")
+		return nil
+	}
 	return &Authenticator{
 		database: repo,
 		logger:   log.With(sl.Module("impl.authenticator")),
@@ -62,9 +65,6 @@ func (a *Authenticator) SetFirebase(firebase FirebaseAuth) {
 func (a *Authenticator) AuthenticateByToken(token string) (*entity.User, error) {
 	if token == "" {
 		return nil, fmt.Errorf("empty token")
-	}
-	if a.database == nil {
-		return nil, fmt.Errorf("database not initialized")
 	}
 	a.mux.Lock()
 	defer a.mux.Unlock()
@@ -127,7 +127,10 @@ func (a *Authenticator) GetUserById(userId string) (*entity.User, error) {
 		if err != nil {
 			return nil, fmt.Errorf("adding user: %s", err)
 		}
-		a.logger.Info(fmt.Sprintf("new user registered: %s; %s", username, utility.Secret(userId)))
+		a.logger.With(
+			slog.String("username", user.Username),
+			sl.Secret("user_id", userId),
+		).Info("new user registered")
 	}
 
 	_ = a.updateLastSeen(user)
@@ -144,9 +147,6 @@ func (a *Authenticator) updateLastSeen(user *entity.User) error {
 }
 
 func (a *Authenticator) GenerateInvites(count int) ([]string, error) {
-	if a.database == nil {
-		return nil, fmt.Errorf("database not initialized")
-	}
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	invites := make([]string, 0)
@@ -157,7 +157,7 @@ func (a *Authenticator) GenerateInvites(count int) ([]string, error) {
 		}
 		err := a.database.AddInviteCode(invite)
 		if err != nil {
-			a.logger.Error("adding invite code", err)
+			a.logger.Error("add invite code", sl.Err(err))
 			continue
 		}
 		invites = append(invites, inviteCode)
@@ -169,9 +169,6 @@ func (a *Authenticator) GenerateInvites(count int) ([]string, error) {
 }
 
 func (a *Authenticator) GetUserTag(user *entity.User) (string, error) {
-	if a.database == nil {
-		return "", fmt.Errorf("database not initialized")
-	}
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	tags, _ := a.database.GetUserTags(user.UserId)
@@ -224,9 +221,6 @@ func (a *Authenticator) generateKey(length int) string {
 // AuthenticateUser method returns user with blank password if authentication is successful
 // Note: in a database, the password should be stored as a hash
 func (a *Authenticator) AuthenticateUser(username, password string) (*entity.User, error) {
-	if a.database == nil {
-		return nil, fmt.Errorf("database not initialized")
-	}
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	user, err := a.database.GetUser(username)
@@ -245,16 +239,17 @@ func (a *Authenticator) AuthenticateUser(username, password string) (*entity.Use
 		return nil, err
 	}
 	user.Password = ""
-	a.logger.Info(fmt.Sprintf("user %s logged in with password", user.Username))
+	a.logger.With(
+		slog.String("username", user.Username),
+		sl.Secret("user_id", user.UserId),
+		sl.Secret("token", token),
+	).Info("user authenticated")
 	return user, nil
 }
 
 // RegisterUser add new user to the database
 // for new user registration, using "token" field as a value of invite code
 func (a *Authenticator) RegisterUser(user *entity.User) error {
-	if a.database == nil {
-		return fmt.Errorf("database not initialized")
-	}
 	if user.Password == "" {
 		return fmt.Errorf("empty password")
 	}
@@ -288,15 +283,12 @@ func (a *Authenticator) RegisterUser(user *entity.User) error {
 	}
 	err = a.database.DeleteInviteCode(user.Token)
 	if err != nil {
-		a.logger.Error("deleting invite code", err)
+		a.logger.Error("deleting invite code", sl.Err(err))
 	}
 	return nil
 }
 
 func (a *Authenticator) GetUsers(role string) ([]*entity.User, error) {
-	if a.database == nil {
-		return nil, fmt.Errorf("database not initialized")
-	}
 	if role != "admin" {
 		return nil, fmt.Errorf("access denied")
 	}
@@ -312,7 +304,7 @@ func (a *Authenticator) GetUsers(role string) ([]*entity.User, error) {
 func (a *Authenticator) generatePasswordHash(password string) string {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		a.logger.Error("generating password hash", err)
+		a.logger.Error("generating password hash", sl.Err(err))
 		return ""
 	}
 	return string(hash)

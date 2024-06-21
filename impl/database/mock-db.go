@@ -2,7 +2,6 @@ package database
 
 import (
 	"evsys-back/entity"
-	"evsys-back/services"
 	"time"
 )
 
@@ -17,7 +16,7 @@ func (db *MockDB) ReadLog(logName string) (interface{}, error) {
 	return nil, nil
 }
 
-func (db *MockDB) ReadLogAfter(timeStart time.Time) ([]*services.FeatureMessage, error) {
+func (db *MockDB) ReadLogAfter(timeStart time.Time) ([]*entity.FeatureMessage, error) {
 	return nil, nil
 }
 

@@ -13,8 +13,6 @@ import (
 	"evsys-back/internal/api/middleware/authenticate"
 	"evsys-back/internal/api/middleware/timeout"
 	"evsys-back/internal/lib/sl"
-	"evsys-back/services"
-	"evsys-back/utility"
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -31,10 +29,22 @@ type Server struct {
 	conf         *config.Config
 	httpServer   *http.Server
 	core         Core
-	statusReader services.StatusReader
+	statusReader StatusReader
 	log          *slog.Logger
 	upgrader     websocket.Upgrader
 	pool         *Pool
+}
+
+type StatusReader interface {
+	GetTransactionAfter(userId string, after time.Time) (*entity.Transaction, error)
+	GetTransaction(transactionId int) (*entity.Transaction, error)
+	GetLastMeterValues(transactionId int, from time.Time) ([]*entity.TransactionMeter, error)
+
+	SaveStatus(userId string, stage entity.Stage, transactionId int) (time.Time, error)
+	GetStatus(userId string) (*entity.UserStatus, bool)
+	ClearStatus(userId string)
+
+	ReadLogAfter(timeStart time.Time) ([]*entity.FeatureMessage, error)
 }
 
 type Core interface {
@@ -126,7 +136,7 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 	return &server
 }
 
-func (s *Server) SetStatusReader(statusReader services.StatusReader) {
+func (s *Server) SetStatusReader(statusReader StatusReader) {
 	s.statusReader = statusReader
 }
 
@@ -235,8 +245,8 @@ type Client struct {
 	ws           *websocket.Conn
 	user         *entity.User
 	core         Core
-	statusReader services.StatusReader // user state holder and transaction state reader
-	send         chan []byte           // served by writePump, sending messages to client
+	statusReader StatusReader // user state holder and transaction state reader
+	send         chan []byte  // served by writePump, sending messages to client
 	logger       *slog.Logger
 	pool         *Pool          // tracking client connect and disconnect, stored active clients array
 	id           string         // replaced with idTag after user authorization
@@ -274,7 +284,7 @@ func (c *Client) readPump() {
 		_, message, err := c.ws.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived) {
-				c.logger.Warn(fmt.Sprintf("read pump: unexpected close %s", utility.Secret(c.id)))
+				c.logger.Warn("read pump: unexpected close")
 			}
 			break
 		}
@@ -307,13 +317,20 @@ func (c *Client) readPump() {
 				c.sendResponse(entity.Error, fmt.Sprintf("get user tag: %v", err))
 				continue
 			}
+
+			if c.user != nil {
+				c.logger = c.logger.With(
+					slog.String("user", c.user.Username),
+					sl.Secret("id", c.id))
+				c.logger.Debug("ws: user authenticated")
+			}
 		}
 
 		userRequest.Token = c.id
 
 		err = c.core.WsRequest(&userRequest)
 		if err != nil {
-			c.logger.Error("read pump: handle request", err)
+			c.logger.Error("ws: read pump", sl.Err(err))
 			continue
 		}
 
@@ -334,9 +351,9 @@ func (c *Client) readPump() {
 				c.restoreUserState(userState)
 			}
 		case entity.ListenTransaction:
-			_, err := c.statusReader.SaveStatus(c.id, entity.StageListen, userRequest.TransactionId)
+			_, err = c.statusReader.SaveStatus(c.id, entity.StageListen, userRequest.TransactionId)
 			if err != nil {
-				c.logger.Error("read pump: save status Listen", err)
+				c.logger.Error("read pump: save status Listen", sl.Err(err))
 			}
 			_, ok := c.listeners[userRequest.TransactionId]
 			if !ok {
@@ -354,7 +371,7 @@ func (c *Client) readPump() {
 		case entity.ListenChargePoints:
 			c.setSubscription(ChargePointEvent)
 		case entity.PingConnection:
-			c.sendResponse(entity.Success, fmt.Sprintf("ping %s", utility.Secret(c.id)))
+			c.sendResponse(entity.Success, fmt.Sprintf("ping %s", time.Now()))
 		default:
 			c.sendResponse(entity.Success, "request handled")
 		}
@@ -678,13 +695,14 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request) {
 		s.log.Error("upgrade http to websocket", err)
 		return
 	}
+	log := s.log.With(slog.String("remote", ws.RemoteAddr().String()))
 
 	client := &Client{
 		ws:           ws,
 		core:         s.core,
 		statusReader: s.statusReader,
 		send:         make(chan []byte, 256),
-		logger:       s.log,
+		logger:       log,
 		pool:         s.pool,
 		id:           "",
 		subscription: ChargePointEvent,

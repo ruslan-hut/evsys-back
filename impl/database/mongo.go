@@ -4,7 +4,6 @@ import (
 	"context"
 	"evsys-back/config"
 	"evsys-back/entity"
-	"evsys-back/services"
 	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -90,10 +89,10 @@ func (m *MongoDB) read(table, dataType string) (interface{}, error) {
 	timeFieldName := "timestamp"
 
 	switch dataType {
-	case services.FeatureMessageType:
-		logMessages = []services.FeatureMessage{}
-	case services.LogMessageType:
-		logMessages = []services.LogMessage{}
+	case entity.FeatureMessageType:
+		logMessages = []entity.FeatureMessage{}
+	case entity.LogMessageType:
+		logMessages = []entity.LogMessage{}
 		timeFieldName = "time"
 	default:
 		return nil, fmt.Errorf("unknown data type: %s", dataType)
@@ -118,18 +117,18 @@ func (m *MongoDB) read(table, dataType string) (interface{}, error) {
 func (m *MongoDB) ReadLog(logName string) (interface{}, error) {
 	switch logName {
 	case "sys":
-		return m.read(collectionSysLog, services.FeatureMessageType)
+		return m.read(collectionSysLog, entity.FeatureMessageType)
 	case "back":
-		return m.read(collectionBackLog, services.LogMessageType)
+		return m.read(collectionBackLog, entity.LogMessageType)
 	case "pay":
-		return m.read(collectionPaymentLog, services.LogMessageType)
+		return m.read(collectionPaymentLog, entity.LogMessageType)
 	default:
 		return nil, fmt.Errorf("unknown log name: %s", logName)
 	}
 }
 
 // ReadLogAfter returns array of log messages in a normal , filtered by timeStart
-func (m *MongoDB) ReadLogAfter(timeStart time.Time) ([]*services.FeatureMessage, error) {
+func (m *MongoDB) ReadLogAfter(timeStart time.Time) ([]*entity.FeatureMessage, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -144,7 +143,7 @@ func (m *MongoDB) ReadLogAfter(timeStart time.Time) ([]*services.FeatureMessage,
 	if err != nil {
 		return nil, err
 	}
-	var result []*services.FeatureMessage
+	var result []*entity.FeatureMessage
 	err = cursor.All(m.ctx, &result)
 	if err != nil {
 		return nil, err
