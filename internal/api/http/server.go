@@ -695,7 +695,13 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request) {
 		s.log.Error("upgrade http to websocket", err)
 		return
 	}
-	log := s.log.With(slog.String("remote", ws.RemoteAddr().String()))
+	remote := r.RemoteAddr
+	// if the request is coming from a proxy, use the X-Forwarded-For header
+	xRemote := r.Header.Get("X-Forwarded-For")
+	if xRemote != "" {
+		remote = xRemote
+	}
+	log := s.log.With(slog.String("remote", remote))
 
 	client := &Client{
 		ws:           ws,

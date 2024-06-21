@@ -741,7 +741,7 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]*entity.ChargeState, e
 		return nil, err
 	}
 	if len(transactions) == 0 {
-		return nil, fmt.Errorf("no data")
+		return nil, nil
 	}
 
 	var chargeStates []*entity.ChargeState
