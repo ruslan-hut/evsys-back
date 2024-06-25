@@ -38,7 +38,7 @@ func (sr *StatusReader) GetTransactionAfter(userId string, after time.Time) (*en
 		return nil, fmt.Errorf("database is not set for status reader")
 	}
 	transaction, err := sr.database.GetTransactionByTag(userId, after)
-	if err != nil {
+	if err != nil || transaction == nil {
 		return &entity.Transaction{TransactionId: -1}, nil
 	}
 	return transaction, nil
@@ -49,8 +49,8 @@ func (sr *StatusReader) GetTransaction(transactionId int) (*entity.Transaction, 
 		return nil, fmt.Errorf("database is not set for status reader")
 	}
 	transaction, err := sr.database.GetTransaction(transactionId)
-	if err != nil {
-		return nil, fmt.Errorf("reading database: %v", err)
+	if err != nil || transaction == nil {
+		return nil, fmt.Errorf("no transaction data: %d", transactionId)
 	}
 	return transaction, nil
 }

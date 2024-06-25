@@ -324,9 +324,9 @@ func (m *MongoDB) GetUserTag(idTag string) (*entity.UserTag, error) {
 }
 
 func (m *MongoDB) AddUserTag(userTag *entity.UserTag) error {
-	existedUserTag, err := m.GetUserTag(userTag.IdTag)
-	if err == nil {
-		return fmt.Errorf("user tag %s already exists for user %s", existedUserTag.IdTag, existedUserTag.UserId)
+	t, err := m.GetUserTag(userTag.IdTag)
+	if t != nil {
+		return fmt.Errorf("user tag %s already exists for user %s", t.IdTag, t.UserId)
 	}
 	connection, err := m.connect()
 	if err != nil {
