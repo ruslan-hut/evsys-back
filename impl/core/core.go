@@ -133,11 +133,31 @@ func (c *Core) GetLocations(accessLevel int) (interface{}, error) {
 }
 
 func (c *Core) GetChargePoints(accessLevel int, search string) (interface{}, error) {
-	return c.repo.GetChargePoints(accessLevel, search)
+	list, err := c.repo.GetChargePoints(accessLevel, search)
+	if err != nil {
+		return nil, err
+	}
+	if list == nil {
+		return nil, nil
+	}
+	// disable connectors if charge point is not operational
+	for _, cp := range list {
+		cp.CheckConnectorsStatus()
+	}
+	return list, nil
 }
 
 func (c *Core) GetChargePoint(accessLevel int, id string) (interface{}, error) {
-	return c.repo.GetChargePoint(accessLevel, id)
+	cp, err := c.repo.GetChargePoint(accessLevel, id)
+	if err != nil {
+		return nil, err
+	}
+	if cp == nil {
+		return nil, nil
+	}
+	// disable connectors if charge point is not operational
+	cp.CheckConnectorsStatus()
+	return cp, nil
 }
 
 func (c *Core) SaveChargePoint(accessLevel int, chargePoint *entity.ChargePoint) error {

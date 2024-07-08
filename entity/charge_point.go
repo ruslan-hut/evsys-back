@@ -1,7 +1,6 @@
 package entity
 
 import (
-	"encoding/json"
 	"evsys-back/internal/lib/validate"
 	"fmt"
 	"net/http"
@@ -40,15 +39,25 @@ func (cp *ChargePoint) GetConnector(id int) (*Connector, error) {
 	return nil, fmt.Errorf("connector %d not found", id)
 }
 
-func GetChargePointFromPayload(payload []byte) (*ChargePoint, error) {
-	var cp ChargePoint
-	err := json.Unmarshal(payload, &cp)
-	if err != nil {
-		return nil, err
-	}
-	return &cp, nil
-}
-
 func (cp *ChargePoint) Bind(_ *http.Request) error {
 	return validate.Struct(cp)
+}
+
+// IsAvailable returns true if the charge point is online and operational.
+func (cp *ChargePoint) IsAvailable() bool {
+	if !cp.IsOnline {
+		return false
+	}
+	return cp.Status != "Unavailable" && cp.Status != "Faulted"
+}
+
+func (cp *ChargePoint) CheckConnectorsStatus() {
+	if cp.Connectors == nil {
+		return
+	}
+	if !cp.IsAvailable() {
+		for _, conn := range cp.Connectors {
+			conn.Status = "Unavailable"
+		}
+	}
 }
