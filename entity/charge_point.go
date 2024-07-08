@@ -58,6 +58,7 @@ func (cp *ChargePoint) CheckConnectorsStatus() {
 	if !cp.IsAvailable() {
 		for _, conn := range cp.Connectors {
 			conn.Status = "Unavailable"
+			conn.State = "unavailable"
 		}
 	}
 }
