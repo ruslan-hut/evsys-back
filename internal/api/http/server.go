@@ -79,13 +79,7 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 	router.Use(middleware.Recoverer)
 	router.Use(render.SetContentType(render.ContentTypeJSON))
 
-	//c := cors.New(cors.Options{
-	//	AllowedOrigins:   []string{"*"},
-	//	AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE"},
-	//	AllowedHeaders:   []string{"Content-Type", "Authorization"},
-	//	AllowCredentials: true,
-	//})
-	router.Use(helper.Options(log))
+	router.Use(helper.Options())
 
 	// websocket connection
 	router.Route("/", func(r chi.Router) {
@@ -126,7 +120,6 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 			//router.Post("/payment/notify", s.paymentNotify)
 
 			r.Get("/log/{name}", helper.Log(log, core))
-			//r.Options("/*", helper.Options())
 		})
 
 		// requests without authorization token
@@ -134,7 +127,6 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 			r.Get("/config/{name}", helper.Config(log, core))
 			r.Post("/users/authenticate", users.Authenticate(log, core))
 			r.Post("/users/register", users.Register(log, core))
-			//r.Options("/*", helper.Options())
 		})
 	})
 
