@@ -110,6 +110,11 @@ func Options(log *slog.Logger) func(next http.Handler) http.Handler {
 			ww.Header().Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			ww.Header().Add("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
+			if r.Method == http.MethodOptions {
+				render.Status(r, http.StatusOK)
+				return
+			}
+
 			next.ServeHTTP(ww, r)
 		}
 
