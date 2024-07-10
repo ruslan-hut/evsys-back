@@ -9,7 +9,6 @@ require (
 	github.com/go-playground/validator/v10 v10.22.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/ilyakaznacheev/cleanenv v1.5.0
-	github.com/julienschmidt/httprouter v1.3.0
 	go.mongodb.org/mongo-driver v1.15.0
 	golang.org/x/crypto v0.22.0
 	google.golang.org/api v0.172.0
@@ -58,7 +57,6 @@ require (
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
-	google.golang.org/genproto v0.0.0-20240415180920-8c6c420018be // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240415180920-8c6c420018be // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240415180920-8c6c420018be // indirect
 	google.golang.org/grpc v1.63.2 // indirect
