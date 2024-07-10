@@ -126,6 +126,7 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 			r.Get("/config/{name}", helper.Config(log, core))
 			r.Post("/users/authenticate", users.Authenticate(log, core))
 			r.Post("/users/register", users.Register(log, core))
+			r.Options("/*", helper.Options())
 		})
 	})
 
