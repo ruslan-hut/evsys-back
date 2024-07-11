@@ -34,7 +34,7 @@ func Command(logger *slog.Logger, handler CentralSystem) http.HandlerFunc {
 			slog.String("charge_point_id", command.ChargePointId),
 			slog.Int("connector_id", command.ConnectorId),
 			slog.String("feature_name", command.FeatureName),
-			slog.String("payload", command.Payload),
+			sl.Secret("payload", command.Payload),
 		)
 
 		data, err := handler.SendCommand(&command)
