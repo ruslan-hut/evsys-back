@@ -230,9 +230,8 @@ func (c *Core) DeletePaymentMethod(user *entity.User, pm *entity.PaymentMethod) 
 	if pm == nil {
 		return fmt.Errorf("payment method is nil")
 	}
-	if user.UserId != pm.UserId && user.AccessLevel < MaxAccessLevel {
-		return fmt.Errorf("access denied")
-	}
+	// delete only methods, belonging to user that requested deletion
+	pm.UserId = user.UserId
 	return c.repo.DeletePaymentMethod(pm)
 }
 

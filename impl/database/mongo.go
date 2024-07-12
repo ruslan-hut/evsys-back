@@ -1051,7 +1051,7 @@ func (m *MongoDB) DeletePaymentMethod(paymentMethod *entity.PaymentMethod) error
 		return err
 	}
 	if result.DeletedCount == 0 {
-		return fmt.Errorf("payment method not found: %s; user id: %s", paymentMethod.Identifier, paymentMethod.UserId)
+		return fmt.Errorf("payment method not found")
 	}
 
 	// if we deleted default method, then set first method to default
