@@ -1046,9 +1046,12 @@ func (m *MongoDB) DeletePaymentMethod(paymentMethod *entity.PaymentMethod) error
 
 	collection := connection.Database(m.database).Collection(collectionPaymentMethods)
 	filter := bson.D{{"identifier", paymentMethod.Identifier}, {"user_id", paymentMethod.UserId}}
-	_, err = collection.DeleteOne(m.ctx, filter)
+	result, err := collection.DeleteOne(m.ctx, filter)
 	if err != nil {
 		return err
+	}
+	if result.DeletedCount == 0 {
+		return fmt.Errorf("payment method not found")
 	}
 
 	// if we deleted default method, then set first method to default
