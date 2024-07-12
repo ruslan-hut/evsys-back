@@ -1042,11 +1042,7 @@ func (m *MongoDB) DeletePaymentMethod(paymentMethod *entity.PaymentMethod) error
 	}
 	defer m.disconnect(connection)
 
-	pm, err := m.GetPaymentMethod(paymentMethod.Identifier, paymentMethod.UserId)
-	if err != nil {
-		return err
-	}
-	isDefault := pm.IsDefault
+	isDefault := paymentMethod.IsDefault
 
 	collection := connection.Database(m.database).Collection(collectionPaymentMethods)
 	filter := bson.D{{"identifier", paymentMethod.Identifier}, {"user_id", paymentMethod.UserId}}
