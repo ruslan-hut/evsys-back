@@ -143,6 +143,9 @@ func (c *Core) GetChargePoints(accessLevel int, search string) (interface{}, err
 	// disable connectors if charge point is not operational
 	for _, cp := range list {
 		cp.CheckConnectorsStatus()
+		if accessLevel < MaxAccessLevel {
+			cp.HideSensitiveData()
+		}
 	}
 	return list, nil
 }
@@ -157,6 +160,9 @@ func (c *Core) GetChargePoint(accessLevel int, id string) (interface{}, error) {
 	}
 	// disable connectors if charge point is not operational
 	cp.CheckConnectorsStatus()
+	if accessLevel < MaxAccessLevel {
+		cp.HideSensitiveData()
+	}
 	return cp, nil
 }
 

@@ -11,14 +11,14 @@ type ChargePoint struct {
 	Id              string       `json:"charge_point_id" bson:"charge_point_id" validate:"required"`
 	IsEnabled       bool         `json:"is_enabled" bson:"is_enabled"`
 	Title           string       `json:"title" bson:"title" validate:"omitempty"`
-	Description     string       `json:"description" bson:"description" validate:"omitempty"`
+	Description     string       `json:"description,omitempty" bson:"description" validate:"omitempty"`
 	Model           string       `json:"model" bson:"model" validate:"omitempty"`
-	SerialNumber    string       `json:"serial_number" bson:"serial_number" validate:"omitempty"`
-	Vendor          string       `json:"vendor" bson:"vendor" validate:"omitempty"`
-	FirmwareVersion string       `json:"firmware_version" bson:"firmware_version" validate:"omitempty"`
+	SerialNumber    string       `json:"serial_number,omitempty" bson:"serial_number" validate:"omitempty"`
+	Vendor          string       `json:"vendor,omitempty" bson:"vendor" validate:"omitempty"`
+	FirmwareVersion string       `json:"firmware_version,omitempty" bson:"firmware_version" validate:"omitempty"`
 	Status          string       `json:"status" bson:"status" validate:"omitempty"`
 	ErrorCode       string       `json:"error_code" bson:"error_code" validate:"omitempty"`
-	Info            string       `json:"info" bson:"info" validate:"omitempty"`
+	Info            string       `json:"info,omitempty" bson:"info" validate:"omitempty"`
 	LastSeen        string       `json:"last_seen" bson:"last_seen" validate:"omitempty"` // deprecated
 	EventTime       time.Time    `json:"event_time" bson:"event_time" validate:"omitempty"`
 	IsOnline        bool         `json:"is_online" bson:"is_online"`
@@ -61,4 +61,10 @@ func (cp *ChargePoint) CheckConnectorsStatus() {
 			conn.State = "unavailable"
 		}
 	}
+}
+
+func (cp *ChargePoint) HideSensitiveData() {
+	cp.SerialNumber = ""
+	cp.Vendor = ""
+	cp.FirmwareVersion = ""
 }
