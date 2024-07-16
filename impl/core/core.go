@@ -80,14 +80,28 @@ func (c *Core) AuthenticateByToken(token string) (*entity.User, error) {
 	if c.auth == nil {
 		return nil, fmt.Errorf("authenticator not set")
 	}
-	return c.auth.AuthenticateByToken(token)
+	user, err := c.auth.AuthenticateByToken(token)
+	if err != nil {
+		return nil, err
+	}
+	if user != nil {
+		user.Password = ""
+	}
+	return user, nil
 }
 
 func (c *Core) AuthenticateUser(username, password string) (*entity.User, error) {
 	if c.auth == nil {
 		return nil, fmt.Errorf("authenticator not set")
 	}
-	return c.auth.AuthenticateUser(username, password)
+	user, err := c.auth.AuthenticateUser(username, password)
+	if err != nil {
+		return nil, err
+	}
+	if user != nil {
+		user.Password = ""
+	}
+	return user, nil
 }
 
 func (c *Core) AddUser(user *entity.User) (*entity.User, error) {
