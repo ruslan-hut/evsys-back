@@ -1,6 +1,8 @@
 package entity
 
-import "time"
+import (
+	"time"
+)
 
 type ChargeState struct {
 	TransactionId      int                 `json:"transaction_id" bson:"transaction_id"`

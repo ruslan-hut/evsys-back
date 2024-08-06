@@ -5,10 +5,14 @@ import (
 	"evsys-back/internal/lib/sl"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 )
 
-const MaxAccessLevel int = 10
+const (
+	MaxAccessLevel              int = 10
+	NormalizedMeterValuesLength     = 60
+)
 
 type Repository interface {
 	GetConfig(name string) (interface{}, error)
@@ -204,15 +208,43 @@ func (c *Core) SendCommand(command *entity.CentralSystemCommand) (interface{}, e
 }
 
 func (c *Core) GetActiveTransactions(userId string) (interface{}, error) {
-	return c.repo.GetActiveTransactions(userId)
+	transactions, err := c.repo.GetActiveTransactions(userId)
+	if err != nil {
+		return nil, err
+	}
+	if transactions == nil {
+		return nil, nil
+	}
+	for _, t := range transactions {
+		t.MeterValues = NormalizeMeterValues(t.MeterValues, NormalizedMeterValuesLength)
+	}
+	return transactions, nil
 }
 
 func (c *Core) GetTransactions(userId, period string) (interface{}, error) {
-	return c.repo.GetTransactions(userId, period)
+	transactions, err := c.repo.GetTransactions(userId, period)
+	if err != nil {
+		return nil, err
+	}
+	if transactions == nil {
+		return nil, nil
+	}
+	for _, t := range transactions {
+		t.MeterValues = NormalizeMeterValues(t.MeterValues, NormalizedMeterValuesLength)
+	}
+	return transactions, nil
 }
 
 func (c *Core) GetTransaction(accessLevel, id int) (interface{}, error) {
-	return c.repo.GetTransactionState(accessLevel, id)
+	state, err := c.repo.GetTransactionState(accessLevel, id)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
+		return nil, nil
+	}
+	state.MeterValues = NormalizeMeterValues(state.MeterValues, NormalizedMeterValuesLength)
+	return state, nil
 }
 
 func (c *Core) GetPaymentMethods(userId string) (interface{}, error) {
@@ -334,4 +366,36 @@ func (c *Core) WsRequest(request *entity.UserRequest) error {
 	}
 
 	return nil
+}
+
+func NormalizeMeterValues(meterValues []*entity.TransactionMeter, newLength int) []*entity.TransactionMeter {
+	if newLength == 0 || meterValues == nil || len(meterValues) <= newLength {
+		return meterValues
+	}
+	originalLength := len(meterValues)
+	scaleFactor := float64(originalLength) / float64(newLength)
+	normalized := make([]*entity.TransactionMeter, newLength)
+	for i := 0; i < newLength; i++ {
+		originalIndex := float64(i) * scaleFactor
+		lowerIndex := int(math.Floor(originalIndex))
+		upperIndex := int(math.Ceil(originalIndex))
+		if upperIndex >= originalLength {
+			upperIndex = originalLength - 1
+		}
+		normalized[i] = meterValues[lowerIndex]
+		if lowerIndex != upperIndex {
+			v1 := float64(meterValues[lowerIndex].ConsumedEnergy)
+			v2 := float64(meterValues[upperIndex].ConsumedEnergy)
+			normalized[i].ConsumedEnergy = int(interpolate(originalIndex, float64(lowerIndex), float64(upperIndex), v1, v2))
+			p1 := float64(meterValues[lowerIndex].PowerRate)
+			p2 := float64(meterValues[upperIndex].PowerRate)
+			normalized[i].PowerRate = int(interpolate(originalIndex, float64(lowerIndex), float64(upperIndex), p1, p2))
+		}
+	}
+	return normalized
+}
+
+// Function to perform linear interpolation
+func interpolate(x, x0, x1, y0, y1 float64) float64 {
+	return y0 + (y1-y0)*(x-x0)/(x1-x0)
 }
