@@ -599,29 +599,32 @@ func (m *MongoDB) getTransactionState(level int, transaction *entity.Transaction
 	}
 	price := transaction.PaymentAmount
 	powerRate := 0
+	meterValues := transaction.MeterValues
+	duration := int(transaction.TimeStop.Sub(transaction.TimeStart).Seconds())
 
-	lastMeter, _ := m.GetLastMeterValue(transaction.TransactionId)
-	if lastMeter != nil {
-		if lastMeter.Value > transaction.MeterStart {
-			consumed = lastMeter.Value - transaction.MeterStart
+	if !transaction.IsFinished {
+
+		lastMeter, _ := m.GetLastMeterValue(transaction.TransactionId)
+		if lastMeter != nil {
+			if lastMeter.Value > transaction.MeterStart {
+				consumed = lastMeter.Value - transaction.MeterStart
+			}
+			price = lastMeter.Price
+			powerRate = lastMeter.PowerRate
 		}
-		price = lastMeter.Price
-		powerRate = lastMeter.PowerRate
-	}
 
-	hourAgo := time.Now().Add(-time.Hour) // limit meter values with 1 hour
-	if lastMeter != nil {
-		hourAgo = lastMeter.Time.Add(-time.Hour)
-	}
-	meterValues, err := m.GetMeterValues(transaction.TransactionId, hourAgo)
+		hourAgo := time.Now().Add(-time.Hour) // limit meter values with 1 hour
+		if lastMeter != nil {
+			hourAgo = lastMeter.Time.Add(-time.Hour)
+		}
+		meterValues, err = m.GetMeterValues(transaction.TransactionId, hourAgo)
 
-	if len(meterValues) == 0 && lastMeter != nil {
-		meterValues = append(meterValues, lastMeter)
-	}
+		if len(meterValues) == 0 && lastMeter != nil {
+			meterValues = append(meterValues, lastMeter)
+		}
 
-	duration := int(time.Since(transaction.TimeStart).Seconds())
-	if transaction.IsFinished {
-		duration = int(transaction.TimeStop.Sub(transaction.TimeStart).Seconds())
+		duration = int(time.Since(transaction.TimeStart).Seconds())
+
 	}
 
 	chargeState = entity.ChargeState{
