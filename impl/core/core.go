@@ -213,7 +213,8 @@ func (c *Core) GetActiveTransactions(userId string) (interface{}, error) {
 		return nil, err
 	}
 	if transactions == nil {
-		return nil, nil
+		empty := make([]*entity.ChargeState, 0)
+		return empty, nil
 	}
 	for _, t := range transactions {
 		t.MeterValues = NormalizeMeterValues(t.MeterValues, NormalizedMeterValuesLength)
@@ -227,7 +228,8 @@ func (c *Core) GetTransactions(userId, period string) (interface{}, error) {
 		return nil, err
 	}
 	if transactions == nil {
-		return nil, nil
+		empty := make([]*entity.Transaction, 0)
+		return empty, nil
 	}
 	for _, t := range transactions {
 		t.MeterValues = NormalizeMeterValues(t.MeterValues, NormalizedMeterValuesLength)
