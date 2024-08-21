@@ -4,7 +4,13 @@ import (
 	"evsys-back/internal/lib/validate"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
+)
+
+const (
+	statusUnavailable = "Unavailable"
+	statusFaulted     = "Faulted"
 )
 
 type ChargePoint struct {
@@ -48,7 +54,7 @@ func (cp *ChargePoint) IsAvailable() bool {
 	if !cp.IsOnline {
 		return false
 	}
-	return cp.Status != "Unavailable" && cp.Status != "Faulted"
+	return cp.Status != statusUnavailable && cp.Status != statusFaulted
 }
 
 func (cp *ChargePoint) CheckConnectorsStatus() {
@@ -56,9 +62,10 @@ func (cp *ChargePoint) CheckConnectorsStatus() {
 		return
 	}
 	if !cp.IsAvailable() {
+		cp.Status = statusUnavailable
 		for _, conn := range cp.Connectors {
-			conn.Status = "Unavailable"
-			conn.State = "unavailable"
+			conn.Status = statusUnavailable
+			conn.State = strings.ToLower(statusUnavailable)
 		}
 	}
 }
