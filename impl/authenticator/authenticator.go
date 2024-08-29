@@ -43,7 +43,7 @@ type Authenticator struct {
 	logger   *slog.Logger
 	database Repository
 	firebase FirebaseAuth
-	mux      *sync.Mutex
+	mux      sync.Mutex
 }
 
 func New(log *slog.Logger, repo Repository) *Authenticator {
@@ -54,7 +54,7 @@ func New(log *slog.Logger, repo Repository) *Authenticator {
 	return &Authenticator{
 		database: repo,
 		logger:   log.With(sl.Module("impl.authenticator")),
-		mux:      &sync.Mutex{},
+		mux:      sync.Mutex{},
 	}
 }
 

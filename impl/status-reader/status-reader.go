@@ -20,7 +20,7 @@ type StatusReader struct {
 	logger   *slog.Logger
 	database Repository
 	status   map[string]*entity.UserStatus
-	mux      *sync.Mutex
+	mux      sync.Mutex
 }
 
 func New(log *slog.Logger, repo Repository) *StatusReader {
@@ -28,7 +28,7 @@ func New(log *slog.Logger, repo Repository) *StatusReader {
 		database: repo,
 		logger:   log.With(sl.Module("impl.status-reader")),
 		status:   make(map[string]*entity.UserStatus),
-		mux:      &sync.Mutex{},
+		mux:      sync.Mutex{},
 	}
 	return &statusReader
 }
