@@ -16,7 +16,7 @@ import (
 type Transactions interface {
 	GetActiveTransactions(userId string) (interface{}, error)
 	GetTransactions(userId, period string) (interface{}, error)
-	GetTransaction(accessLevel, id int) (interface{}, error)
+	GetTransaction(userId string, accessLevel, id int) (interface{}, error)
 }
 
 func ListActive(logger *slog.Logger, handler Transactions) http.HandlerFunc {
@@ -91,7 +91,7 @@ func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 			return
 		}
 
-		data, err := handler.GetTransaction(user.AccessLevel, transactionId)
+		data, err := handler.GetTransaction(user.UserId, user.AccessLevel, transactionId)
 		if err != nil {
 			log.Error("transaction info", sl.Err(err))
 			render.Status(r, 204)

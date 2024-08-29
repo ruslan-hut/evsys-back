@@ -105,7 +105,7 @@ func (db *MockDB) GetTransactionByTag(idTag string, timeStart time.Time) (*entit
 	return nil, nil
 }
 
-func (db *MockDB) GetTransactionState(level int, id int) (*entity.ChargeState, error) {
+func (db *MockDB) GetTransactionState(userId string, level int, id int) (*entity.ChargeState, error) {
 	return nil, nil
 }
 

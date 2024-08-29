@@ -27,7 +27,7 @@ type Repository interface {
 
 	GetActiveTransactions(userId string) ([]*entity.ChargeState, error)
 	GetTransactions(userId string, period string) ([]*entity.Transaction, error)
-	GetTransactionState(level int, id int) (*entity.ChargeState, error)
+	GetTransactionState(userId string, level int, id int) (*entity.ChargeState, error)
 
 	GetPaymentMethods(userId string) ([]*entity.PaymentMethod, error)
 	SavePaymentMethod(paymentMethod *entity.PaymentMethod) error
@@ -237,8 +237,8 @@ func (c *Core) GetTransactions(userId, period string) (interface{}, error) {
 	return transactions, nil
 }
 
-func (c *Core) GetTransaction(accessLevel, id int) (interface{}, error) {
-	state, err := c.repo.GetTransactionState(accessLevel, id)
+func (c *Core) GetTransaction(userId string, accessLevel, id int) (interface{}, error) {
+	state, err := c.repo.GetTransactionState(userId, accessLevel, id)
 	if err != nil {
 		return nil, err
 	}

@@ -575,7 +575,7 @@ func (m *MongoDB) GetConnector(chargePointId string, connectorId int) (*entity.C
 	return &connector, nil
 }
 
-func (m *MongoDB) getTransactionState(level int, transaction *entity.Transaction) (*entity.ChargeState, error) {
+func (m *MongoDB) getTransactionState(userId string, level int, transaction *entity.Transaction) (*entity.ChargeState, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -623,6 +623,12 @@ func (m *MongoDB) getTransactionState(level int, transaction *entity.Transaction
 
 	}
 
+	// current user can stop own transaction
+	canStop := false
+	if !transaction.IsFinished && transaction.UserTag != nil {
+		canStop = transaction.UserTag.UserId == userId
+	}
+
 	chargeState = entity.ChargeState{
 		TransactionId:      transaction.TransactionId,
 		ConnectorId:        transaction.ConnectorId,
@@ -638,14 +644,14 @@ func (m *MongoDB) getTransactionState(level int, transaction *entity.Transaction
 		Price:              price,
 		Status:             connector.Status,
 		IsCharging:         transaction.IsFinished == false,
-		CanStop:            false,
+		CanStop:            canStop,
 		MeterValues:        meterValues,
 	}
 
 	return &chargeState, nil
 }
 
-func (m *MongoDB) GetTransactionState(level int, id int) (*entity.ChargeState, error) {
+func (m *MongoDB) GetTransactionState(userId string, level int, id int) (*entity.ChargeState, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -656,7 +662,7 @@ func (m *MongoDB) GetTransactionState(level int, id int) (*entity.ChargeState, e
 	if err != nil {
 		return nil, err
 	}
-	chargeState, err := m.getTransactionState(level, transaction)
+	chargeState, err := m.getTransactionState(userId, level, transaction)
 	if err != nil {
 		return nil, err
 	}
@@ -745,12 +751,10 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]*entity.ChargeState, e
 
 	var chargeStates []*entity.ChargeState
 	for _, transaction := range transactions {
-		chargeState, err := m.getTransactionState(user.AccessLevel, &transaction)
-		if err != nil {
-			continue
+		chargeState, _ := m.getTransactionState(userId, user.AccessLevel, &transaction)
+		if chargeState != nil {
+			chargeStates = append(chargeStates, chargeState)
 		}
-		chargeState.CanStop = true
-		chargeStates = append(chargeStates, chargeState)
 	}
 	return chargeStates, nil
 }
