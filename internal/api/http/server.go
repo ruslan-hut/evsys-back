@@ -254,7 +254,7 @@ type Client struct {
 	listeners    map[int]string // map of transaction state listeners, key is transaction id, value is user idTag
 	subscription SubscriptionType
 	isClosed     bool
-	mux          *sync.Mutex
+	mux          sync.Mutex
 }
 
 func (c *Client) writePump() {
@@ -714,7 +714,7 @@ func (s *Server) handleWs(w http.ResponseWriter, r *http.Request) {
 		id:           "",
 		subscription: ChargePointEvent,
 		listeners:    make(map[int]string),
-		mux:          &sync.Mutex{},
+		mux:          sync.Mutex{},
 	}
 	s.pool.register <- client
 
