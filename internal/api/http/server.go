@@ -519,7 +519,6 @@ func (c *Client) listenForTransactionState(transactionId int) {
 	}
 
 	lastMeterValue := time.Now()
-	errorCounter := 0
 	waitStep := 5
 	ticker := time.NewTicker(time.Duration(waitStep) * time.Second)
 
@@ -537,15 +536,10 @@ func (c *Client) listenForTransactionState(transactionId int) {
 			if !ok {
 				return
 			}
-			values, err := c.statusReader.GetLastMeterValues(transactionId, lastMeterValue)
-			if err != nil {
-				errorCounter++
-				if errorCounter > 10 {
-					return
-				}
+			values, _ := c.statusReader.GetLastMeterValues(transactionId, lastMeterValue)
+			if values == nil {
 				continue
 			}
-			errorCounter = 0
 			for _, value := range values {
 				value.Timestamp = value.Time.Unix()
 				c.wsResponse(&entity.WsResponse{
@@ -585,12 +579,8 @@ func (c *Client) listenForLogUpdates() {
 			if c.isClosed {
 				return
 			}
-			messages, err := c.statusReader.ReadLogAfter(lastMessageTime)
-			if err != nil {
-				//errorCounter++
-				//if errorCounter > 10 {
-				//	return
-				//}
+			messages, _ := c.statusReader.ReadLogAfter(lastMessageTime)
+			if messages == nil {
 				continue
 			}
 			if len(messages) > 0 {
@@ -598,7 +588,7 @@ func (c *Client) listenForLogUpdates() {
 				for _, message := range messages {
 					data, err := json.Marshal(message)
 					if err != nil {
-						c.logger.Error("marshal message", err)
+						c.logger.Error("marshal message", sl.Err(err))
 						continue
 					}
 					c.wsResponse(&entity.WsResponse{
@@ -625,9 +615,8 @@ func (s *Server) listenForUpdates() {
 	for {
 		select {
 		case <-ticker.C:
-			messages, err := s.statusReader.ReadLogAfter(lastMessageTime)
-			if err != nil {
-				s.log.Error("reading log", err)
+			messages, _ := s.statusReader.ReadLogAfter(lastMessageTime)
+			if messages == nil {
 				continue
 			}
 			if len(messages) > 0 {
@@ -645,7 +634,7 @@ func (s *Server) listenForUpdates() {
 
 					data, err := json.Marshal(message)
 					if err != nil {
-						s.log.Error("marshal log message", err)
+						s.log.Error("marshal log message", sl.Err(err))
 						continue
 					}
 					s.pool.logEvent <- &entity.WsResponse{
