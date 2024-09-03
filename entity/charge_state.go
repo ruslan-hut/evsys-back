@@ -4,6 +4,8 @@ import (
 	"time"
 )
 
+const chargePointStatusCharging = "Charging"
+
 type ChargeState struct {
 	TransactionId      int                 `json:"transaction_id" bson:"transaction_id"`
 	ConnectorId        int                 `json:"connector_id" bson:"connector_id"`
@@ -24,7 +26,7 @@ type ChargeState struct {
 }
 
 func (cs *ChargeState) CheckState() {
-	if !cs.IsCharging {
+	if !cs.IsCharging || cs.Status != chargePointStatusCharging {
 		cs.PowerRate = 0
 	}
 }
