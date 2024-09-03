@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+const (
+	roleAdmin    = "admin"
+	roleOperator = "operator"
+)
+
 type User struct {
 	Username       string    `json:"username" bson:"username" validate:"omitempty"`
 	Password       string    `json:"password" bson:"password" validate:"required"`
@@ -35,4 +40,12 @@ type UserInfo struct {
 
 func (u *User) Bind(_ *http.Request) error {
 	return validate.Struct(u)
+}
+
+func (u *User) IsAdmin() bool {
+	return u.Role == roleAdmin
+}
+
+func (u *User) IsPowerUser() bool {
+	return u.Role == roleAdmin || u.Role == roleOperator
 }

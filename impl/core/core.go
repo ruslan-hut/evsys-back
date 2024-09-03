@@ -42,8 +42,9 @@ type Authenticator interface {
 	AuthenticateByToken(token string) (*entity.User, error)
 	AuthenticateUser(username, password string) (*entity.User, error)
 	RegisterUser(user *entity.User) error
-	GetUsers(role string) ([]*entity.User, error)
+	GetUsers(user *entity.User) ([]*entity.User, error)
 	GetUserTag(user *entity.User) (string, error)
+	CommandAccess(user *entity.User, command string) error
 }
 
 type CentralSystem interface {
@@ -126,11 +127,11 @@ func (c *Core) GetUser(author *entity.User, username string) (*entity.UserInfo, 
 	return c.repo.GetUserInfo(author.AccessLevel, username)
 }
 
-func (c *Core) GetUsers(_ int, role string) ([]*entity.User, error) {
+func (c *Core) GetUsers(user *entity.User) ([]*entity.User, error) {
 	if c.auth == nil {
 		return nil, fmt.Errorf("authenticator not set")
 	}
-	return c.auth.GetUsers(role)
+	return c.auth.GetUsers(user)
 }
 
 func (c *Core) UserTag(user *entity.User) (string, error) {
@@ -197,12 +198,16 @@ func (c *Core) SaveChargePoint(accessLevel int, chargePoint *entity.ChargePoint)
 	return c.repo.UpdateChargePoint(accessLevel, chargePoint)
 }
 
-func (c *Core) SendCommand(command *entity.CentralSystemCommand) (interface{}, error) {
+func (c *Core) SendCommand(command *entity.CentralSystemCommand, user *entity.User) (interface{}, error) {
 	if c.cs == nil {
 		return nil, fmt.Errorf("central system not set")
 	}
 	if command == nil {
 		return nil, fmt.Errorf("command is nil")
+	}
+	err := c.auth.CommandAccess(user, command.FeatureName)
+	if err != nil {
+		return nil, err
 	}
 	return c.cs.SendCommand(command), nil
 }

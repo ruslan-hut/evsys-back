@@ -2,6 +2,7 @@ package centralsystem
 
 import (
 	"evsys-back/entity"
+	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
 	"fmt"
@@ -12,14 +13,19 @@ import (
 )
 
 type CentralSystem interface {
-	SendCommand(command *entity.CentralSystemCommand) (interface{}, error)
+	SendCommand(command *entity.CentralSystemCommand, user *entity.User) (interface{}, error)
 }
 
 func Command(logger *slog.Logger, handler CentralSystem) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
+		user := cont.GetUser(r.Context())
+
 		log := logger.With(
 			sl.Module("handlers.central_system"),
+			slog.String("user", user.Username),
+			slog.String("role", user.Role),
+			slog.Int("access_level", user.AccessLevel),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
@@ -37,7 +43,7 @@ func Command(logger *slog.Logger, handler CentralSystem) http.HandlerFunc {
 			sl.Secret("payload", command.Payload),
 		)
 
-		data, err := handler.SendCommand(&command)
+		data, err := handler.SendCommand(&command, user)
 		if err != nil {
 			log.Error("cs command", sl.Err(err))
 			render.Status(r, 204)

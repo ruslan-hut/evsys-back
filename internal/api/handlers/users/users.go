@@ -18,7 +18,7 @@ type Users interface {
 	AuthenticateUser(username, password string) (*entity.User, error)
 	AddUser(user *entity.User) (*entity.User, error)
 	GetUser(author *entity.User, username string) (*entity.UserInfo, error)
-	GetUsers(accessLevel int, role string) ([]*entity.User, error)
+	GetUsers(user *entity.User) ([]*entity.User, error)
 }
 
 func Authenticate(logger *slog.Logger, handler Users) http.HandlerFunc {
@@ -97,6 +97,7 @@ func Info(logger *slog.Logger, handler Users) http.HandlerFunc {
 			sl.Module("handlers.users"),
 			slog.String("name", name),
 			slog.String("author", user.Username),
+			slog.String("role", user.Role),
 			slog.Int("access_level", user.AccessLevel),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
@@ -122,11 +123,12 @@ func List(logger *slog.Logger, handler Users) http.HandlerFunc {
 		log := logger.With(
 			sl.Module("handlers.users"),
 			slog.String("author", user.Username),
+			slog.String("role", user.Role),
 			slog.Int("access_level", user.AccessLevel),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
-		data, err := handler.GetUsers(user.AccessLevel, user.Role)
+		data, err := handler.GetUsers(user)
 		if err != nil {
 			log.Error("get users", sl.Err(err))
 			render.Status(r, 400)

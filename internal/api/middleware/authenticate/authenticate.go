@@ -80,6 +80,7 @@ func New(log *slog.Logger, auth Authenticate) func(next http.Handler) http.Handl
 			logger = logger.With(
 				slog.String("user", user.Username),
 				slog.Int("access_level", user.AccessLevel),
+				slog.String("role", user.Role),
 				sl.Secret("user_id", user.UserId),
 			)
 			ctx := cont.PutUser(r.Context(), user)

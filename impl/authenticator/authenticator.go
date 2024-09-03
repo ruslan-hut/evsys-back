@@ -18,6 +18,12 @@ const (
 	defaultPaymentPlan = "default"
 )
 
+// commands allowed only for admins
+var adminCommands = []string{"ChangeConfiguration", "SetChargingProfile", "ClearChargingProfile", "GetDiagnostics"}
+
+// commands allowed for all users
+var userCommands = []string{"RemoteStartTransaction", "RemoteStopTransaction"}
+
 type Repository interface {
 	GetUser(username string) (*entity.User, error)
 	GetUserById(userId string) (*entity.User, error)
@@ -288,8 +294,8 @@ func (a *Authenticator) RegisterUser(user *entity.User) error {
 	return nil
 }
 
-func (a *Authenticator) GetUsers(role string) ([]*entity.User, error) {
-	if role != "admin" {
+func (a *Authenticator) GetUsers(user *entity.User) ([]*entity.User, error) {
+	if user == nil || !user.IsAdmin() {
 		return nil, fmt.Errorf("access denied")
 	}
 	a.mux.Lock()
@@ -299,6 +305,29 @@ func (a *Authenticator) GetUsers(role string) ([]*entity.User, error) {
 		return nil, err
 	}
 	return users, nil
+}
+
+func (a *Authenticator) CommandAccess(user *entity.User, command string) error {
+	if user == nil {
+		return fmt.Errorf("access denied")
+	}
+	if user.IsAdmin() {
+		return nil
+	}
+	for _, c := range userCommands {
+		if c == command {
+			return nil
+		}
+	}
+	if !user.IsPowerUser() {
+		return fmt.Errorf("access denied")
+	}
+	for _, c := range adminCommands {
+		if c == command {
+			return fmt.Errorf("access denied")
+		}
+	}
+	return nil
 }
 
 func (a *Authenticator) generatePasswordHash(password string) string {
