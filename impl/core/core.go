@@ -217,6 +217,7 @@ func (c *Core) GetActiveTransactions(userId string) (interface{}, error) {
 		return empty, nil
 	}
 	for _, t := range transactions {
+		t.CheckState()
 		t.MeterValues = NormalizeMeterValues(t.MeterValues, NormalizedMeterValuesLength)
 	}
 	return transactions, nil
@@ -245,6 +246,7 @@ func (c *Core) GetTransaction(userId string, accessLevel, id int) (interface{}, 
 	if state == nil {
 		return nil, nil
 	}
+	state.CheckState()
 	state.MeterValues = NormalizeMeterValues(state.MeterValues, NormalizedMeterValuesLength)
 	return state, nil
 }

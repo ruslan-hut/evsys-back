@@ -22,3 +22,9 @@ type ChargeState struct {
 	CanStop            bool                `json:"can_stop" bson:"can_stop"`
 	MeterValues        []*TransactionMeter `json:"meter_values" bson:"meter_values"`
 }
+
+func (cs *ChargeState) CheckState() {
+	if !cs.IsCharging {
+		cs.PowerRate = 0
+	}
+}
