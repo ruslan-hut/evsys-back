@@ -545,9 +545,10 @@ func (c *Client) listenForTransactionState(transactionId int) {
 				c.wsResponse(&entity.WsResponse{
 					Status:          entity.Value,
 					Stage:           entity.Info,
-					Info:            value.Unit,
-					Progress:        value.Value, // for compatibility with old clients
-					Power:           value.Value,
+					Info:            value.Measurand,
+					Power:           value.ConsumedEnergy,
+					PowerRate:       value.PowerRate,
+					SoC:             value.BatteryLevel,
 					Price:           value.Price,
 					Minute:          value.Minute,
 					Id:              transactionId,
