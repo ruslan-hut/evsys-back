@@ -438,6 +438,7 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 				c.wsResponse(&entity.WsResponse{
 					Status: entity.Success,
 					Stage:  entity.Start,
+					Id:     transaction.TransactionId,
 					Info:   fmt.Sprintf("transaction started: %v", transaction.TransactionId),
 				})
 				return
@@ -447,6 +448,7 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 				c.wsResponse(&entity.WsResponse{
 					Status:   entity.Waiting,
 					Stage:    entity.Start,
+					Id:       -1,
 					Info:     fmt.Sprintf("waiting %vs; %v%%", seconds, progress),
 					Progress: progress,
 				})
@@ -493,6 +495,7 @@ func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int
 				c.wsResponse(&entity.WsResponse{
 					Status: entity.Success,
 					Stage:  entity.Stop,
+					Id:     transaction.TransactionId,
 					Info:   fmt.Sprintf("transaction stopped: %v", transaction.TransactionId),
 				})
 				return
@@ -502,6 +505,7 @@ func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int
 				c.wsResponse(&entity.WsResponse{
 					Status:   entity.Waiting,
 					Stage:    entity.Stop,
+					Id:       transaction.TransactionId,
 					Info:     fmt.Sprintf("waiting %vs; %v%%", seconds, progress),
 					Progress: progress,
 				})
