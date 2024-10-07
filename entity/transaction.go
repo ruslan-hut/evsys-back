@@ -16,6 +16,7 @@ type Transaction struct {
 	PaymentAmount int                 `json:"payment_amount" bson:"payment_amount"`
 	PaymentBilled int                 `json:"payment_billed" bson:"payment_billed"`
 	PaymentOrder  int                 `json:"payment_order" bson:"payment_order"`
+	PaymentError  string              `json:"payment_error" bson:"payment_error"`
 	Plan          *PaymentPlan        `json:"payment_plan" bson:"payment_plan"`
 	MeterValues   []*TransactionMeter `json:"meter_values" bson:"meter_values"`
 	UserTag       *UserTag            `json:"user_tag" bson:"user_tag"`
