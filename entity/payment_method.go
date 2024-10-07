@@ -17,6 +17,7 @@ type PaymentMethod struct {
 	UserId      string `json:"user_id" bson:"user_id" validate:"omitempty"`
 	UserName    string `json:"user_name" bson:"user_name" validate:"omitempty"`
 	FailCount   int    `json:"fail_count" bson:"fail_count" validate:"omitempty"`
+	CofTid      string `json:"merchant_cof_txnid" bson:"merchant_cof_txnid" validate:"omitempty"`
 }
 
 func (p *PaymentMethod) Bind(_ *http.Request) error {
