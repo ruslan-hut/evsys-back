@@ -211,6 +211,8 @@ func (a *Authenticator) GetUserTag(user *entity.User) (string, error) {
 	return tags[0].IdTag, nil
 }
 
+// generate random key of specified length by reading cryptographic random function
+// and converting bytes to hex encoding; ensures key length by slicing if necessary
 func (a *Authenticator) generateKey(length int) string {
 	b := make([]byte, length)
 	_, err := rand.Read(b)
@@ -254,8 +256,7 @@ func (a *Authenticator) AuthenticateUser(username, password string) (*entity.Use
 	return user, nil
 }
 
-// RegisterUser add new user to the database
-// for new user registration, using "token" field as a value of invite code
+// RegisterUser registers a new user in the system with validation checks and default assignments.
 func (a *Authenticator) RegisterUser(user *entity.User) error {
 	if user.Password == "" {
 		return fmt.Errorf("empty password")
@@ -268,34 +269,55 @@ func (a *Authenticator) RegisterUser(user *entity.User) error {
 	}
 	a.mux.Lock()
 	defer a.mux.Unlock()
+	// check if username exists
 	existedUser, _ := a.database.GetUser(user.Username)
 	if existedUser != nil {
 		return fmt.Errorf("user already exists")
 	}
+	// check provided invite code
 	ok, _ := a.database.CheckInviteCode(user.Token)
 	if !ok {
 		return fmt.Errorf("invalid invite code")
 	}
+	// get password hash to store in user's data
 	user.Password = a.generatePasswordHash(user.Password)
 	if user.Password == "" {
 		return fmt.Errorf("empty password hash")
 	}
+	// assign default payment plan
 	if user.PaymentPlan == "" {
 		user.PaymentPlan = defaultPaymentPlan
 	}
+	// assign default user role
 	if user.Role == "" {
 		user.Role = defaultUserRole
 	}
+	// generate unique user id
+	user.UserId = a.getUserId()
 	user.DateRegistered = time.Now()
+	// store new user in repository
 	err := a.database.AddUser(user)
 	if err != nil {
 		return err
 	}
+	// delete used invite code
 	err = a.database.DeleteInviteCode(user.Token)
 	if err != nil {
 		a.logger.Error("deleting invite code", sl.Err(err))
 	}
 	return nil
+}
+
+// generate user ID using a 32-character key, ensuring uniqueness by recursively checking database
+// if user already exists with the generated ID
+// Note: This recursive approach could lead to stack overflow if not managed properly
+func (a *Authenticator) getUserId() string {
+	id := a.generateKey(32)
+	user, _ := a.database.GetUser(id)
+	if user == nil {
+		return id
+	}
+	return a.getUserId()
 }
 
 func (a *Authenticator) GetUsers(user *entity.User) ([]*entity.User, error) {
