@@ -2,6 +2,7 @@ package entity
 
 import (
 	"evsys-back/internal/lib/validate"
+	"fmt"
 	"net/http"
 )
 
@@ -14,4 +15,22 @@ type CentralSystemCommand struct {
 
 func (c *CentralSystemCommand) Bind(_ *http.Request) error {
 	return validate.Struct(c)
+}
+
+func NewCommandStartTransaction(chargePointId string, connectorId int, idTag string) *CentralSystemCommand {
+	return &CentralSystemCommand{
+		ChargePointId: chargePointId,
+		ConnectorId:   connectorId,
+		FeatureName:   "RemoteStartTransaction",
+		Payload:       idTag,
+	}
+}
+
+func NewCommandStopTransaction(chargePointId string, connectorId int, transactionId int) *CentralSystemCommand {
+	return &CentralSystemCommand{
+		ChargePointId: chargePointId,
+		ConnectorId:   connectorId,
+		FeatureName:   "RemoteStopTransaction",
+		Payload:       fmt.Sprintf("%d", transactionId),
+	}
 }

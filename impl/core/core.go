@@ -341,18 +341,13 @@ func (c *Core) WsRequest(request *entity.UserRequest) error {
 		return fmt.Errorf("central system is not connected")
 	}
 
-	command := entity.CentralSystemCommand{
-		ChargePointId: request.ChargePointId,
-		ConnectorId:   request.ConnectorId,
-	}
+	var command *entity.CentralSystemCommand
 
 	switch request.Command {
 	case entity.StartTransaction:
-		command.FeatureName = "RemoteStartTransaction"
-		command.Payload = request.Token
+		command = entity.NewCommandStartTransaction(request.ChargePointId, request.ConnectorId, request.Token)
 	case entity.StopTransaction:
-		command.FeatureName = "RemoteStopTransaction"
-		command.Payload = fmt.Sprintf("%d", request.TransactionId)
+		command = entity.NewCommandStopTransaction(request.ChargePointId, request.ConnectorId, request.TransactionId)
 	case entity.CheckStatus:
 		return nil
 	case entity.ListenTransaction:
@@ -369,7 +364,7 @@ func (c *Core) WsRequest(request *entity.UserRequest) error {
 		return fmt.Errorf("unknown command %s", request.Command)
 	}
 
-	response := c.cs.SendCommand(&command)
+	response := c.cs.SendCommand(command)
 	if response.IsError() {
 		return fmt.Errorf("sending command to central system: %s", response.Info)
 	}
