@@ -16,6 +16,7 @@ import (
 const (
 	tokenLength        = 32
 	defaultPaymentPlan = "default"
+	defaultUserRole    = "user"
 )
 
 // commands allowed only for admins
@@ -281,6 +282,9 @@ func (a *Authenticator) RegisterUser(user *entity.User) error {
 	}
 	if user.PaymentPlan == "" {
 		user.PaymentPlan = defaultPaymentPlan
+	}
+	if user.Role == "" {
+		user.Role = defaultUserRole
 	}
 	user.DateRegistered = time.Now()
 	err := a.database.AddUser(user)
