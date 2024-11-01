@@ -29,7 +29,7 @@ func Config(logger *slog.Logger, handler Helper) http.HandlerFunc {
 
 		data, err := handler.GetConfig(name)
 		if err != nil {
-			log.Error("get config", sl.Err(err))
+			log.With(sl.Err(err)).Error("get config failed")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get config: %v", err)))
 			return
@@ -53,7 +53,7 @@ func Log(logger *slog.Logger, handler Helper) http.HandlerFunc {
 
 		data, err := handler.GetLog(name)
 		if err != nil {
-			log.Error("get log", sl.Err(err))
+			log.With(sl.Err(err)).Error("get log failed")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get log: %v", err)))
 			return

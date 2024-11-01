@@ -33,7 +33,7 @@ func List(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 		data, err := handler.GetPaymentMethods(user.UserId)
 		if err != nil {
-			log.Error("payment methods list", sl.Err(err))
+			log.With(sl.Err(err)).Error("payment methods list")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to read payment methods: %v", err)))
 			return
@@ -57,7 +57,7 @@ func Save(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 		var pm entity.PaymentMethod
 		if err := render.Bind(r, &pm); err != nil {
-			log.Error("bind", sl.Err(err))
+			log.With(sl.Err(err)).Error("bind")
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode: %v", err)))
 			return
@@ -69,7 +69,7 @@ func Save(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 		err := handler.SavePaymentMethod(user, &pm)
 		if err != nil {
-			log.Error("payment method not saved", sl.Err(err))
+			log.With(sl.Err(err)).Error("payment method not saved")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to save payment method: %v", err)))
 			return
@@ -93,7 +93,7 @@ func Update(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 		var pm entity.PaymentMethod
 		if err := render.Bind(r, &pm); err != nil {
-			log.Error("bind", sl.Err(err))
+			log.With(sl.Err(err)).Error("bind")
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode: %v", err)))
 			return
@@ -105,7 +105,7 @@ func Update(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 		err := handler.UpdatePaymentMethod(user, &pm)
 		if err != nil {
-			log.Error("payment method not updated", sl.Err(err))
+			log.With(sl.Err(err)).Error("payment method not updated")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to update payment method: %v", err)))
 			return
@@ -129,7 +129,7 @@ func Delete(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 		var pm entity.PaymentMethod
 		if err := render.Bind(r, &pm); err != nil {
-			log.Error("bind", sl.Err(err))
+			log.With(sl.Err(err)).Error("bind")
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode: %v", err)))
 			return
@@ -141,7 +141,7 @@ func Delete(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 		err := handler.DeletePaymentMethod(user, &pm)
 		if err != nil {
-			log.Error("payment method not deleted", sl.Err(err))
+			log.With(sl.Err(err)).Error("payment method not deleted")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to delete payment method: %v", err)))
 			return
@@ -165,7 +165,7 @@ func Order(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 		var order entity.PaymentOrder
 		if err := render.Bind(r, &order); err != nil {
-			log.Error("bind", sl.Err(err))
+			log.With(sl.Err(err)).Error("bind")
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode: %v", err)))
 			return
@@ -178,7 +178,7 @@ func Order(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 		updated, err := handler.SetOrder(user, &order)
 		if err != nil {
-			log.Error("order not set", sl.Err(err))
+			log.With(sl.Err(err)).Error("order not set")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to set order: %v", err)))
 			return

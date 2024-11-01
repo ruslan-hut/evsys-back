@@ -275,7 +275,7 @@ func (c *Client) writePump() {
 			}
 			err := c.ws.WriteMessage(websocket.TextMessage, message)
 			if err != nil {
-				c.logger.Error("write message", err)
+				c.logger.With(sl.Err(err)).Error("write message")
 				return
 			}
 		}
@@ -301,7 +301,7 @@ func (c *Client) readPump() {
 		var userRequest entity.UserRequest
 		err = json.Unmarshal(message, &userRequest)
 		if err != nil {
-			c.logger.Error("read pump: unmarshal", err)
+			c.logger.With(sl.Err(err)).Error("read pump: unmarshal")
 			c.sendResponse(entity.Error, "invalid request")
 			continue
 		}
@@ -336,7 +336,7 @@ func (c *Client) readPump() {
 
 		err = c.core.WsRequest(&userRequest)
 		if err != nil {
-			c.logger.Error("ws: read pump", sl.Err(err))
+			c.logger.With(sl.Err(err)).Error("ws: read pump")
 			continue
 		}
 
@@ -359,7 +359,7 @@ func (c *Client) readPump() {
 		case entity.ListenTransaction:
 			_, err = c.statusReader.SaveStatus(c.id, entity.StageListen, userRequest.TransactionId)
 			if err != nil {
-				c.logger.Error("read pump: save status Listen", sl.Err(err))
+				c.logger.With(sl.Err(err)).Error("read pump: save status Listen")
 			}
 			_, ok := c.listeners[userRequest.TransactionId]
 			if !ok {
@@ -436,7 +436,7 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 			}
 			transaction, err := c.statusReader.GetTransactionAfter(c.id, timeStart)
 			if err != nil {
-				c.logger.Error("get transaction", err)
+				c.logger.With(sl.Err(err)).Error("get transaction")
 				continue
 			}
 			if transaction.TransactionId > -1 {
@@ -493,7 +493,7 @@ func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int
 			}
 			transaction, err := c.statusReader.GetTransaction(transactionId)
 			if err != nil {
-				c.logger.Error("get transaction", err)
+				c.logger.With(sl.Err(err)).Error("get transaction")
 				continue
 			}
 			if transaction.IsFinished {
@@ -598,7 +598,7 @@ func (c *Client) listenForLogUpdates() {
 				for _, message := range messages {
 					data, err := json.Marshal(message)
 					if err != nil {
-						c.logger.Error("marshal message", sl.Err(err))
+						c.logger.With(sl.Err(err)).Error("marshal message")
 						continue
 					}
 					c.wsResponse(&entity.WsResponse{
@@ -644,7 +644,7 @@ func (s *Server) listenForUpdates() {
 
 					data, err := json.Marshal(message)
 					if err != nil {
-						s.log.Error("marshal log message", sl.Err(err))
+						s.log.With(sl.Err(err)).Error("marshal log message")
 						continue
 					}
 					s.pool.logEvent <- &entity.WsResponse{
@@ -677,7 +677,7 @@ func (c *Client) wsResponse(response *entity.WsResponse) {
 	if err == nil {
 		c.send <- data
 	} else {
-		c.logger.Error("send response", err)
+		c.logger.With(sl.Err(err)).Error("send response")
 	}
 }
 
@@ -692,7 +692,7 @@ func (c *Client) close() {
 func (s *Server) handleWs(w http.ResponseWriter, r *http.Request) {
 	ws, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		s.log.Error("upgrade http to websocket", err)
+		s.log.With(sl.Err(err)).Error("upgrade http to websocket")
 		return
 	}
 	remote := r.RemoteAddr

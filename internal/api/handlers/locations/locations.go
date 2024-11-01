@@ -32,7 +32,7 @@ func ListLocations(logger *slog.Logger, handler Locations) http.HandlerFunc {
 
 		data, err := handler.GetLocations(user.AccessLevel)
 		if err != nil {
-			log.Error("get locations", sl.Err(err))
+			log.With(sl.Err(err)).Error("get locations")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get locations: %v", err)))
 			return
@@ -58,7 +58,7 @@ func ListChargePoints(logger *slog.Logger, handler Locations) http.HandlerFunc {
 
 		data, err := handler.GetChargePoints(user.AccessLevel, search)
 		if err != nil {
-			log.Error("get charge points", sl.Err(err))
+			log.With(sl.Err(err)).Error("get charge points")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get charge points: %v", err)))
 			return
@@ -84,7 +84,7 @@ func ChargePointRead(logger *slog.Logger, handler Locations) http.HandlerFunc {
 
 		data, err := handler.GetChargePoint(user.AccessLevel, id)
 		if err != nil {
-			log.Error("get charge point", sl.Err(err))
+			log.With(sl.Err(err)).Error("get charge point")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get charge point: %v", err)))
 			return
@@ -110,7 +110,7 @@ func ChargePointSave(logger *slog.Logger, handler Locations) http.HandlerFunc {
 
 		var chargePoint entity.ChargePoint
 		if err := render.Bind(r, &chargePoint); err != nil {
-			log.Error("decode charge point", sl.Err(err))
+			log.With(sl.Err(err)).Error("decode charge point")
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode charge point: %v", err)))
 			return
@@ -118,7 +118,7 @@ func ChargePointSave(logger *slog.Logger, handler Locations) http.HandlerFunc {
 
 		err := handler.SaveChargePoint(user.AccessLevel, &chargePoint)
 		if err != nil {
-			log.Error("save charge point", sl.Err(err))
+			log.With(sl.Err(err)).Error("save charge point")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to save charge point: %v", err)))
 			return

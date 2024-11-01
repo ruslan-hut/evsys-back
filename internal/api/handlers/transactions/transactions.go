@@ -32,7 +32,7 @@ func ListActive(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 
 		data, err := handler.GetActiveTransactions(user.UserId)
 		if err != nil {
-			log.Error("active transactions", sl.Err(err))
+			log.With(sl.Err(err)).Error("active transactions")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to read transactions: %v", err)))
 			return
@@ -58,7 +58,7 @@ func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 
 		data, err := handler.GetTransactions(user.UserId, period)
 		if err != nil {
-			log.Error("transactions list", sl.Err(err))
+			log.With(sl.Err(err)).Error("transactions list")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to read transactions: %v", err)))
 			return
@@ -85,7 +85,7 @@ func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 
 		transactionId, err := strconv.Atoi(id)
 		if err != nil {
-			log.Error("transaction id", sl.Err(err))
+			log.With(sl.Err(err)).Error("transaction id")
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to parse transaction id: %v", err)))
 			return
@@ -93,7 +93,7 @@ func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 
 		data, err := handler.GetTransaction(user.UserId, user.AccessLevel, transactionId)
 		if err != nil {
-			log.Error("transaction info", sl.Err(err))
+			log.With(sl.Err(err)).Error("transaction info")
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to read transaction info: %v", err)))
 			return
