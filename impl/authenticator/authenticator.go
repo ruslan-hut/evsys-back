@@ -164,7 +164,7 @@ func (a *Authenticator) GenerateInvites(count int) ([]string, error) {
 		}
 		err := a.database.AddInviteCode(invite)
 		if err != nil {
-			a.logger.Error("add invite code", sl.Err(err))
+			a.logger.Error("add invite code", err)
 			continue
 		}
 		invites = append(invites, inviteCode)
@@ -303,7 +303,7 @@ func (a *Authenticator) RegisterUser(user *entity.User) error {
 	// delete used invite code
 	err = a.database.DeleteInviteCode(user.Token)
 	if err != nil {
-		a.logger.Error("deleting invite code", sl.Err(err))
+		a.logger.Error("deleting invite code", err)
 	}
 	return nil
 }
@@ -359,7 +359,7 @@ func (a *Authenticator) CommandAccess(user *entity.User, command string) error {
 func (a *Authenticator) generatePasswordHash(password string) string {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		a.logger.Error("generating password hash", sl.Err(err))
+		a.logger.Error("generating password hash", err)
 		return ""
 	}
 	return string(hash)
