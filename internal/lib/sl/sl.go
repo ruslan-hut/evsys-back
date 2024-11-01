@@ -6,10 +6,7 @@ import (
 )
 
 func Err(err error) slog.Attr {
-	return slog.Attr{
-		Key:   "err",
-		Value: slog.StringValue(err.Error()),
-	}
+	return slog.String("error", err.Error())
 }
 
 // Secret returns a string with the first 5 characters of the input string
@@ -22,15 +19,9 @@ func Secret(key, value string) slog.Attr {
 	if value == "" {
 		r = "?"
 	}
-	return slog.Attr{
-		Key:   key,
-		Value: slog.StringValue(r),
-	}
+	return slog.String(key, r)
 }
 
 func Module(mod string) slog.Attr {
-	return slog.Attr{
-		Key:   "mod",
-		Value: slog.StringValue(mod),
-	}
+	return slog.String("mod", mod)
 }
