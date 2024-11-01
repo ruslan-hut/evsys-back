@@ -40,14 +40,14 @@ func MonthlyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 
 		to, err := request.GetDate(r, "to")
 		if err != nil {
-			log.With(sl.Err(err)).Error("wrong parameter")
+			log.Error("wrong parameter", sl.Err(err))
 			wrongParameter(w, r, err)
 			return
 		}
 
 		group, err := request.GetString(r, "group")
 		if err != nil {
-			log.With(sl.Err(err)).Error("wrong parameter")
+			log.Error("wrong parameter", sl.Err(err))
 			wrongParameter(w, r, err)
 			return
 		}
@@ -60,7 +60,7 @@ func MonthlyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 
 		data, err := handler.MonthlyStats(from, to, group)
 		if err != nil {
-			log.With(sl.Err(err)).Error("get report failed")
+			log.Error("get report failed", sl.Err(err))
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get report data: %v", err)))
 			return
@@ -86,21 +86,21 @@ func UsersStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 
 		from, err := request.GetDate(r, "from")
 		if err != nil {
-			log.With(sl.Err(err)).Error("wrong parameter")
+			log.Error("wrong parameter", sl.Err(err))
 			wrongParameter(w, r, err)
 			return
 		}
 
 		to, err := request.GetDate(r, "to")
 		if err != nil {
-			log.With(sl.Err(err)).Error("wrong parameter")
+			log.Error("wrong parameter", sl.Err(err))
 			wrongParameter(w, r, err)
 			return
 		}
 
 		group, err := request.GetString(r, "group")
 		if err != nil {
-			log.With(sl.Err(err)).Error("wrong parameter")
+			log.Error("wrong parameter", sl.Err(err))
 			wrongParameter(w, r, err)
 			return
 		}
@@ -113,7 +113,7 @@ func UsersStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 
 		data, err := handler.UsersStats(from, to, group)
 		if err != nil {
-			log.With(sl.Err(err)).Error("get report failed")
+			log.Error("get report failed", sl.Err(err))
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get report data: %v", err)))
 			return
