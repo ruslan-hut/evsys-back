@@ -60,7 +60,7 @@ func MonthlyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 
 		data, err := handler.MonthlyStats(from, to, group)
 		if err != nil {
-			log.Error("get user", sl.Err(err))
+			log.Error("get report", sl.Err(err))
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get report data: %v", err)))
 			return
@@ -113,12 +113,12 @@ func UsersStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 
 		data, err := handler.UsersStats(from, to, group)
 		if err != nil {
-			log.Error("get user", sl.Err(err))
+			log.Error("get report", sl.Err(err))
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get report data: %v", err)))
 			return
 		}
-		log.Info("monthly report")
+		log.Info("users report")
 
 		render.JSON(w, r, data)
 	}
