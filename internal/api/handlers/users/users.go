@@ -30,7 +30,7 @@ func Authenticate(logger *slog.Logger, handler Users) http.HandlerFunc {
 
 		var user entity.User
 		if err := render.Bind(r, &user); err != nil {
-			log.With(sl.Err(err)).Error("decode user data")
+			log.Error("decode user data", sl.Err(err))
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode user data: %v", err)))
 			return
@@ -47,7 +47,7 @@ func Authenticate(logger *slog.Logger, handler Users) http.HandlerFunc {
 		}
 
 		if err != nil {
-			log.With(sl.Err(err)).Error("not authorized")
+			log.Error("not authorized", sl.Err(err))
 			render.Status(r, 401)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Not authorized: %v", err)))
 			return
@@ -67,7 +67,7 @@ func Register(logger *slog.Logger, handler Users) http.HandlerFunc {
 
 		var user entity.User
 		if err := render.Bind(r, &user); err != nil {
-			log.With(sl.Err(err)).Error("decode user data")
+			log.Error("decode user data", sl.Err(err))
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode user data: %v", err)))
 			return
@@ -76,7 +76,7 @@ func Register(logger *slog.Logger, handler Users) http.HandlerFunc {
 
 		data, err := handler.AddUser(&user)
 		if err != nil {
-			log.With(sl.Err(err)).Error("save user")
+			log.Error("save user", sl.Err(err))
 			render.Status(r, 500)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to save user: %v", err)))
 			return
@@ -104,7 +104,7 @@ func Info(logger *slog.Logger, handler Users) http.HandlerFunc {
 
 		data, err := handler.GetUser(user, name)
 		if err != nil {
-			log.With(sl.Err(err)).Error("get user")
+			log.Error("get user", sl.Err(err))
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get user: %v", err)))
 			return
@@ -130,7 +130,7 @@ func List(logger *slog.Logger, handler Users) http.HandlerFunc {
 
 		data, err := handler.GetUsers(user)
 		if err != nil {
-			log.With(sl.Err(err)).Error("get users")
+			log.Error("get users", sl.Err(err))
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get users: %v", err)))
 			return
