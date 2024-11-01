@@ -22,11 +22,11 @@ func New(log *slog.Logger, key string) (*Firebase, error) {
 	sa := option.WithCredentialsFile(key)
 	app, err := firebase.NewApp(ctx, nil, sa)
 	if err != nil {
-		return nil, fmt.Errorf("error initializing app: %v", err)
+		return nil, fmt.Errorf("initializing app: %v", err)
 	}
 	client, err := app.Auth(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("error getting auth client: %v\n", err)
+		return nil, fmt.Errorf("getting auth client: %v", err)
 	}
 	return &Firebase{
 		app:     app,
@@ -39,7 +39,7 @@ func New(log *slog.Logger, key string) (*Firebase, error) {
 func (f *Firebase) CheckToken(tokenId string) (string, error) {
 	token, err := f.client.VerifyIDToken(f.context, tokenId)
 	if err != nil {
-		f.logger.Error("verifying token", err)
+		f.logger.Error("verifying token", sl.Err(err))
 		return "", err
 	}
 	return token.UID, nil
