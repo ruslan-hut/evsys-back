@@ -8,6 +8,7 @@ import (
 	"evsys-back/internal/api/handlers/helper"
 	"evsys-back/internal/api/handlers/locations"
 	"evsys-back/internal/api/handlers/payments"
+	"evsys-back/internal/api/handlers/report"
 	"evsys-back/internal/api/handlers/transactions"
 	"evsys-back/internal/api/handlers/users"
 	"evsys-back/internal/api/middleware/authenticate"
@@ -55,6 +56,7 @@ type Core interface {
 	centralsystem.CentralSystem
 	transactions.Transactions
 	payments.Payments
+	report.Reports
 
 	UserTag(user *entity.User) (string, error)
 	WsRequest(request *entity.UserRequest) error
@@ -118,6 +120,8 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 			//router.Get("/payment/ok", s.paymentSuccess)
 			//router.Get("/payment/ko", s.paymentFail)
 			//router.Post("/payment/notify", s.paymentNotify)
+
+			r.Get("/report/month", report.MonthlyStatistics(log, core))
 
 			r.Get("/log/{name}", helper.Log(log, core))
 		})
