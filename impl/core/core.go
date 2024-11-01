@@ -371,7 +371,20 @@ func (c *Core) WsRequest(request *entity.UserRequest) error {
 	return nil
 }
 
-func (c *Core) Monthly(from, to time.Time, userGroup string) (interface{}, error) {
+func (c *Core) MonthlyStats(from, to time.Time, userGroup string) (interface{}, error) {
+	c.log.With(
+		slog.Time("from", from),
+		slog.Time("to", to),
+		slog.String("group", userGroup),
+	).Debug("monthly stats")
+	return nil, nil
+}
 
+func (c *Core) UsersStats(from, to time.Time, userGroup string) (interface{}, error) {
+	c.log.With(
+		slog.Time("from", from),
+		slog.Time("to", to),
+		slog.String("group", userGroup),
+	).Debug("users stats")
 	return nil, nil
 }
