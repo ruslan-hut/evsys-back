@@ -13,7 +13,7 @@ func GetDate(r *http.Request, key string) (time.Time, error) {
 	query := r.URL.Query()
 	par := query.Get(key)
 	if par == "" {
-		return time.Now(), nil
+		return time.Now(), fmt.Errorf("parameter '%s' is missing", key)
 	}
 	initial := par
 	if len(par) == 10 {
@@ -33,7 +33,7 @@ func GetString(r *http.Request, key string) (string, error) {
 	query := r.URL.Query()
 	par := query.Get(key)
 	if par == "" {
-		return "", fmt.Errorf("empty value of %s", key)
+		return "", fmt.Errorf("parameter '%s' is missing", key)
 	}
 	return par, nil
 }
