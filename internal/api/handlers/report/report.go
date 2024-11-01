@@ -33,7 +33,7 @@ func MonthlyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 
 		from, err := request.GetDate(r, "from")
 		if err != nil {
-			log.With(sl.Err(err)).Error("wrong parameter")
+			log.Error("wrong parameter", sl.Err(err))
 			wrongParameter(w, r, err)
 			return
 		}
