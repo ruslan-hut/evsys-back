@@ -33,21 +33,21 @@ func MonthlyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 
 		from, err := request.GetDate(r, "from")
 		if err != nil {
-			log.Error("wrong parameter", err)
+			log.With(sl.Err(err)).Error("wrong parameter")
 			wrongParameter(w, r, err)
 			return
 		}
 
 		to, err := request.GetDate(r, "to")
 		if err != nil {
-			log.Error("wrong parameter", err)
+			log.With(sl.Err(err)).Error("wrong parameter")
 			wrongParameter(w, r, err)
 			return
 		}
 
 		group, err := request.GetString(r, "group")
 		if err != nil {
-			log.Error("wrong parameter", err)
+			log.With(sl.Err(err)).Error("wrong parameter")
 			wrongParameter(w, r, err)
 			return
 		}
@@ -86,21 +86,21 @@ func UsersStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 
 		from, err := request.GetDate(r, "from")
 		if err != nil {
-			log.Error("wrong parameter", err)
+			log.With(sl.Err(err)).Error("wrong parameter")
 			wrongParameter(w, r, err)
 			return
 		}
 
 		to, err := request.GetDate(r, "to")
 		if err != nil {
-			log.Error("wrong parameter", err)
+			log.With(sl.Err(err)).Error("wrong parameter")
 			wrongParameter(w, r, err)
 			return
 		}
 
 		group, err := request.GetString(r, "group")
 		if err != nil {
-			log.Error("wrong parameter", err)
+			log.With(sl.Err(err)).Error("wrong parameter")
 			wrongParameter(w, r, err)
 			return
 		}
