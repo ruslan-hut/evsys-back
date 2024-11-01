@@ -31,7 +31,7 @@ func Command(logger *slog.Logger, handler CentralSystem) http.HandlerFunc {
 
 		var command entity.CentralSystemCommand
 		if err := render.Bind(r, &command); err != nil {
-			log.With(sl.Err(err)).Error("bind failed")
+			log.Error("bind failed", sl.Err(err))
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode: %v", err)))
 			return
@@ -45,12 +45,12 @@ func Command(logger *slog.Logger, handler CentralSystem) http.HandlerFunc {
 
 		data, err := handler.SendCommand(&command, user)
 		if err != nil {
-			log.With(sl.Err(err)).Error("send cs command failed")
+			log.Error("send cs command failed", sl.Err(err))
 			render.Status(r, 204)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to send command: %v", err)))
 			return
 		}
-		log.Info("cs command success", slog.Any("data", data))
+		log.Info("cs command success")
 
 		render.JSON(w, r, data)
 	}
