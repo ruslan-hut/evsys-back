@@ -7,7 +7,7 @@ import (
 
 func Err(err error) slog.Attr {
 	return slog.Attr{
-		Key:   "error",
+		Key:   "err",
 		Value: slog.StringValue(err.Error()),
 	}
 }
