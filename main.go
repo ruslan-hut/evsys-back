@@ -62,7 +62,7 @@ func main() {
 	var fb *firebase.Firebase
 	if conf.FirebaseKey != "" {
 		log.Info("firebase enabled")
-		fb, err = firebase.New(log, conf.FirebaseKey)
+		fb, err = firebase.New(conf.FirebaseKey)
 		if err != nil {
 			log.Error("firebase client", err)
 			return
