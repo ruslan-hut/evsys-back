@@ -78,17 +78,17 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 	if err != nil {
 		return nil, m.findError(err)
 	}
-	var result []interface{}
-	if err = cursor.All(m.ctx, &result); err != nil {
-		return nil, err
-	}
-	//var lines []*ReportLineMonth
-	//if err = cursor.All(m.ctx, &lines); err != nil {
+	//var result []interface{}
+	//if err = cursor.All(m.ctx, &result); err != nil {
 	//	return nil, err
 	//}
-	//result := make([]interface{}, len(lines))
-	//for i, v := range lines {
-	//	result[i] = v
-	//}
+	var lines []*ReportLineMonth
+	if err = cursor.All(m.ctx, &lines); err != nil {
+		return nil, err
+	}
+	result := make([]interface{}, len(lines))
+	for i, v := range lines {
+		result[i] = v
+	}
 	return result, err
 }
