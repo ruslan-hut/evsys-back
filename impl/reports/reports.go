@@ -28,6 +28,9 @@ func (r *Reports) TotalsByMonth(from, to time.Time, userGroup string) (interface
 		r.log.Error("totals by month failed", sl.Err(err))
 		return []interface{}{}, nil
 	}
+	if data == nil {
+		return []interface{}{}, nil
+	}
 	return data, nil
 }
 
