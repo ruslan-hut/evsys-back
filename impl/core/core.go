@@ -11,49 +11,8 @@ import (
 const (
 	MaxAccessLevel              int = 10
 	NormalizedMeterValuesLength     = 60
+	subSystemReports                = "reports"
 )
-
-type Repository interface {
-	GetConfig(name string) (interface{}, error)
-	ReadLog(name string) (interface{}, error)
-
-	GetUserInfo(accessLevel int, username string) (*entity.UserInfo, error)
-
-	GetLocations() ([]*entity.Location, error)
-	GetChargePoints(level int, searchTerm string) ([]*entity.ChargePoint, error)
-	GetChargePoint(level int, id string) (*entity.ChargePoint, error)
-	UpdateChargePoint(level int, chargePoint *entity.ChargePoint) error
-
-	GetActiveTransactions(userId string) ([]*entity.ChargeState, error)
-	GetTransactions(userId string, period string) ([]*entity.Transaction, error)
-	GetTransactionState(userId string, level int, id int) (*entity.ChargeState, error)
-
-	GetPaymentMethods(userId string) ([]*entity.PaymentMethod, error)
-	SavePaymentMethod(paymentMethod *entity.PaymentMethod) error
-	UpdatePaymentMethod(paymentMethod *entity.PaymentMethod) error
-	DeletePaymentMethod(paymentMethod *entity.PaymentMethod) error
-	GetLastOrder() (*entity.PaymentOrder, error)
-	SavePaymentOrder(order *entity.PaymentOrder) error
-	GetPaymentOrderByTransaction(transactionId int) (*entity.PaymentOrder, error)
-}
-
-type Authenticator interface {
-	AuthenticateByToken(token string) (*entity.User, error)
-	AuthenticateUser(username, password string) (*entity.User, error)
-	RegisterUser(user *entity.User) error
-	GetUsers(user *entity.User) ([]*entity.User, error)
-	GetUserTag(user *entity.User) (string, error)
-	CommandAccess(user *entity.User, command string) error
-}
-
-type Reports interface {
-	TotalsByMonth(from, to time.Time, userGroup string) (interface{}, error)
-	TotalsByUsers(from, to time.Time, userGroup string) (interface{}, error)
-}
-
-type CentralSystem interface {
-	SendCommand(command *entity.CentralSystemCommand) *entity.CentralSystemResponse
-}
 
 type Core struct {
 	repo    Repository
@@ -381,16 +340,18 @@ func (c *Core) WsRequest(request *entity.UserRequest) error {
 	return nil
 }
 
-func (c *Core) MonthlyStats(from, to time.Time, userGroup string) (interface{}, error) {
-	if c.reports == nil {
-		return nil, fmt.Errorf("report is not available")
+func (c *Core) MonthlyStats(user *entity.User, from, to time.Time, userGroup string) (interface{}, error) {
+	err := c.checkSubsystemAccess(user, subSystemReports)
+	if err != nil {
+		return nil, err
 	}
 	return c.reports.TotalsByMonth(from, to, userGroup)
 }
 
-func (c *Core) UsersStats(from, to time.Time, userGroup string) (interface{}, error) {
-	if c.reports == nil {
-		return nil, fmt.Errorf("report is not available")
+func (c *Core) UsersStats(user *entity.User, from, to time.Time, userGroup string) (interface{}, error) {
+	err := c.checkSubsystemAccess(user, subSystemReports)
+	if err != nil {
+		return nil, err
 	}
 	return c.reports.TotalsByUsers(from, to, userGroup)
 }

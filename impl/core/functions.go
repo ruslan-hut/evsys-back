@@ -2,8 +2,23 @@ package core
 
 import (
 	"evsys-back/entity"
+	"fmt"
 	"math"
 )
+
+func (c *Core) checkSubsystemAccess(user *entity.User, subsystem string) error {
+	if c.auth == nil {
+		return fmt.Errorf("authenticator not set")
+	}
+	err := c.auth.HasAccess(user, subsystem)
+	if err != nil {
+		return err
+	}
+	if subsystem == subSystemReports && c.reports == nil {
+		return fmt.Errorf("report is not available")
+	}
+	return nil
+}
 
 func NormalizeMeterValues(meterValues []*entity.TransactionMeter, newLength int) []*entity.TransactionMeter {
 	if newLength == 0 || meterValues == nil || len(meterValues) <= newLength {

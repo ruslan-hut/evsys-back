@@ -1,6 +1,7 @@
 package report
 
 import (
+	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/request"
 	"evsys-back/internal/lib/api/response"
@@ -14,8 +15,8 @@ import (
 )
 
 type Reports interface {
-	MonthlyStats(from, to time.Time, userGroup string) (interface{}, error)
-	UsersStats(from, to time.Time, userGroup string) (interface{}, error)
+	MonthlyStats(user *entity.User, from, to time.Time, userGroup string) (interface{}, error)
+	UsersStats(user *entity.User, from, to time.Time, userGroup string) (interface{}, error)
 }
 
 func MonthlyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
@@ -58,7 +59,7 @@ func MonthlyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 			slog.String("group", group),
 		)
 
-		data, err := handler.MonthlyStats(from, to, group)
+		data, err := handler.MonthlyStats(user, from, to, group)
 		if err != nil {
 			log.Error("get report failed", sl.Err(err))
 			render.Status(r, 400)
@@ -111,7 +112,7 @@ func UsersStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 			slog.String("group", group),
 		)
 
-		data, err := handler.UsersStats(from, to, group)
+		data, err := handler.UsersStats(user, from, to, group)
 		if err != nil {
 			log.Error("get report failed", sl.Err(err))
 			render.Status(r, 400)

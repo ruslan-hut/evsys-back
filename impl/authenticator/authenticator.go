@@ -1,8 +1,6 @@
 package authenticator
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/sl"
 	"fmt"
@@ -24,27 +22,6 @@ var adminCommands = []string{"ChangeConfiguration", "SetChargingProfile", "Clear
 
 // commands allowed for all users
 var userCommands = []string{"RemoteStartTransaction", "RemoteStopTransaction"}
-
-type Repository interface {
-	GetUser(username string) (*entity.User, error)
-	GetUserById(userId string) (*entity.User, error)
-	UpdateLastSeen(user *entity.User) error
-	AddUser(user *entity.User) error
-	CheckUsername(username string) error
-	CheckToken(token string) (*entity.User, error)
-	AddInviteCode(invite *entity.Invite) error
-	CheckInviteCode(code string) (bool, error)
-	DeleteInviteCode(code string) error
-	GetUserTags(userId string) ([]entity.UserTag, error)
-	AddUserTag(userTag *entity.UserTag) error
-	CheckUserTag(idTag string) error
-	UpdateTagLastSeen(userTag *entity.UserTag) error
-	GetUsers() ([]*entity.User, error)
-}
-
-type FirebaseAuth interface {
-	CheckToken(token string) (string, error)
-}
 
 type Authenticator struct {
 	logger   *slog.Logger
@@ -144,15 +121,6 @@ func (a *Authenticator) GetUserById(userId string) (*entity.User, error) {
 	return user, nil
 }
 
-// update user last seen
-func (a *Authenticator) updateLastSeen(user *entity.User) error {
-	err := a.database.UpdateLastSeen(user)
-	if err != nil {
-		return fmt.Errorf("updating user last seen: %s", err)
-	}
-	return nil
-}
-
 func (a *Authenticator) GenerateInvites(count int) ([]string, error) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
@@ -209,22 +177,6 @@ func (a *Authenticator) GetUserTag(user *entity.User) (string, error) {
 	}
 	_ = a.database.UpdateTagLastSeen(&tags[0])
 	return tags[0].IdTag, nil
-}
-
-// generate random key of specified length by reading cryptographic random function
-// and converting bytes to hex encoding; ensures key length by slicing if necessary
-func (a *Authenticator) generateKey(length int) string {
-	b := make([]byte, length)
-	_, err := rand.Read(b)
-	if err != nil {
-		return ""
-	}
-	s := hex.EncodeToString(b)
-	// string length is doubled because of hex encoding
-	if len(s) > length {
-		s = s[:length]
-	}
-	return s
 }
 
 // AuthenticateUser method returns user with blank password if authentication is successful
@@ -308,18 +260,6 @@ func (a *Authenticator) RegisterUser(user *entity.User) error {
 	return nil
 }
 
-// generate user ID using a 32-character key, ensuring uniqueness by recursively checking database
-// if user already exists with the generated ID
-// Note: This recursive approach could lead to stack overflow if not managed properly
-func (a *Authenticator) getUserId() string {
-	id := a.generateKey(32)
-	user, _ := a.database.GetUser(id)
-	if user == nil {
-		return id
-	}
-	return a.getUserId()
-}
-
 func (a *Authenticator) GetUsers(user *entity.User) ([]*entity.User, error) {
 	if user == nil || !user.IsAdmin() {
 		return nil, fmt.Errorf("access denied")
@@ -333,9 +273,10 @@ func (a *Authenticator) GetUsers(user *entity.User) ([]*entity.User, error) {
 	return users, nil
 }
 
+// CommandAccess check user access for a specific command based on role and permissions
 func (a *Authenticator) CommandAccess(user *entity.User, command string) error {
 	if user == nil {
-		return fmt.Errorf("access denied")
+		return fmt.Errorf("user undefined")
 	}
 	if user.IsAdmin() {
 		return nil
@@ -356,11 +297,13 @@ func (a *Authenticator) CommandAccess(user *entity.User, command string) error {
 	return nil
 }
 
-func (a *Authenticator) generatePasswordHash(password string) string {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		a.logger.Error("generating password hash", err)
-		return ""
+// HasAccess check access permission for a user to a specific subsystem based on user type
+func (a *Authenticator) HasAccess(user *entity.User, subSystem string) error {
+	if user == nil {
+		return fmt.Errorf("user undefined")
 	}
-	return string(hash)
+	if user.IsPowerUser() {
+		return nil
+	}
+	return fmt.Errorf("access to %s denied", subSystem)
 }
