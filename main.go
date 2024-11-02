@@ -6,6 +6,7 @@ import (
 	"evsys-back/impl/central-system"
 	"evsys-back/impl/core"
 	"evsys-back/impl/database"
+	"evsys-back/impl/reports"
 	statusreader "evsys-back/impl/status-reader"
 	"evsys-back/internal/api/http"
 	"evsys-back/internal/firebase"
@@ -43,20 +44,18 @@ func main() {
 		mockDb = database.NewMockDB()
 	}
 
-	var cs *centralsystem.CentralSystem
-	if conf.CentralSystem.Enabled {
-		log.With(
-			slog.String("url", conf.CentralSystem.Url),
-			sl.Secret("token", conf.CentralSystem.Token),
-		).Info("connecting to central system")
-		cs = centralsystem.NewCentralSystem(conf.CentralSystem.Url, conf.CentralSystem.Token)
-	}
-
 	var auth *authenticator.Authenticator
 	if conf.Mongo.Enabled {
 		auth = authenticator.New(log, mongo)
 	} else {
 		auth = authenticator.New(log, mockDb)
+	}
+
+	var rep *reports.Reports
+	if conf.Mongo.Enabled {
+		rep = reports.New(mongo, log)
+	} else {
+		rep = reports.New(mockDb, log)
 	}
 
 	var fb *firebase.Firebase
@@ -77,7 +76,14 @@ func main() {
 		coreHandler = core.New(log, mockDb)
 	}
 	coreHandler.SetAuth(auth)
+	coreHandler.SetReports(rep)
+
 	if conf.CentralSystem.Enabled {
+		log.With(
+			slog.String("url", conf.CentralSystem.Url),
+			sl.Secret("token", conf.CentralSystem.Token),
+		).Info("connecting to central system")
+		cs := centralsystem.NewCentralSystem(conf.CentralSystem.Url, conf.CentralSystem.Token)
 		coreHandler.SetCentralSystem(cs)
 	}
 

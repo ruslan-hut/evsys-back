@@ -46,15 +46,21 @@ type Authenticator interface {
 	CommandAccess(user *entity.User, command string) error
 }
 
+type Reports interface {
+	TotalsByMonth(from, to time.Time, userGroup string) (interface{}, error)
+	TotalsByUsers(from, to time.Time, userGroup string) (interface{}, error)
+}
+
 type CentralSystem interface {
 	SendCommand(command *entity.CentralSystemCommand) *entity.CentralSystemResponse
 }
 
 type Core struct {
-	repo Repository
-	auth Authenticator
-	cs   CentralSystem
-	log  *slog.Logger
+	repo    Repository
+	auth    Authenticator
+	cs      CentralSystem
+	reports Reports
+	log     *slog.Logger
 }
 
 func New(log *slog.Logger, repo Repository) *Core {
@@ -70,6 +76,10 @@ func (c *Core) SetAuth(auth Authenticator) {
 
 func (c *Core) SetCentralSystem(cs CentralSystem) {
 	c.cs = cs
+}
+
+func (c *Core) SetReports(reports Reports) {
+	c.reports = reports
 }
 
 func (c *Core) GetConfig(name string) (interface{}, error) {
@@ -372,19 +382,15 @@ func (c *Core) WsRequest(request *entity.UserRequest) error {
 }
 
 func (c *Core) MonthlyStats(from, to time.Time, userGroup string) (interface{}, error) {
-	c.log.With(
-		slog.Time("from", from),
-		slog.Time("to", to),
-		slog.String("group", userGroup),
-	).Debug("monthly stats")
-	return nil, nil
+	if c.reports == nil {
+		return nil, fmt.Errorf("report is not available")
+	}
+	return c.reports.TotalsByMonth(from, to, userGroup)
 }
 
 func (c *Core) UsersStats(from, to time.Time, userGroup string) (interface{}, error) {
-	c.log.With(
-		slog.Time("from", from),
-		slog.Time("to", to),
-		slog.String("group", userGroup),
-	).Debug("users stats")
-	return nil, nil
+	if c.reports == nil {
+		return nil, fmt.Errorf("report is not available")
+	}
+	return c.reports.TotalsByUsers(from, to, userGroup)
 }
