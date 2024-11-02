@@ -37,8 +37,8 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 		{{"$unwind", "$user_info"}},
 		// Stage 5: Filter transactions by a specific user group
 		{{"$match", bson.D{
-			//{"user_info.group", userGroup},
-			{"transaction_stop", bson.D{
+			{"user_info.group", userGroup},
+			{"time_stop", bson.D{
 				{"$gte", from},
 				{"$lte", to},
 			}},
@@ -51,8 +51,8 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 		}}},
 		{{"$group", bson.D{
 			{"_id", bson.D{
-				{"year", bson.D{{"$year", "$transaction_stop"}}},
-				{"month", bson.D{{"$month", "$transaction_stop"}}},
+				{"year", bson.D{{"$year", "$time_stop"}}},
+				{"month", bson.D{{"$month", "$time_stop"}}},
 			}},
 			{"totalConsumedWatts", bson.D{{"$sum", "$consumed_watts"}}},
 			{"avgWatts", bson.D{{"$avg", "$consumed_watts"}}},
