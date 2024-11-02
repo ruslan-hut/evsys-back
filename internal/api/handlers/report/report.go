@@ -15,8 +15,8 @@ import (
 )
 
 type Reports interface {
-	MonthlyStats(user *entity.User, from, to time.Time, userGroup string) (interface{}, error)
-	UsersStats(user *entity.User, from, to time.Time, userGroup string) (interface{}, error)
+	MonthlyStats(user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
+	UsersStats(user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
 }
 
 func MonthlyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {

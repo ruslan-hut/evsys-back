@@ -22,24 +22,28 @@ func New(repo Repository, log *slog.Logger) *Reports {
 	}
 }
 
-func (r *Reports) TotalsByMonth(from, to time.Time, userGroup string) (interface{}, error) {
-	r.log.With(
+func (r *Reports) TotalsByMonth(from, to time.Time, userGroup string) ([]interface{}, error) {
+	log := r.log.With(
 		slog.Time("from", from),
 		slog.Time("to", to),
 		slog.String("userGroup", userGroup),
-	).Debug("totals by month")
+	)
 	data, err := r.repo.TotalsByMonth(from, to, userGroup)
 	if err != nil {
-		r.log.Error("totals by month failed", sl.Err(err))
+		log.Error("totals by month failed", sl.Err(err))
 		return []interface{}{}, nil
 	}
 	if data == nil {
+		log.Debug("totals by month: no data")
 		return []interface{}{}, nil
 	}
+	log.With(
+		slog.Int("count", len(data)),
+	).Debug("totals by month")
 	return data, nil
 }
 
-func (r *Reports) TotalsByUsers(from, to time.Time, userGroup string) (interface{}, error) {
+func (r *Reports) TotalsByUsers(from, to time.Time, userGroup string) ([]interface{}, error) {
 	r.log.With(
 		slog.Time("from", from),
 		slog.Time("to", to),

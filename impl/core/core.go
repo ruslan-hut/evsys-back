@@ -340,7 +340,7 @@ func (c *Core) WsRequest(request *entity.UserRequest) error {
 	return nil
 }
 
-func (c *Core) MonthlyStats(user *entity.User, from, to time.Time, userGroup string) (interface{}, error) {
+func (c *Core) MonthlyStats(user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error) {
 	err := c.checkSubsystemAccess(user, subSystemReports)
 	if err != nil {
 		return nil, err
@@ -348,7 +348,7 @@ func (c *Core) MonthlyStats(user *entity.User, from, to time.Time, userGroup str
 	return c.reports.TotalsByMonth(from, to, userGroup)
 }
 
-func (c *Core) UsersStats(user *entity.User, from, to time.Time, userGroup string) (interface{}, error) {
+func (c *Core) UsersStats(user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error) {
 	err := c.checkSubsystemAccess(user, subSystemReports)
 	if err != nil {
 		return nil, err

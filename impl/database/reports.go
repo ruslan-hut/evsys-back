@@ -7,7 +7,7 @@ import (
 )
 
 // TotalsByMonth returns the total consumed watts, average watts, and count of transactions by month
-func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) (interface{}, error) {
+func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interface{}, error) {
 	connection, err := m.connect()
 	if err != nil {
 		return nil, err
@@ -78,9 +78,13 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) (interface
 	if err != nil {
 		return nil, m.findError(err)
 	}
-	var lines []*ReportLineMonth
+	var lines []interface{}
 	if err = cursor.All(m.ctx, &lines); err != nil {
 		return nil, err
 	}
+	//result := make([]interface{}, len(lines))
+	//for i, v := range lines {
+	//	result[i] = v
+	//}
 	return lines, err
 }
