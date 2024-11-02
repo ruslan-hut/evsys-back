@@ -37,7 +37,7 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 		{{"$unwind", "$user_info"}},
 		// Stage 5: Filter transactions by a specific user group
 		{{"$match", bson.D{
-			{"user_info.group", userGroup},
+			//{"user_info.group", userGroup},
 			{"transaction_stop", bson.D{
 				{"$gte", from},
 				{"$lte", to},
