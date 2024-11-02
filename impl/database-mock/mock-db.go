@@ -1,4 +1,4 @@
-package database
+package database_mock
 
 import (
 	"evsys-back/entity"
@@ -182,5 +182,9 @@ func (db *MockDB) GetPaymentOrder(id int) (*entity.PaymentOrder, error) {
 }
 
 func (db *MockDB) GetPaymentOrderByTransaction(transactionId int) (*entity.PaymentOrder, error) {
+	return nil, nil
+}
+
+func (db *MockDB) TotalsByMonth(from, to time.Time, userGroup string) (interface{}, error) {
 	return nil, nil
 }

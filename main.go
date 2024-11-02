@@ -6,6 +6,7 @@ import (
 	"evsys-back/impl/central-system"
 	"evsys-back/impl/core"
 	"evsys-back/impl/database"
+	databasemock "evsys-back/impl/database-mock"
 	"evsys-back/impl/reports"
 	statusreader "evsys-back/impl/status-reader"
 	"evsys-back/internal/api/http"
@@ -17,7 +18,7 @@ import (
 )
 
 var mongo *database.MongoDB
-var mockDb *database.MockDB
+var mockDb *databasemock.MockDB
 
 func main() {
 
@@ -41,7 +42,7 @@ func main() {
 		}
 	} else {
 		log.Info("using mock db")
-		mockDb = database.NewMockDB()
+		mockDb = databasemock.NewMockDB()
 	}
 
 	var auth *authenticator.Authenticator
