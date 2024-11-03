@@ -17,6 +17,16 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 	collection := connection.Database(m.database).Collection(collectionTransactions)
 
 	pipeline := mongo.Pipeline{
+		// Stage 0: Filter transactions
+		{{"$match", bson.D{
+			{"time_stop", bson.D{
+				{"$gte", from},
+				{"$lte", to},
+			}},
+			{"$expr", bson.D{
+				{"$gt", bson.A{"$meter_stop", "$meter_start"}},
+			}},
+		}}},
 		// Stage 1: Lookup user tags by `id_tag`
 		{{"$lookup", bson.D{
 			{"from", collectionUserTags},
@@ -38,13 +48,6 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 		// Stage 5: Filter transactions by a specific user group
 		{{"$match", bson.D{
 			{"user_info.group", userGroup},
-			{"time_stop", bson.D{
-				{"$gte", from},
-				{"$lte", to},
-			}},
-			{"$expr", bson.D{
-				{"$gt", bson.A{"$meter_stop", "$meter_start"}},
-			}},
 		}}},
 		// Stage 6: Calculate consumed watts and group by year and month
 		{{"$addFields", bson.D{
@@ -103,6 +106,16 @@ func (m *MongoDB) TotalsByUsers(from, to time.Time, userGroup string) ([]interfa
 	collection := connection.Database(m.database).Collection(collectionTransactions)
 
 	pipeline := mongo.Pipeline{
+		// Stage 0: Filter transactions
+		{{"$match", bson.D{
+			{"time_stop", bson.D{
+				{"$gte", from},
+				{"$lte", to},
+			}},
+			{"$expr", bson.D{
+				{"$gt", bson.A{"$meter_stop", "$meter_start"}},
+			}},
+		}}},
 		// Stage 1: Lookup user tags by `id_tag`
 		{{"$lookup", bson.D{
 			{"from", collectionUserTags},
@@ -124,13 +137,6 @@ func (m *MongoDB) TotalsByUsers(from, to time.Time, userGroup string) ([]interfa
 		// Stage 5: Filter transactions by a specific user group
 		{{"$match", bson.D{
 			{"user_info.group", userGroup},
-			{"time_stop", bson.D{
-				{"$gte", from},
-				{"$lte", to},
-			}},
-			{"$expr", bson.D{
-				{"$gt", bson.A{"$meter_stop", "$meter_start"}},
-			}},
 		}}},
 		// Stage 6: Calculate consumed watts and group by year and month
 		{{"$addFields", bson.D{
