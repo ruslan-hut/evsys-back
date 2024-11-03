@@ -61,5 +61,5 @@ func (r *Reports) TotalsByUsers(from, to time.Time, userGroup string) ([]interfa
 	log.With(
 		slog.Int("count", len(data)),
 	).Debug("totals by users")
-	return nil, nil
+	return data, nil
 }
