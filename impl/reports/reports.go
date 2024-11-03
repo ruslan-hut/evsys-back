@@ -44,10 +44,22 @@ func (r *Reports) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 }
 
 func (r *Reports) TotalsByUsers(from, to time.Time, userGroup string) ([]interface{}, error) {
-	r.log.With(
+	log := r.log.With(
 		slog.Time("from", from),
 		slog.Time("to", to),
 		slog.String("userGroup", userGroup),
+	)
+	data, err := r.repo.TotalsByUsers(from, to, userGroup)
+	if err != nil {
+		log.Error("totals by users failed", sl.Err(err))
+		return []interface{}{}, nil
+	}
+	if data == nil {
+		log.Debug("totals by users: no data")
+		return []interface{}{}, nil
+	}
+	log.With(
+		slog.Int("count", len(data)),
 	).Debug("totals by users")
 	return nil, nil
 }
