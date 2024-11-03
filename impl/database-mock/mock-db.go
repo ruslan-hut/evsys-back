@@ -188,3 +188,7 @@ func (db *MockDB) GetPaymentOrderByTransaction(transactionId int) (*entity.Payme
 func (db *MockDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interface{}, error) {
 	return nil, nil
 }
+
+func (db *MockDB) TotalsByUsers(from, to time.Time, userGroup string) ([]interface{}, error) {
+	return nil, nil
+}
