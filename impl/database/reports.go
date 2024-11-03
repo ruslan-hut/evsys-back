@@ -42,8 +42,8 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 				{"$gte", from},
 				{"$lte", to},
 			}},
-			{"meter_stop", bson.D{
-				{"$gt", "$meter_start"},
+			{"$expr", bson.D{
+				{"$gt", bson.A{"$meter_stop", "$meter_start"}},
 			}},
 		}}},
 		// Stage 6: Calculate consumed watts and group by year and month
@@ -128,8 +128,8 @@ func (m *MongoDB) TotalsByUsers(from, to time.Time, userGroup string) ([]interfa
 				{"$gte", from},
 				{"$lte", to},
 			}},
-			{"meter_stop", bson.D{
-				{"$gt", "$meter_start"},
+			{"$expr", bson.D{
+				{"$gt", bson.A{"$meter_stop", "$meter_start"}},
 			}},
 		}}},
 		// Stage 6: Calculate consumed watts and group by year and month
