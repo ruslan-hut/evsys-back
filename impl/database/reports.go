@@ -41,12 +41,9 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 					{"if", bson.D{{"$gt", bson.A{bson.D{{"$size", "$user_tag_info"}}, 0}}}},
 					{"then", bson.D{{"$arrayElemAt", bson.A{"$user_tag_info.user_id", 0}}}},
 					{"else", ""},
-				},
-				},
-			},
-			},
-		},
-		}},
+				}},
+			}},
+		}}},
 		// Unwind to de-nest user_tag_info array
 		//{{"$unwind", "$user_tag_info"}},
 		// Remove user_tag_info from the document
@@ -138,12 +135,24 @@ func (m *MongoDB) TotalsByUsers(from, to time.Time, userGroup string) ([]interfa
 			{"foreignField", "id_tag"},
 			{"as", "user_tag_info"},
 		}}},
+		// Add user id to the document
+		{{"$addFields", bson.D{
+			{"user_id", bson.D{
+				{"$cond", bson.D{
+					{"if", bson.D{{"$gt", bson.A{bson.D{{"$size", "$user_tag_info"}}, 0}}}},
+					{"then", bson.D{{"$arrayElemAt", bson.A{"$user_tag_info.user_id", 0}}}},
+					{"else", ""},
+				}},
+			}},
+		}}},
 		// Stage 2: Unwind to de-nest user_tag_info array
-		{{"$unwind", "$user_tag_info"}},
+		//{{"$unwind", "$user_tag_info"}},
+		// Remove user_tag_info from the document
+		{{"$unset", "user_tag_info"}},
 		// Stage 3: Lookup users by `user_id` obtained from `user_tag_info`
 		{{"$lookup", bson.D{
 			{"from", collectionUsers},
-			{"localField", "user_tag_info.user_id"},
+			{"localField", "user_id"},
 			{"foreignField", "user_id"},
 			{"as", "user_info"},
 		}}},
