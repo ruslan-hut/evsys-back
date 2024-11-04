@@ -37,9 +37,16 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 		// Add user id to the document
 		{{"$addFields", bson.D{
 			{"user_id", bson.D{
-				{"$arrayElemAt", bson.A{"$user_tag_info.user_id", 0}},
-			}},
-		}}},
+				{"$cond", bson.D{
+					{"if", bson.D{{"$gt", bson.A{bson.D{{"$size", "$user_tag_info"}}, 0}}}},
+					{"then", bson.D{{"$arrayElemAt", bson.A{"$user_tag_info.user_id", 0}}}},
+					{"else", ""},
+				},
+				},
+			},
+			},
+		},
+		}},
 		// Unwind to de-nest user_tag_info array
 		//{{"$unwind", "$user_tag_info"}},
 		// Remove user_tag_info from the document
