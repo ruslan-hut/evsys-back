@@ -17,7 +17,7 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 	collection := connection.Database(m.database).Collection(collectionTransactions)
 
 	pipeline := mongo.Pipeline{
-		// Stage 0: Filter transactions
+		// Filter transactions
 		{{"$match", bson.D{
 			{"time_stop", bson.D{
 				{"$gte", from},
@@ -27,29 +27,37 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 				{"$gt", bson.A{"$meter_stop", "$meter_start"}},
 			}},
 		}}},
-		// Stage 1: Lookup user tags by `id_tag`
+		// Lookup user tags by `id_tag`
 		{{"$lookup", bson.D{
 			{"from", collectionUserTags},
 			{"localField", "id_tag"},
 			{"foreignField", "id_tag"},
 			{"as", "user_tag_info"},
 		}}},
-		// Stage 2: Unwind to de-nest user_tag_info array
-		{{"$unwind", "$user_tag_info"}},
-		// Stage 3: Lookup users by `user_id` obtained from `user_tag_info`
+		// Add user id to the document
+		{{"$addFields", bson.D{
+			{"user_id", bson.D{
+				{"$arrayElemAt", bson.A{"$user_tag_info.user_id", 0}},
+			}},
+		}}},
+		// Unwind to de-nest user_tag_info array
+		//{{"$unwind", "$user_tag_info"}},
+		// Remove user_tag_info from the document
+		{{"$unset", "user_tag_info"}},
+		// Lookup users by `user_id` obtained from `user_tag_info`
 		{{"$lookup", bson.D{
 			{"from", collectionUsers},
-			{"localField", "user_tag_info.user_id"},
+			{"localField", "user_id"},
 			{"foreignField", "user_id"},
 			{"as", "user_info"},
 		}}},
-		// Stage 4: Unwind to de-nest user_info array
+		// Unwind to de-nest user_info array
 		{{"$unwind", "$user_info"}},
 		// Stage 5: Filter transactions by a specific user group
 		{{"$match", bson.D{
 			{"user_info.group", userGroup},
 		}}},
-		// Stage 6: Calculate consumed watts and group by year and month
+		// Calculate consumed watts and group by year and month
 		{{"$addFields", bson.D{
 			{"consumed_watts", bson.D{
 				{"$subtract", bson.A{"$meter_stop", "$meter_start"}},
@@ -64,12 +72,12 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 			{"avgWatts", bson.D{{"$avg", "$consumed_watts"}}},
 			{"count", bson.D{{"$sum", 1}}},
 		}}},
-		// Stage 7: Sort by year and month
+		// Sort by year and month
 		{{"$sort", bson.D{
 			{"_id.year", 1},
 			{"_id.month", 1},
 		}}},
-		// (Optional) Stage 8: Reshape the output if needed
+		// Reshape the output if needed
 		{{"$project", bson.D{
 			{"_id", 0},
 			{"year", "$_id.year"},
