@@ -101,7 +101,7 @@ func (a *Authenticator) GetUserById(userId string) (*entity.User, error) {
 
 		user = &entity.User{
 			Username:       username,
-			Name:           "Firebase user",
+			Name:           "App user",
 			UserId:         userId,
 			PaymentPlan:    defaultPaymentPlan,
 			DateRegistered: time.Now(),
