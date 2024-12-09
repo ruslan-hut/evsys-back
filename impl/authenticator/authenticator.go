@@ -105,6 +105,7 @@ func (a *Authenticator) GetUserById(userId string) (*entity.User, error) {
 			Name:           "App user",
 			UserId:         userId,
 			PaymentPlan:    defaultPaymentPlan,
+			Group:          defaultUserGroupId,
 			DateRegistered: time.Now(),
 		}
 
