@@ -15,6 +15,7 @@ const (
 	tokenLength        = 32
 	defaultPaymentPlan = "default"
 	defaultUserRole    = "user"
+	defaultUserGroupId = "default"
 )
 
 // commands allowed only for admins
@@ -243,6 +244,10 @@ func (a *Authenticator) RegisterUser(user *entity.User) error {
 	// assign default user role
 	if user.Role == "" {
 		user.Role = defaultUserRole
+	}
+	// assign default user group
+	if user.Group == "" {
+		user.Group = defaultUserGroupId
 	}
 	// generate unique user id
 	user.UserId = a.getUserId()
