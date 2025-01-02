@@ -355,3 +355,11 @@ func (c *Core) UsersStats(user *entity.User, from, to time.Time, userGroup strin
 	}
 	return c.reports.TotalsByUsers(from, to, userGroup)
 }
+
+func (c *Core) ChargerStats(user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error) {
+	err := c.checkSubsystemAccess(user, subSystemReports)
+	if err != nil {
+		return nil, err
+	}
+	return c.reports.TotalsByCharger(from, to, userGroup)
+}

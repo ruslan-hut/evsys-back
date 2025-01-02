@@ -63,3 +63,24 @@ func (r *Reports) TotalsByUsers(from, to time.Time, userGroup string) ([]interfa
 	).Debug("totals by users")
 	return data, nil
 }
+
+func (r *Reports) TotalsByCharger(from, to time.Time, userGroup string) ([]interface{}, error) {
+	log := r.log.With(
+		slog.Time("from", from),
+		slog.Time("to", to),
+		slog.String("userGroup", userGroup),
+	)
+	data, err := r.repo.TotalsByCharger(from, to, userGroup)
+	if err != nil {
+		log.Error("totals by charger failed", sl.Err(err))
+		return []interface{}{}, nil
+	}
+	if data == nil {
+		log.Debug("totals by charger: no data")
+		return []interface{}{}, nil
+	}
+	log.With(
+		slog.Int("count", len(data)),
+	).Debug("totals by charger")
+	return data, nil
+}
