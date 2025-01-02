@@ -192,3 +192,7 @@ func (db *MockDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 func (db *MockDB) TotalsByUsers(from, to time.Time, userGroup string) ([]interface{}, error) {
 	return nil, nil
 }
+
+func (db *MockDB) TotalsByCharger(from, to time.Time, userGroup string) ([]interface{}, error) {
+	return nil, nil
+}
