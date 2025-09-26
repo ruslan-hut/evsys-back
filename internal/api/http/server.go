@@ -15,15 +15,16 @@ import (
 	"evsys-back/internal/api/middleware/timeout"
 	"evsys-back/internal/lib/sl"
 	"fmt"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
-	"github.com/gorilla/websocket"
 	"log/slog"
 	"net"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/render"
+	"github.com/gorilla/websocket"
 )
 
 type Server struct {
@@ -107,6 +108,7 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 
 			r.Get("/transactions/active", transactions.ListActive(log, core))
 			r.Get("/transactions/list", transactions.List(log, core))
+			r.Get("/transactions/recent", transactions.RecentUserChargePoints(log, core))
 			r.Get("/transactions/list/{period}", transactions.List(log, core))
 			r.Get("/transactions/info/{id}", transactions.Get(log, core))
 			//router.Get("/transactions/bill", s.transactionBill)

@@ -6,11 +6,12 @@ import (
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
 	"fmt"
+	"log/slog"
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
-	"log/slog"
-	"net/http"
 )
 
 type Users interface {

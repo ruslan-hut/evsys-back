@@ -224,6 +224,10 @@ func (c *Core) GetTransaction(userId string, accessLevel, id int) (interface{}, 
 	return state, nil
 }
 
+func (c *Core) GetRecentChargePoints(userId string) (interface{}, error) {
+	return c.repo.GetRecentUserChargePoints(userId)
+}
+
 func (c *Core) GetPaymentMethods(userId string) (interface{}, error) {
 	return c.repo.GetPaymentMethods(userId)
 }

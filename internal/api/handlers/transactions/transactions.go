@@ -5,18 +5,20 @@ import (
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
 	"fmt"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
 	"log/slog"
 	"net/http"
 	"strconv"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/render"
 )
 
 type Transactions interface {
 	GetActiveTransactions(userId string) (interface{}, error)
 	GetTransactions(userId, period string) (interface{}, error)
 	GetTransaction(userId string, accessLevel, id int) (interface{}, error)
+	GetRecentChargePoints(userId string) (interface{}, error)
 }
 
 func ListActive(logger *slog.Logger, handler Transactions) http.HandlerFunc {
@@ -99,6 +101,31 @@ func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 			return
 		}
 		log.Info("transaction info")
+
+		render.JSON(w, r, data)
+	}
+}
+
+func RecentUserChargePoints(logger *slog.Logger, handler Transactions) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user := cont.GetUser(r.Context())
+
+		log := logger.With(
+			sl.Module("handlers.transactions"),
+			slog.String("user", user.Username),
+			sl.Secret("user_id", user.UserId),
+			slog.Int("access_level", user.AccessLevel),
+			slog.String("request_id", middleware.GetReqID(r.Context())),
+		)
+
+		data, err := handler.GetRecentChargePoints(user.UserId)
+		if err != nil {
+			log.With(sl.Err(err)).Error("get recent charge points")
+			render.Status(r, 204)
+			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get recent charge points: %v", err)))
+			return
+		}
+		log.Info("list recent charge points")
 
 		render.JSON(w, r, data)
 	}

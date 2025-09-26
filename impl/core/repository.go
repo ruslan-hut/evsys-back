@@ -16,6 +16,7 @@ type Repository interface {
 	GetActiveTransactions(userId string) ([]*entity.ChargeState, error)
 	GetTransactions(userId string, period string) ([]*entity.Transaction, error)
 	GetTransactionState(userId string, level int, id int) (*entity.ChargeState, error)
+	GetRecentUserChargePoints(userId string) ([]*entity.ChargePoint, error)
 
 	GetPaymentMethods(userId string) ([]*entity.PaymentMethod, error)
 	SavePaymentMethod(paymentMethod *entity.PaymentMethod) error

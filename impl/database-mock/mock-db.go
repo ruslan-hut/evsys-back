@@ -133,6 +133,10 @@ func (db *MockDB) GetMeterValues(transactionId int, from time.Time) ([]*entity.T
 	return nil, nil
 }
 
+func (db *MockDB) GetRecentUserChargePoints(userId string) ([]*entity.ChargePoint, error) {
+	return nil, nil
+}
+
 func (db *MockDB) AddInviteCode(invite *entity.Invite) error {
 	return nil
 }

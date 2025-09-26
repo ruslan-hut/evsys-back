@@ -6,14 +6,15 @@ import (
 	"evsys-back/config"
 	"evsys-back/entity"
 	"fmt"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
 	"strconv"
 	"strings"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const (
@@ -588,6 +589,9 @@ func (m *MongoDB) getTransactionState(userId string, level int, transaction *ent
 	if err != nil {
 		return nil, fmt.Errorf("get charge point: %v", err)
 	}
+	if chargePoint == nil {
+		return nil, fmt.Errorf("charge point not found")
+	}
 	connector, err := chargePoint.GetConnector(transaction.ConnectorId)
 	if err != nil {
 		return nil, fmt.Errorf("get connector: %v", err)
@@ -717,6 +721,9 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]*entity.ChargeState, e
 	user, err := m.GetUserById(userId)
 	if err != nil {
 		return nil, fmt.Errorf("get user: %v", err)
+	}
+	if user == nil {
+		return nil, fmt.Errorf("user not found")
 	}
 
 	tags, err := m.GetUserTags(userId)
@@ -910,6 +917,77 @@ func (m *MongoDB) GetMeterValues(transactionId int, from time.Time) ([]*entity.T
 		return nil, m.findError(err)
 	}
 	return meterValues, nil
+}
+
+func (m *MongoDB) GetRecentUserChargePoints(userId string) ([]*entity.ChargePoint, error) {
+	connection, err := m.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer m.disconnect(connection)
+
+	// Get last 3 transactions for user's tags
+	tags, err := m.GetUserTags(userId)
+	if err != nil {
+		return nil, err
+	}
+	if len(tags) == 0 {
+		return nil, nil
+	}
+
+	var idTags []string
+	for _, tag := range tags {
+		idTags = append(idTags, strings.ToUpper(tag.IdTag))
+	}
+
+	// Get transactions
+	collection := connection.Database(m.database).Collection(collectionTransactions)
+	filter := bson.D{
+		{"id_tag", bson.D{{"$in", idTags}}},
+		{"is_finished", true},
+	}
+	opts := options.Find().SetSort(bson.D{{"time_start", -1}}).SetLimit(3)
+	cursor, err := collection.Find(m.ctx, filter, opts)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	var transactions []entity.Transaction
+	if err = cursor.All(m.ctx, &transactions); err != nil {
+		return nil, err
+	}
+
+	// Extract charge point IDs
+	var chargePointIds []string
+	for _, t := range transactions {
+		chargePointIds = append(chargePointIds, t.ChargePointId)
+	}
+
+	// Get charge points
+	if len(chargePointIds) == 0 {
+		return m.GetChargePoints(0, "")
+	}
+
+	pipeline := mongo.Pipeline{
+		{{"$match", bson.D{{"charge_point_id", bson.D{{"$in", chargePointIds}}}}}},
+		{{"$lookup", bson.M{
+			"from":         collectionConnectors,
+			"localField":   "charge_point_id",
+			"foreignField": "charge_point_id",
+			"as":           "Connectors",
+		}}},
+	}
+
+	collection = connection.Database(m.database).Collection(collectionChargePoints)
+	var chargePoints []*entity.ChargePoint
+	cursor, err = collection.Aggregate(m.ctx, pipeline)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	if err = cursor.All(m.ctx, &chargePoints); err != nil {
+		return nil, err
+	}
+
+	return chargePoints, nil
 }
 
 func (m *MongoDB) AddInviteCode(invite *entity.Invite) error {
