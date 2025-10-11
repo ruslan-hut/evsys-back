@@ -380,7 +380,7 @@ func (c *Client) readPump() {
 		case entity.ListenChargePoints:
 			c.setSubscription(ChargePointEvent)
 		case entity.PingConnection:
-			c.sendResponse(entity.Success, fmt.Sprintf("pong %s", c.id))
+			c.sendResponse(entity.Ping, fmt.Sprintf("pong %s", c.id))
 		default:
 			c.sendResponse(entity.Error, fmt.Sprintf("unknown command: %s", userRequest.Command))
 		}
