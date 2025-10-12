@@ -462,7 +462,12 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 				})
 			}
 		case <-pause.C:
-			c.sendResponse(entity.Error, "timeout")
+			//c.sendResponse(entity.Error, "timeout")
+			c.wsResponse(&entity.WsResponse{
+				Status: entity.Error,
+				Stage:  entity.Start,
+				Info:   "timeout",
+			})
 			return
 		}
 	}
@@ -519,7 +524,12 @@ func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int
 				})
 			}
 		case <-pause.C:
-			c.sendResponse(entity.Error, "timeout")
+			//c.sendResponse(entity.Error, "timeout")
+			c.wsResponse(&entity.WsResponse{
+				Status: entity.Error,
+				Stage:  entity.Stop,
+				Info:   "timeout",
+			})
 			return
 		}
 	}
