@@ -480,7 +480,7 @@ func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int
 		c.wsResponse(&entity.WsResponse{
 			Status: entity.Error,
 			Stage:  entity.Stop,
-			Info:   fmt.Sprintf("%v", transactionId),
+			Info:   fmt.Sprintf("%v", err),
 		})
 		return
 	}
