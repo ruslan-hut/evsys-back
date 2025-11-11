@@ -475,6 +475,16 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 
 func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int) {
 
+	_, err := c.statusReader.GetTransaction(transactionId)
+	if err != nil {
+		c.wsResponse(&entity.WsResponse{
+			Status: entity.Error,
+			Stage:  entity.Stop,
+			Info:   fmt.Sprintf("%v", transactionId),
+		})
+		return
+	}
+
 	maxTimeout := 90
 	waitStep := 3
 
