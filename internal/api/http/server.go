@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"evsys-back/config"
 	"evsys-back/entity"
-	"evsys-back/internal/api/handlers/central-system"
+	centralsystem "evsys-back/internal/api/handlers/central-system"
 	"evsys-back/internal/api/handlers/helper"
 	"evsys-back/internal/api/handlers/locations"
 	"evsys-back/internal/api/handlers/payments"
@@ -192,8 +192,8 @@ const (
 )
 
 type Pool struct {
-	register   chan *Client
-	active     chan *Client
+	register chan *Client
+	//active     chan *Client
 	unregister chan *Client
 	clients    map[*Client]bool
 	broadcast  chan []byte
@@ -269,20 +269,15 @@ func (c *Client) writePump() {
 	defer func() {
 		c.close()
 	}()
-	for {
-		select {
-		case message, ok := <-c.send:
-			if !ok {
-				_ = c.ws.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
-			err := c.ws.WriteMessage(websocket.TextMessage, message)
-			if err != nil {
-				c.logger.Error("write message", sl.Err(err))
-				return
-			}
+	for message := range c.send {
+		err := c.ws.WriteMessage(websocket.TextMessage, message)
+		if err != nil {
+			c.logger.Error("write message", sl.Err(err))
+			return
 		}
 	}
+
+	_ = c.ws.WriteMessage(websocket.CloseMessage, []byte{})
 }
 
 func (c *Client) readPump() {
@@ -558,39 +553,36 @@ func (c *Client) listenForTransactionState(transactionId int) {
 		ticker.Stop()
 	}()
 
-	for {
-		select {
-		case <-ticker.C:
-			if c.isClosed {
-				return
-			}
-			_, ok := c.listeners[transactionId]
-			if !ok {
-				return
-			}
-			values, _ := c.statusReader.GetLastMeterValues(transactionId, lastMeterValue)
-			if values == nil {
-				continue
-			}
-			for _, value := range values {
-				value.Timestamp = value.Time.Unix()
-				c.wsResponse(&entity.WsResponse{
-					Status:          entity.Value,
-					Stage:           entity.Info,
-					Info:            value.Measurand,
-					Power:           value.ConsumedEnergy,
-					PowerRate:       value.PowerRate,
-					SoC:             value.BatteryLevel,
-					Price:           value.Price,
-					Minute:          value.Minute,
-					Id:              transactionId,
-					ConnectorId:     value.ConnectorId,
-					ConnectorStatus: value.ConnectorStatus,
-					MeterValue:      value,
-				})
-				lastMeterValue = value.Time
-				time.Sleep(1 * time.Second)
-			}
+	for range ticker.C {
+		if c.isClosed {
+			return
+		}
+		_, ok := c.listeners[transactionId]
+		if !ok {
+			return
+		}
+		values, _ := c.statusReader.GetLastMeterValues(transactionId, lastMeterValue)
+		if values == nil {
+			continue
+		}
+		for _, value := range values {
+			value.Timestamp = value.Time.Unix()
+			c.wsResponse(&entity.WsResponse{
+				Status:          entity.Value,
+				Stage:           entity.Info,
+				Info:            value.Measurand,
+				Power:           value.ConsumedEnergy,
+				PowerRate:       value.PowerRate,
+				SoC:             value.BatteryLevel,
+				Price:           value.Price,
+				Minute:          value.Minute,
+				Id:              transactionId,
+				ConnectorId:     value.ConnectorId,
+				ConnectorStatus: value.ConnectorStatus,
+				MeterValue:      value,
+			})
+			lastMeterValue = value.Time
+			time.Sleep(1 * time.Second)
 		}
 	}
 }
@@ -606,30 +598,27 @@ func (c *Client) listenForLogUpdates() {
 		ticker.Stop()
 	}()
 
-	for {
-		select {
-		case <-ticker.C:
-			if c.isClosed {
-				return
-			}
-			messages, _ := c.statusReader.ReadLogAfter(lastMessageTime)
-			if messages == nil {
-				continue
-			}
-			if len(messages) > 0 {
-				lastMessageTime = messages[len(messages)-1].Timestamp
-				for _, message := range messages {
-					data, err := json.Marshal(message)
-					if err != nil {
-						c.logger.Error("marshal message", sl.Err(err))
-						continue
-					}
-					c.wsResponse(&entity.WsResponse{
-						Status: entity.Success,
-						Stage:  entity.Info,
-						Data:   string(data),
-					})
+	for range ticker.C {
+		if c.isClosed {
+			return
+		}
+		messages, _ := c.statusReader.ReadLogAfter(lastMessageTime)
+		if messages == nil {
+			continue
+		}
+		if len(messages) > 0 {
+			lastMessageTime = messages[len(messages)-1].Timestamp
+			for _, message := range messages {
+				data, err := json.Marshal(message)
+				if err != nil {
+					c.logger.Error("marshal message", sl.Err(err))
+					continue
 				}
+				c.wsResponse(&entity.WsResponse{
+					Status: entity.Success,
+					Stage:  entity.Info,
+					Data:   string(data),
+				})
 			}
 		}
 	}
@@ -645,39 +634,36 @@ func (s *Server) listenForUpdates() {
 		ticker.Stop()
 	}()
 
-	for {
-		select {
-		case <-ticker.C:
-			messages, _ := s.statusReader.ReadLogAfter(lastMessageTime)
-			if messages == nil {
-				continue
-			}
-			if len(messages) > 0 {
-				lastMessageTime = messages[len(messages)-1].Timestamp
-				for _, message := range messages {
+	for range ticker.C {
+		messages, _ := s.statusReader.ReadLogAfter(lastMessageTime)
+		if messages == nil {
+			continue
+		}
+		if len(messages) > 0 {
+			lastMessageTime = messages[len(messages)-1].Timestamp
+			for _, message := range messages {
 
-					if len(message.ChargePointId) > 1 {
-						s.pool.chpEvent <- &entity.WsResponse{
-							Status: entity.Event,
-							Stage:  entity.ChargePointEvent,
-							Data:   message.ChargePointId,
-							Info:   message.Text,
-						}
-					}
-
-					data, err := json.Marshal(message)
-					if err != nil {
-						s.log.Error("marshal log message", sl.Err(err))
-						continue
-					}
-					s.pool.logEvent <- &entity.WsResponse{
+				if len(message.ChargePointId) > 1 {
+					s.pool.chpEvent <- &entity.WsResponse{
 						Status: entity.Event,
-						Stage:  entity.LogEvent,
-						Data:   string(data),
+						Stage:  entity.ChargePointEvent,
+						Data:   message.ChargePointId,
 						Info:   message.Text,
 					}
-
 				}
+
+				data, err := json.Marshal(message)
+				if err != nil {
+					s.log.Error("marshal log message", sl.Err(err))
+					continue
+				}
+				s.pool.logEvent <- &entity.WsResponse{
+					Status: entity.Event,
+					Stage:  entity.LogEvent,
+					Data:   string(data),
+					Info:   message.Text,
+				}
+
 			}
 		}
 	}
@@ -705,7 +691,7 @@ func (c *Client) wsResponse(response *entity.WsResponse) {
 }
 
 func (c *Client) close() {
-	if c.isClosed != true {
+	if !c.isClosed {
 		c.isClosed = true
 		c.pool.unregister <- c
 		_ = c.ws.Close()
