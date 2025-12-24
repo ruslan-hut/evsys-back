@@ -1,6 +1,7 @@
 package statusreader
 
 import (
+	"context"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/sl"
 	"fmt"
@@ -10,10 +11,10 @@ import (
 )
 
 type Repository interface {
-	GetTransactionByTag(userId string, after time.Time) (*entity.Transaction, error)
-	GetTransaction(transactionId int) (*entity.Transaction, error)
-	GetMeterValues(transactionId int, from time.Time) ([]*entity.TransactionMeter, error)
-	ReadLogAfter(timeStart time.Time) ([]*entity.FeatureMessage, error)
+	GetTransactionByTag(ctx context.Context, userId string, after time.Time) (*entity.Transaction, error)
+	GetTransaction(ctx context.Context, transactionId int) (*entity.Transaction, error)
+	GetMeterValues(ctx context.Context, transactionId int, from time.Time) ([]*entity.TransactionMeter, error)
+	ReadLogAfter(ctx context.Context, timeStart time.Time) ([]*entity.FeatureMessage, error)
 }
 
 type StatusReader struct {
@@ -33,22 +34,22 @@ func New(log *slog.Logger, repo Repository) *StatusReader {
 	return &statusReader
 }
 
-func (sr *StatusReader) GetTransactionAfter(userId string, after time.Time) (*entity.Transaction, error) {
+func (sr *StatusReader) GetTransactionAfter(ctx context.Context, userId string, after time.Time) (*entity.Transaction, error) {
 	if sr.database == nil {
 		return nil, fmt.Errorf("database is not set for status reader")
 	}
-	transaction, err := sr.database.GetTransactionByTag(userId, after)
+	transaction, err := sr.database.GetTransactionByTag(ctx, userId, after)
 	if err != nil || transaction == nil {
 		return &entity.Transaction{TransactionId: -1}, nil
 	}
 	return transaction, nil
 }
 
-func (sr *StatusReader) GetTransaction(transactionId int) (*entity.Transaction, error) {
+func (sr *StatusReader) GetTransaction(ctx context.Context, transactionId int) (*entity.Transaction, error) {
 	if sr.database == nil {
 		return nil, fmt.Errorf("database is not set for status reader")
 	}
-	transaction, err := sr.database.GetTransaction(transactionId)
+	transaction, err := sr.database.GetTransaction(ctx, transactionId)
 	if err != nil || transaction == nil {
 		return nil, fmt.Errorf("no transaction data: %d", transactionId)
 	}
@@ -82,22 +83,22 @@ func (sr *StatusReader) ClearStatus(userId string) {
 	delete(sr.status, userId)
 }
 
-func (sr *StatusReader) GetLastMeterValues(transactionId int, from time.Time) ([]*entity.TransactionMeter, error) {
+func (sr *StatusReader) GetLastMeterValues(ctx context.Context, transactionId int, from time.Time) ([]*entity.TransactionMeter, error) {
 	if sr.database == nil {
 		return nil, fmt.Errorf("database is not set for status reader")
 	}
-	meter, err := sr.database.GetMeterValues(transactionId, from)
+	meter, err := sr.database.GetMeterValues(ctx, transactionId, from)
 	if err != nil {
 		return nil, err
 	}
 	return meter, nil
 }
 
-func (sr *StatusReader) ReadLogAfter(timeStart time.Time) ([]*entity.FeatureMessage, error) {
+func (sr *StatusReader) ReadLogAfter(ctx context.Context, timeStart time.Time) ([]*entity.FeatureMessage, error) {
 	if sr.database == nil {
 		return nil, fmt.Errorf("database is not set for status reader")
 	}
-	messages, err := sr.database.ReadLogAfter(timeStart)
+	messages, err := sr.database.ReadLogAfter(ctx, timeStart)
 	if err != nil {
 		return nil, err
 	}

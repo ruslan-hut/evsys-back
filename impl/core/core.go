@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/sl"
 	"fmt"
@@ -41,19 +42,19 @@ func (c *Core) SetReports(reports Reports) {
 	c.reports = reports
 }
 
-func (c *Core) GetConfig(name string) (interface{}, error) {
-	return c.repo.GetConfig(name)
+func (c *Core) GetConfig(ctx context.Context, name string) (interface{}, error) {
+	return c.repo.GetConfig(ctx, name)
 }
 
-func (c *Core) GetLog(name string) (interface{}, error) {
-	return c.repo.ReadLog(name)
+func (c *Core) GetLog(ctx context.Context, name string) (interface{}, error) {
+	return c.repo.ReadLog(ctx, name)
 }
 
-func (c *Core) AuthenticateByToken(token string) (*entity.User, error) {
+func (c *Core) AuthenticateByToken(ctx context.Context, token string) (*entity.User, error) {
 	if c.auth == nil {
 		return nil, fmt.Errorf("authenticator not set")
 	}
-	user, err := c.auth.AuthenticateByToken(token)
+	user, err := c.auth.AuthenticateByToken(ctx, token)
 	if err != nil {
 		return nil, err
 	}
@@ -63,11 +64,11 @@ func (c *Core) AuthenticateByToken(token string) (*entity.User, error) {
 	return user, nil
 }
 
-func (c *Core) AuthenticateUser(username, password string) (*entity.User, error) {
+func (c *Core) AuthenticateUser(ctx context.Context, username, password string) (*entity.User, error) {
 	if c.auth == nil {
 		return nil, fmt.Errorf("authenticator not set")
 	}
-	user, err := c.auth.AuthenticateUser(username, password)
+	user, err := c.auth.AuthenticateUser(ctx, username, password)
 	if err != nil {
 		return nil, err
 	}
@@ -77,50 +78,50 @@ func (c *Core) AuthenticateUser(username, password string) (*entity.User, error)
 	return user, nil
 }
 
-func (c *Core) AddUser(user *entity.User) (*entity.User, error) {
+func (c *Core) AddUser(ctx context.Context, user *entity.User) (*entity.User, error) {
 	if c.auth == nil {
 		return nil, fmt.Errorf("authenticator not set")
 	}
-	err := c.auth.RegisterUser(user)
+	err := c.auth.RegisterUser(ctx, user)
 	if err != nil {
 		return nil, err
 	}
 	return user, nil
 }
 
-func (c *Core) GetUser(author *entity.User, username string) (*entity.UserInfo, error) {
+func (c *Core) GetUser(ctx context.Context, author *entity.User, username string) (*entity.UserInfo, error) {
 	if author.AccessLevel < 10 || username == "0000" { // user can get info about himself
-		return c.repo.GetUserInfo(author.AccessLevel, author.Username)
+		return c.repo.GetUserInfo(ctx, author.AccessLevel, author.Username)
 	}
-	return c.repo.GetUserInfo(author.AccessLevel, username)
+	return c.repo.GetUserInfo(ctx, author.AccessLevel, username)
 }
 
-func (c *Core) GetUsers(user *entity.User) ([]*entity.User, error) {
+func (c *Core) GetUsers(ctx context.Context, user *entity.User) ([]*entity.User, error) {
 	if c.auth == nil {
 		return nil, fmt.Errorf("authenticator not set")
 	}
-	return c.auth.GetUsers(user)
+	return c.auth.GetUsers(ctx, user)
 }
 
-func (c *Core) UserTag(user *entity.User) (string, error) {
+func (c *Core) UserTag(ctx context.Context, user *entity.User) (string, error) {
 	if c.auth == nil {
 		return "", fmt.Errorf("authenticator not set")
 	}
 	if user == nil {
 		return "", fmt.Errorf("user is nil")
 	}
-	return c.auth.GetUserTag(user)
+	return c.auth.GetUserTag(ctx, user)
 }
 
-func (c *Core) GetLocations(accessLevel int) (interface{}, error) {
+func (c *Core) GetLocations(ctx context.Context, accessLevel int) (interface{}, error) {
 	if accessLevel < MaxAccessLevel {
 		return nil, fmt.Errorf("access denied")
 	}
-	return c.repo.GetLocations()
+	return c.repo.GetLocations(ctx)
 }
 
-func (c *Core) GetChargePoints(accessLevel int, search string) (interface{}, error) {
-	list, err := c.repo.GetChargePoints(accessLevel, search)
+func (c *Core) GetChargePoints(ctx context.Context, accessLevel int, search string) (interface{}, error) {
+	list, err := c.repo.GetChargePoints(ctx, accessLevel, search)
 	if err != nil {
 		return nil, err
 	}
@@ -137,8 +138,8 @@ func (c *Core) GetChargePoints(accessLevel int, search string) (interface{}, err
 	return list, nil
 }
 
-func (c *Core) GetChargePoint(accessLevel int, id string) (interface{}, error) {
-	cp, err := c.repo.GetChargePoint(accessLevel, id)
+func (c *Core) GetChargePoint(ctx context.Context, accessLevel int, id string) (interface{}, error) {
+	cp, err := c.repo.GetChargePoint(ctx, accessLevel, id)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +154,7 @@ func (c *Core) GetChargePoint(accessLevel int, id string) (interface{}, error) {
 	return cp, nil
 }
 
-func (c *Core) SaveChargePoint(accessLevel int, chargePoint *entity.ChargePoint) error {
+func (c *Core) SaveChargePoint(ctx context.Context, accessLevel int, chargePoint *entity.ChargePoint) error {
 	if chargePoint == nil {
 		return fmt.Errorf("charge point is nil")
 	}
@@ -163,7 +164,7 @@ func (c *Core) SaveChargePoint(accessLevel int, chargePoint *entity.ChargePoint)
 	if accessLevel < chargePoint.AccessLevel {
 		return fmt.Errorf("access denied")
 	}
-	return c.repo.UpdateChargePoint(accessLevel, chargePoint)
+	return c.repo.UpdateChargePoint(ctx, accessLevel, chargePoint)
 }
 
 func (c *Core) SendCommand(command *entity.CentralSystemCommand, user *entity.User) (interface{}, error) {
@@ -180,8 +181,8 @@ func (c *Core) SendCommand(command *entity.CentralSystemCommand, user *entity.Us
 	return c.cs.SendCommand(command), nil
 }
 
-func (c *Core) GetActiveTransactions(userId string) (interface{}, error) {
-	transactions, err := c.repo.GetActiveTransactions(userId)
+func (c *Core) GetActiveTransactions(ctx context.Context, userId string) (interface{}, error) {
+	transactions, err := c.repo.GetActiveTransactions(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
@@ -196,8 +197,8 @@ func (c *Core) GetActiveTransactions(userId string) (interface{}, error) {
 	return transactions, nil
 }
 
-func (c *Core) GetTransactions(userId, period string) (interface{}, error) {
-	transactions, err := c.repo.GetTransactions(userId, period)
+func (c *Core) GetTransactions(ctx context.Context, userId, period string) (interface{}, error) {
+	transactions, err := c.repo.GetTransactions(ctx, userId, period)
 	if err != nil {
 		return nil, err
 	}
@@ -211,8 +212,8 @@ func (c *Core) GetTransactions(userId, period string) (interface{}, error) {
 	return transactions, nil
 }
 
-func (c *Core) GetTransaction(userId string, accessLevel, id int) (interface{}, error) {
-	state, err := c.repo.GetTransactionState(userId, accessLevel, id)
+func (c *Core) GetTransaction(ctx context.Context, userId string, accessLevel, id int) (interface{}, error) {
+	state, err := c.repo.GetTransactionState(ctx, userId, accessLevel, id)
 	if err != nil {
 		return nil, err
 	}
@@ -224,15 +225,15 @@ func (c *Core) GetTransaction(userId string, accessLevel, id int) (interface{}, 
 	return state, nil
 }
 
-func (c *Core) GetRecentChargePoints(userId string) (interface{}, error) {
-	return c.repo.GetRecentUserChargePoints(userId)
+func (c *Core) GetRecentChargePoints(ctx context.Context, userId string) (interface{}, error) {
+	return c.repo.GetRecentUserChargePoints(ctx, userId)
 }
 
-func (c *Core) GetPaymentMethods(userId string) (interface{}, error) {
-	return c.repo.GetPaymentMethods(userId)
+func (c *Core) GetPaymentMethods(ctx context.Context, userId string) (interface{}, error) {
+	return c.repo.GetPaymentMethods(ctx, userId)
 }
 
-func (c *Core) SavePaymentMethod(user *entity.User, pm *entity.PaymentMethod) error {
+func (c *Core) SavePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error {
 	if user == nil {
 		return fmt.Errorf("user is nil")
 	}
@@ -241,10 +242,10 @@ func (c *Core) SavePaymentMethod(user *entity.User, pm *entity.PaymentMethod) er
 	}
 	pm.UserId = user.UserId
 	pm.UserName = user.Username
-	return c.repo.SavePaymentMethod(pm)
+	return c.repo.SavePaymentMethod(ctx, pm)
 }
 
-func (c *Core) UpdatePaymentMethod(user *entity.User, pm *entity.PaymentMethod) error {
+func (c *Core) UpdatePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error {
 	if user == nil {
 		return fmt.Errorf("user is nil")
 	}
@@ -253,10 +254,10 @@ func (c *Core) UpdatePaymentMethod(user *entity.User, pm *entity.PaymentMethod) 
 	}
 	pm.UserId = user.UserId
 	pm.UserName = user.Username
-	return c.repo.UpdatePaymentMethod(pm)
+	return c.repo.UpdatePaymentMethod(ctx, pm)
 }
 
-func (c *Core) DeletePaymentMethod(user *entity.User, pm *entity.PaymentMethod) error {
+func (c *Core) DeletePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error {
 	if user == nil {
 		return fmt.Errorf("user is nil")
 	}
@@ -265,10 +266,10 @@ func (c *Core) DeletePaymentMethod(user *entity.User, pm *entity.PaymentMethod) 
 	}
 	// delete only methods, belonging to user that requested deletion
 	pm.UserId = user.UserId
-	return c.repo.DeletePaymentMethod(pm)
+	return c.repo.DeletePaymentMethod(ctx, pm)
 }
 
-func (c *Core) SetOrder(user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, error) {
+func (c *Core) SetOrder(ctx context.Context, user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, error) {
 	if user == nil {
 		return nil, fmt.Errorf("user is nil")
 	}
@@ -279,16 +280,16 @@ func (c *Core) SetOrder(user *entity.User, order *entity.PaymentOrder) (*entity.
 
 		// if payment process was interrupted, find unclosed order and close it
 		if order.TransactionId > 0 {
-			continueOrder, _ := c.repo.GetPaymentOrderByTransaction(order.TransactionId)
+			continueOrder, _ := c.repo.GetPaymentOrderByTransaction(ctx, order.TransactionId)
 			if continueOrder != nil {
 				continueOrder.IsCompleted = true
 				continueOrder.Result = "closed without response"
 				continueOrder.TimeClosed = time.Now()
-				_ = c.repo.SavePaymentOrder(continueOrder)
+				_ = c.repo.SavePaymentOrder(ctx, continueOrder)
 			}
 		}
 
-		lastOrder, _ := c.repo.GetLastOrder()
+		lastOrder, _ := c.repo.GetLastOrder(ctx)
 		if lastOrder != nil {
 			order.Order = lastOrder.Order + 1
 		} else {
@@ -300,7 +301,7 @@ func (c *Core) SetOrder(user *entity.User, order *entity.PaymentOrder) (*entity.
 	order.UserId = user.UserId
 	order.UserName = user.Username
 
-	err := c.repo.SavePaymentOrder(order)
+	err := c.repo.SavePaymentOrder(ctx, order)
 	if err != nil {
 		return nil, err
 	}
@@ -344,26 +345,26 @@ func (c *Core) WsRequest(request *entity.UserRequest) error {
 	return nil
 }
 
-func (c *Core) MonthlyStats(user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (c *Core) MonthlyStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error) {
 	err := c.checkSubsystemAccess(user, subSystemReports)
 	if err != nil {
 		return nil, err
 	}
-	return c.reports.TotalsByMonth(from, to, userGroup)
+	return c.reports.TotalsByMonth(ctx, from, to, userGroup)
 }
 
-func (c *Core) UsersStats(user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (c *Core) UsersStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error) {
 	err := c.checkSubsystemAccess(user, subSystemReports)
 	if err != nil {
 		return nil, err
 	}
-	return c.reports.TotalsByUsers(from, to, userGroup)
+	return c.reports.TotalsByUsers(ctx, from, to, userGroup)
 }
 
-func (c *Core) ChargerStats(user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (c *Core) ChargerStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error) {
 	err := c.checkSubsystemAccess(user, subSystemReports)
 	if err != nil {
 		return nil, err
 	}
-	return c.reports.TotalsByCharger(from, to, userGroup)
+	return c.reports.TotalsByCharger(ctx, from, to, userGroup)
 }

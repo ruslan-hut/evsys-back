@@ -1,6 +1,7 @@
 package authenticate
 
 import (
+	"context"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
@@ -15,7 +16,7 @@ import (
 )
 
 type Authenticate interface {
-	AuthenticateByToken(token string) (*entity.User, error)
+	AuthenticateByToken(ctx context.Context, token string) (*entity.User, error)
 }
 
 func New(log *slog.Logger, auth Authenticate) func(next http.Handler) http.Handler {
@@ -24,7 +25,8 @@ func New(log *slog.Logger, auth Authenticate) func(next http.Handler) http.Handl
 		//log.With(mod).Info("authenticate middleware initialized")
 
 		fn := func(w http.ResponseWriter, r *http.Request) {
-			id := middleware.GetReqID(r.Context())
+			ctx := r.Context()
+			id := middleware.GetReqID(ctx)
 			remote := r.RemoteAddr
 			// if the request is coming from a proxy, use the X-Forwarded-For header
 			xRemote := r.Header.Get("X-Forwarded-For")
@@ -71,7 +73,7 @@ func New(log *slog.Logger, auth Authenticate) func(next http.Handler) http.Handl
 				return
 			}
 
-			user, err := auth.AuthenticateByToken(token)
+			user, err := auth.AuthenticateByToken(ctx, token)
 			if err != nil {
 				logger = logger.With(sl.Err(err))
 				authFailed(ww, r, "Unauthorized: token not found")
@@ -83,7 +85,7 @@ func New(log *slog.Logger, auth Authenticate) func(next http.Handler) http.Handl
 				slog.String("role", user.Role),
 				sl.Secret("user_id", user.UserId),
 			)
-			ctx := cont.PutUser(r.Context(), user)
+			ctx = cont.PutUser(ctx, user)
 
 			ww.Header().Set("X-Request-ID", id)
 			next.ServeHTTP(ww, r.WithContext(ctx))

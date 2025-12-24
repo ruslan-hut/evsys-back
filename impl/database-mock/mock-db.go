@@ -1,6 +1,7 @@
 package database_mock
 
 import (
+	"context"
 	"evsys-back/entity"
 	"time"
 )
@@ -12,47 +13,47 @@ func NewMockDB() *MockDB {
 	return &MockDB{}
 }
 
-func (db *MockDB) ReadLog(logName string) (interface{}, error) {
+func (db *MockDB) ReadLog(_ context.Context, logName string) (interface{}, error) {
 	return nil, nil
 }
 
-func (db *MockDB) ReadLogAfter(timeStart time.Time) ([]*entity.FeatureMessage, error) {
+func (db *MockDB) ReadLogAfter(_ context.Context, timeStart time.Time) ([]*entity.FeatureMessage, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetConfig(name string) (interface{}, error) {
+func (db *MockDB) GetConfig(_ context.Context, name string) (interface{}, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetUser(username string) (*entity.User, error) {
+func (db *MockDB) GetUser(_ context.Context, username string) (*entity.User, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetUserInfo(level int, userId string) (*entity.UserInfo, error) {
+func (db *MockDB) GetUserInfo(_ context.Context, level int, userId string) (*entity.UserInfo, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetUsers() ([]*entity.User, error) {
+func (db *MockDB) GetUsers(_ context.Context) ([]*entity.User, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetUserById(userId string) (*entity.User, error) {
+func (db *MockDB) GetUserById(_ context.Context, userId string) (*entity.User, error) {
 	return nil, nil
 }
 
-func (db *MockDB) UpdateLastSeen(user *entity.User) error {
+func (db *MockDB) UpdateLastSeen(_ context.Context, user *entity.User) error {
 	return nil
 }
 
-func (db *MockDB) AddUser(user *entity.User) error {
+func (db *MockDB) AddUser(_ context.Context, user *entity.User) error {
 	return nil
 }
 
-func (db *MockDB) CheckUsername(username string) error {
+func (db *MockDB) CheckUsername(_ context.Context, username string) error {
 	return nil
 }
 
-func (db *MockDB) CheckToken(token string) (*entity.User, error) {
+func (db *MockDB) CheckToken(_ context.Context, token string) (*entity.User, error) {
 	if token == "12345678901234567890123456789000" {
 		return &entity.User{
 			Username:    "test",
@@ -65,55 +66,55 @@ func (db *MockDB) CheckToken(token string) (*entity.User, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetUserTags(userId string) ([]entity.UserTag, error) {
+func (db *MockDB) GetUserTags(_ context.Context, userId string) ([]entity.UserTag, error) {
 	return nil, nil
 }
 
-func (db *MockDB) AddUserTag(userTag *entity.UserTag) error {
+func (db *MockDB) AddUserTag(_ context.Context, userTag *entity.UserTag) error {
 	return nil
 }
 
-func (db *MockDB) CheckUserTag(idTag string) error {
+func (db *MockDB) CheckUserTag(_ context.Context, idTag string) error {
 	return nil
 }
 
-func (db *MockDB) UpdateTagLastSeen(userTag *entity.UserTag) error {
+func (db *MockDB) UpdateTagLastSeen(_ context.Context, userTag *entity.UserTag) error {
 	return nil
 }
 
-func (db *MockDB) GetLocations() ([]*entity.Location, error) {
+func (db *MockDB) GetLocations(_ context.Context) ([]*entity.Location, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetChargePoints(level int, searchTerm string) ([]*entity.ChargePoint, error) {
+func (db *MockDB) GetChargePoints(_ context.Context, level int, searchTerm string) ([]*entity.ChargePoint, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetChargePoint(level int, id string) (*entity.ChargePoint, error) {
+func (db *MockDB) GetChargePoint(_ context.Context, level int, id string) (*entity.ChargePoint, error) {
 	return nil, nil
 }
 
-func (db *MockDB) UpdateChargePoint(level int, chargePoint *entity.ChargePoint) error {
+func (db *MockDB) UpdateChargePoint(_ context.Context, level int, chargePoint *entity.ChargePoint) error {
 	return nil
 }
 
-func (db *MockDB) GetTransaction(id int) (*entity.Transaction, error) {
+func (db *MockDB) GetTransaction(_ context.Context, id int) (*entity.Transaction, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetTransactionByTag(idTag string, timeStart time.Time) (*entity.Transaction, error) {
+func (db *MockDB) GetTransactionByTag(_ context.Context, idTag string, timeStart time.Time) (*entity.Transaction, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetTransactionState(userId string, level int, id int) (*entity.ChargeState, error) {
+func (db *MockDB) GetTransactionState(_ context.Context, userId string, level int, id int) (*entity.ChargeState, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetActiveTransactions(userId string) ([]*entity.ChargeState, error) {
+func (db *MockDB) GetActiveTransactions(_ context.Context, userId string) ([]*entity.ChargeState, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetTransactions(userId string, period string) ([]*entity.Transaction, error) {
+func (db *MockDB) GetTransactions(_ context.Context, userId string, period string) ([]*entity.Transaction, error) {
 	return nil, nil
 }
 
@@ -125,27 +126,27 @@ func (db *MockDB) UpdateTransaction(transaction *entity.Transaction) error {
 	return nil
 }
 
-func (db *MockDB) GetLastMeterValue(transactionId int) (*entity.TransactionMeter, error) {
+func (db *MockDB) GetLastMeterValue(_ context.Context, transactionId int) (*entity.TransactionMeter, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetMeterValues(transactionId int, from time.Time) ([]*entity.TransactionMeter, error) {
+func (db *MockDB) GetMeterValues(_ context.Context, transactionId int, from time.Time) ([]*entity.TransactionMeter, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetRecentUserChargePoints(userId string) ([]*entity.ChargePoint, error) {
+func (db *MockDB) GetRecentUserChargePoints(_ context.Context, userId string) ([]*entity.ChargePoint, error) {
 	return nil, nil
 }
 
-func (db *MockDB) AddInviteCode(invite *entity.Invite) error {
+func (db *MockDB) AddInviteCode(_ context.Context, invite *entity.Invite) error {
 	return nil
 }
 
-func (db *MockDB) CheckInviteCode(code string) (bool, error) {
+func (db *MockDB) CheckInviteCode(_ context.Context, code string) (bool, error) {
 	return false, nil
 }
 
-func (db *MockDB) DeleteInviteCode(code string) error {
+func (db *MockDB) DeleteInviteCode(_ context.Context, code string) error {
 	return nil
 }
 
@@ -153,19 +154,19 @@ func (db *MockDB) SavePaymentResult(paymentParameters *entity.PaymentParameters)
 	return nil
 }
 
-func (db *MockDB) SavePaymentMethod(paymentMethod *entity.PaymentMethod) error {
+func (db *MockDB) SavePaymentMethod(_ context.Context, paymentMethod *entity.PaymentMethod) error {
 	return nil
 }
 
-func (db *MockDB) UpdatePaymentMethod(paymentMethod *entity.PaymentMethod) error {
+func (db *MockDB) UpdatePaymentMethod(_ context.Context, paymentMethod *entity.PaymentMethod) error {
 	return nil
 }
 
-func (db *MockDB) DeletePaymentMethod(paymentMethod *entity.PaymentMethod) error {
+func (db *MockDB) DeletePaymentMethod(_ context.Context, paymentMethod *entity.PaymentMethod) error {
 	return nil
 }
 
-func (db *MockDB) GetPaymentMethods(userId string) ([]*entity.PaymentMethod, error) {
+func (db *MockDB) GetPaymentMethods(_ context.Context, userId string) ([]*entity.PaymentMethod, error) {
 	return nil, nil
 }
 
@@ -173,30 +174,30 @@ func (db *MockDB) GetPaymentParameters(orderId string) (*entity.PaymentParameter
 	return nil, nil
 }
 
-func (db *MockDB) GetLastOrder() (*entity.PaymentOrder, error) {
+func (db *MockDB) GetLastOrder(_ context.Context) (*entity.PaymentOrder, error) {
 	return nil, nil
 }
 
-func (db *MockDB) SavePaymentOrder(order *entity.PaymentOrder) error {
+func (db *MockDB) SavePaymentOrder(_ context.Context, order *entity.PaymentOrder) error {
 	return nil
 }
 
-func (db *MockDB) GetPaymentOrder(id int) (*entity.PaymentOrder, error) {
+func (db *MockDB) GetPaymentOrder(_ context.Context, id int) (*entity.PaymentOrder, error) {
 	return nil, nil
 }
 
-func (db *MockDB) GetPaymentOrderByTransaction(transactionId int) (*entity.PaymentOrder, error) {
+func (db *MockDB) GetPaymentOrderByTransaction(_ context.Context, transactionId int) (*entity.PaymentOrder, error) {
 	return nil, nil
 }
 
-func (db *MockDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interface{}, error) {
+func (db *MockDB) TotalsByMonth(_ context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
 	return nil, nil
 }
 
-func (db *MockDB) TotalsByUsers(from, to time.Time, userGroup string) ([]interface{}, error) {
+func (db *MockDB) TotalsByUsers(_ context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
 	return nil, nil
 }
 
-func (db *MockDB) TotalsByCharger(from, to time.Time, userGroup string) ([]interface{}, error) {
+func (db *MockDB) TotalsByCharger(_ context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
 	return nil, nil
 }

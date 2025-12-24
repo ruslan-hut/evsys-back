@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"context"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
 	"fmt"
@@ -12,22 +13,23 @@ import (
 )
 
 type Helper interface {
-	GetConfig(name string) (interface{}, error)
-	GetLog(name string) (interface{}, error)
+	GetConfig(ctx context.Context, name string) (interface{}, error)
+	GetLog(ctx context.Context, name string) (interface{}, error)
 }
 
 func Config(logger *slog.Logger, handler Helper) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
+		ctx := r.Context()
 		name := chi.URLParam(r, "name")
 
 		log := logger.With(
 			sl.Module("handlers.helper"),
 			slog.String("name", name),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		data, err := handler.GetConfig(name)
+		data, err := handler.GetConfig(ctx, name)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get config failed")
 			render.Status(r, 204)
@@ -43,15 +45,16 @@ func Config(logger *slog.Logger, handler Helper) http.HandlerFunc {
 func Log(logger *slog.Logger, handler Helper) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
+		ctx := r.Context()
 		name := chi.URLParam(r, "name")
 
 		log := logger.With(
 			sl.Module("handlers.helper"),
 			slog.String("name", name),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		data, err := handler.GetLog(name)
+		data, err := handler.GetLog(ctx, name)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get log failed")
 			render.Status(r, 204)

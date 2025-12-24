@@ -1,6 +1,7 @@
 package authenticator
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"evsys-back/entity"
@@ -36,18 +37,18 @@ func (a *Authenticator) generateKey(length int) string {
 // generate user ID using a 32-character key, ensuring uniqueness by recursively checking database
 // if user already exists with the generated ID
 // Note: This recursive approach could lead to stack overflow if not managed properly
-func (a *Authenticator) getUserId() string {
+func (a *Authenticator) getUserId(ctx context.Context) string {
 	id := a.generateKey(32)
-	user, _ := a.database.GetUser(id)
+	user, _ := a.database.GetUser(ctx, id)
 	if user == nil {
 		return id
 	}
-	return a.getUserId()
+	return a.getUserId(ctx)
 }
 
 // update user last seen
-func (a *Authenticator) updateLastSeen(user *entity.User) error {
-	err := a.database.UpdateLastSeen(user)
+func (a *Authenticator) updateLastSeen(ctx context.Context, user *entity.User) error {
+	err := a.database.UpdateLastSeen(ctx, user)
 	if err != nil {
 		return fmt.Errorf("updating user last seen: %s", err)
 	}

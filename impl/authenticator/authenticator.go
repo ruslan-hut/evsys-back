@@ -1,6 +1,7 @@
 package authenticator
 
 import (
+	"context"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/sl"
 	"fmt"
@@ -47,7 +48,7 @@ func (a *Authenticator) SetFirebase(firebase FirebaseAuth) {
 	a.firebase = firebase
 }
 
-func (a *Authenticator) AuthenticateByToken(token string) (*entity.User, error) {
+func (a *Authenticator) AuthenticateByToken(ctx context.Context, token string) (*entity.User, error) {
 	if token == "" {
 		return nil, fmt.Errorf("empty token")
 	}
@@ -59,11 +60,11 @@ func (a *Authenticator) AuthenticateByToken(token string) (*entity.User, error) 
 	var user *entity.User
 	// considering token is database token
 	if len(token) == tokenLength {
-		user, _ = a.database.CheckToken(token)
+		user, _ = a.database.CheckToken(ctx, token)
 		if user == nil {
 			return nil, fmt.Errorf("token check failed")
 		}
-		_ = a.updateLastSeen(user)
+		_ = a.updateLastSeen(ctx, user)
 		return user, nil
 	}
 	// considering token is firebase token
@@ -72,7 +73,7 @@ func (a *Authenticator) AuthenticateByToken(token string) (*entity.User, error) 
 		if err != nil {
 			return nil, fmt.Errorf("firebase token check: %s", err)
 		}
-		user, err = a.GetUserById(userId)
+		user, err = a.GetUserById(ctx, userId)
 		if err != nil {
 			return nil, fmt.Errorf("getting user by id: %s", err)
 		}
@@ -83,19 +84,19 @@ func (a *Authenticator) AuthenticateByToken(token string) (*entity.User, error) 
 	return nil, fmt.Errorf("token check failed")
 }
 
-func (a *Authenticator) GetUserById(userId string) (*entity.User, error) {
+func (a *Authenticator) GetUserById(ctx context.Context, userId string) (*entity.User, error) {
 	if userId == "" {
 		return nil, fmt.Errorf("empty user id")
 	}
 
-	user, _ := a.database.GetUserById(userId)
+	user, _ := a.database.GetUserById(ctx, userId)
 
 	if user == nil {
 
 		// generating unique username for new user
 		nameLength := 5
 		username := fmt.Sprintf("user_%s", a.generateKey(nameLength))
-		for a.database.CheckUsername(username) != nil {
+		for a.database.CheckUsername(ctx, username) != nil {
 			nameLength++
 			username = fmt.Sprintf("user_%s", a.generateKey(nameLength))
 		}
@@ -109,7 +110,7 @@ func (a *Authenticator) GetUserById(userId string) (*entity.User, error) {
 			DateRegistered: time.Now(),
 		}
 
-		err := a.database.AddUser(user)
+		err := a.database.AddUser(ctx, user)
 		if err != nil {
 			return nil, fmt.Errorf("adding user: %s", err)
 		}
@@ -119,11 +120,11 @@ func (a *Authenticator) GetUserById(userId string) (*entity.User, error) {
 		).Info("new user registered")
 	}
 
-	_ = a.updateLastSeen(user)
+	_ = a.updateLastSeen(ctx, user)
 	return user, nil
 }
 
-func (a *Authenticator) GenerateInvites(count int) ([]string, error) {
+func (a *Authenticator) GenerateInvites(ctx context.Context, count int) ([]string, error) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	invites := make([]string, 0)
@@ -132,7 +133,7 @@ func (a *Authenticator) GenerateInvites(count int) ([]string, error) {
 		invite := &entity.Invite{
 			Code: inviteCode,
 		}
-		err := a.database.AddInviteCode(invite)
+		err := a.database.AddInviteCode(ctx, invite)
 		if err != nil {
 			a.logger.Error("add invite code", err)
 			continue
@@ -145,10 +146,10 @@ func (a *Authenticator) GenerateInvites(count int) ([]string, error) {
 	return invites, nil
 }
 
-func (a *Authenticator) GetUserTag(user *entity.User) (string, error) {
+func (a *Authenticator) GetUserTag(ctx context.Context, user *entity.User) (string, error) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	tags, _ := a.database.GetUserTags(user.UserId)
+	tags, _ := a.database.GetUserTags(ctx, user.UserId)
 	if tags == nil {
 		tags = make([]entity.UserTag, 0)
 	}
@@ -157,7 +158,7 @@ func (a *Authenticator) GetUserTag(user *entity.User) (string, error) {
 	if len(tags) == 0 {
 
 		newIdTag := strings.ToUpper(a.generateKey(20))
-		for a.database.CheckUserTag(newIdTag) != nil {
+		for a.database.CheckUserTag(ctx, newIdTag) != nil {
 			newIdTag = strings.ToUpper(a.generateKey(20))
 		}
 
@@ -171,22 +172,22 @@ func (a *Authenticator) GetUserTag(user *entity.User) (string, error) {
 			DateRegistered: time.Now(),
 		}
 
-		err := a.database.AddUserTag(&newTag)
+		err := a.database.AddUserTag(ctx, &newTag)
 		if err != nil {
 			return "", fmt.Errorf("adding user tag: %s", err)
 		}
 		tags = append(tags, newTag)
 	}
-	_ = a.database.UpdateTagLastSeen(&tags[0])
+	_ = a.database.UpdateTagLastSeen(ctx, &tags[0])
 	return tags[0].IdTag, nil
 }
 
 // AuthenticateUser method returns user with blank password if authentication is successful
 // Note: in a database, the password should be stored as a hash
-func (a *Authenticator) AuthenticateUser(username, password string) (*entity.User, error) {
+func (a *Authenticator) AuthenticateUser(ctx context.Context, username, password string) (*entity.User, error) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	user, err := a.database.GetUser(username)
+	user, err := a.database.GetUser(ctx, username)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %s", username)
 	}
@@ -197,7 +198,7 @@ func (a *Authenticator) AuthenticateUser(username, password string) (*entity.Use
 	token := a.generateKey(tokenLength)
 	user.Token = token
 	user.LastSeen = time.Now()
-	err = a.database.UpdateLastSeen(user)
+	err = a.database.UpdateLastSeen(ctx, user)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +212,7 @@ func (a *Authenticator) AuthenticateUser(username, password string) (*entity.Use
 }
 
 // RegisterUser registers a new user in the system with validation checks and default assignments.
-func (a *Authenticator) RegisterUser(user *entity.User) error {
+func (a *Authenticator) RegisterUser(ctx context.Context, user *entity.User) error {
 	if user.Password == "" {
 		return fmt.Errorf("empty password")
 	}
@@ -224,12 +225,12 @@ func (a *Authenticator) RegisterUser(user *entity.User) error {
 	a.mux.Lock()
 	defer a.mux.Unlock()
 	// check if username exists
-	existedUser, _ := a.database.GetUser(user.Username)
+	existedUser, _ := a.database.GetUser(ctx, user.Username)
 	if existedUser != nil {
 		return fmt.Errorf("user already exists")
 	}
 	// check provided invite code
-	ok, _ := a.database.CheckInviteCode(user.Token)
+	ok, _ := a.database.CheckInviteCode(ctx, user.Token)
 	if !ok {
 		return fmt.Errorf("invalid invite code")
 	}
@@ -251,28 +252,28 @@ func (a *Authenticator) RegisterUser(user *entity.User) error {
 		user.Group = defaultUserGroupId
 	}
 	// generate unique user id
-	user.UserId = a.getUserId()
+	user.UserId = a.getUserId(ctx)
 	user.DateRegistered = time.Now()
 	// store new user in repository
-	err := a.database.AddUser(user)
+	err := a.database.AddUser(ctx, user)
 	if err != nil {
 		return err
 	}
 	// delete used invite code
-	err = a.database.DeleteInviteCode(user.Token)
+	err = a.database.DeleteInviteCode(ctx, user.Token)
 	if err != nil {
 		a.logger.Error("deleting invite code", err)
 	}
 	return nil
 }
 
-func (a *Authenticator) GetUsers(user *entity.User) ([]*entity.User, error) {
+func (a *Authenticator) GetUsers(ctx context.Context, user *entity.User) ([]*entity.User, error) {
 	if user == nil || !user.IsAdmin() {
 		return nil, fmt.Errorf("access denied")
 	}
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	users, err := a.database.GetUsers()
+	users, err := a.database.GetUsers(ctx)
 	if err != nil {
 		return nil, err
 	}

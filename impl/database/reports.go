@@ -8,8 +8,7 @@ import (
 )
 
 // TotalsByMonth returns the total consumed watts, average watts, and count of transactions by month
-func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interface{}, error) {
-	ctx := context.Background()
+func (m *MongoDB) TotalsByMonth(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
 	collection := m.client.Database(m.database).Collection(collectionTransactions)
 
 	pipeline := mongo.Pipeline{
@@ -104,8 +103,7 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 }
 
 // TotalsByUsers returns the total consumed watts, average watts, and count of transactions by user
-func (m *MongoDB) TotalsByUsers(from, to time.Time, userGroup string) ([]interface{}, error) {
-	ctx := context.Background()
+func (m *MongoDB) TotalsByUsers(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
 	collection := m.client.Database(m.database).Collection(collectionTransactions)
 
 	pipeline := mongo.Pipeline{
@@ -202,8 +200,7 @@ func (m *MongoDB) TotalsByUsers(from, to time.Time, userGroup string) ([]interfa
 	return result, err
 }
 
-func (m *MongoDB) TotalsByCharger(from, to time.Time, userGroup string) ([]interface{}, error) {
-	ctx := context.Background()
+func (m *MongoDB) TotalsByCharger(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
 	collection := m.client.Database(m.database).Collection(collectionTransactions)
 
 	pipeline := mongo.Pipeline{

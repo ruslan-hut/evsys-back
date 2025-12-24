@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"context"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
@@ -13,25 +14,26 @@ import (
 )
 
 type Payments interface {
-	GetPaymentMethods(userId string) (interface{}, error)
-	SavePaymentMethod(user *entity.User, pm *entity.PaymentMethod) error
-	UpdatePaymentMethod(user *entity.User, pm *entity.PaymentMethod) error
-	DeletePaymentMethod(user *entity.User, pm *entity.PaymentMethod) error
-	SetOrder(user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, error)
+	GetPaymentMethods(ctx context.Context, userId string) (interface{}, error)
+	SavePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error
+	UpdatePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error
+	DeletePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error
+	SetOrder(ctx context.Context, user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, error)
 }
 
 func List(logger *slog.Logger, handler Payments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 
 		log := logger.With(
 			sl.Module("handlers.payments"),
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		data, err := handler.GetPaymentMethods(user.UserId)
+		data, err := handler.GetPaymentMethods(ctx, user.UserId)
 		if err != nil {
 			log.With(sl.Err(err)).Error("payment methods list")
 			render.Status(r, 204)
@@ -46,13 +48,14 @@ func List(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 func Save(logger *slog.Logger, handler Payments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 
 		log := logger.With(
 			sl.Module("handlers.payments"),
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		var pm entity.PaymentMethod
@@ -67,7 +70,7 @@ func Save(logger *slog.Logger, handler Payments) http.HandlerFunc {
 			sl.Secret("identifier", pm.Identifier),
 		)
 
-		err := handler.SavePaymentMethod(user, &pm)
+		err := handler.SavePaymentMethod(ctx, user, &pm)
 		if err != nil {
 			log.With(sl.Err(err)).Error("payment method not saved")
 			render.Status(r, 204)
@@ -82,13 +85,14 @@ func Save(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 func Update(logger *slog.Logger, handler Payments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 
 		log := logger.With(
 			sl.Module("handlers.payments"),
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		var pm entity.PaymentMethod
@@ -103,7 +107,7 @@ func Update(logger *slog.Logger, handler Payments) http.HandlerFunc {
 			sl.Secret("identifier", pm.Identifier),
 		)
 
-		err := handler.UpdatePaymentMethod(user, &pm)
+		err := handler.UpdatePaymentMethod(ctx, user, &pm)
 		if err != nil {
 			log.With(sl.Err(err)).Error("payment method not updated")
 			render.Status(r, 204)
@@ -118,13 +122,14 @@ func Update(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 func Delete(logger *slog.Logger, handler Payments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 
 		log := logger.With(
 			sl.Module("handlers.payments"),
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		var pm entity.PaymentMethod
@@ -139,7 +144,7 @@ func Delete(logger *slog.Logger, handler Payments) http.HandlerFunc {
 			sl.Secret("identifier", pm.Identifier),
 		)
 
-		err := handler.DeletePaymentMethod(user, &pm)
+		err := handler.DeletePaymentMethod(ctx, user, &pm)
 		if err != nil {
 			log.With(sl.Err(err)).Error("payment method not deleted")
 			render.Status(r, 204)
@@ -154,13 +159,14 @@ func Delete(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 func Order(logger *slog.Logger, handler Payments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 
 		log := logger.With(
 			sl.Module("handlers.payments"),
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		var order entity.PaymentOrder
@@ -176,7 +182,7 @@ func Order(logger *slog.Logger, handler Payments) http.HandlerFunc {
 			sl.Secret("identifier", order.Identifier),
 		)
 
-		updated, err := handler.SetOrder(user, &order)
+		updated, err := handler.SetOrder(ctx, user, &order)
 		if err != nil {
 			log.With(sl.Err(err)).Error("order not set")
 			render.Status(r, 204)

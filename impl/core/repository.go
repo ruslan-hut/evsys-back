@@ -1,28 +1,31 @@
 package core
 
-import "evsys-back/entity"
+import (
+	"context"
+	"evsys-back/entity"
+)
 
 type Repository interface {
-	GetConfig(name string) (interface{}, error)
-	ReadLog(name string) (interface{}, error)
+	GetConfig(ctx context.Context, name string) (interface{}, error)
+	ReadLog(ctx context.Context, name string) (interface{}, error)
 
-	GetUserInfo(accessLevel int, username string) (*entity.UserInfo, error)
+	GetUserInfo(ctx context.Context, accessLevel int, username string) (*entity.UserInfo, error)
 
-	GetLocations() ([]*entity.Location, error)
-	GetChargePoints(level int, searchTerm string) ([]*entity.ChargePoint, error)
-	GetChargePoint(level int, id string) (*entity.ChargePoint, error)
-	UpdateChargePoint(level int, chargePoint *entity.ChargePoint) error
+	GetLocations(ctx context.Context) ([]*entity.Location, error)
+	GetChargePoints(ctx context.Context, level int, searchTerm string) ([]*entity.ChargePoint, error)
+	GetChargePoint(ctx context.Context, level int, id string) (*entity.ChargePoint, error)
+	UpdateChargePoint(ctx context.Context, level int, chargePoint *entity.ChargePoint) error
 
-	GetActiveTransactions(userId string) ([]*entity.ChargeState, error)
-	GetTransactions(userId string, period string) ([]*entity.Transaction, error)
-	GetTransactionState(userId string, level int, id int) (*entity.ChargeState, error)
-	GetRecentUserChargePoints(userId string) ([]*entity.ChargePoint, error)
+	GetActiveTransactions(ctx context.Context, userId string) ([]*entity.ChargeState, error)
+	GetTransactions(ctx context.Context, userId string, period string) ([]*entity.Transaction, error)
+	GetTransactionState(ctx context.Context, userId string, level int, id int) (*entity.ChargeState, error)
+	GetRecentUserChargePoints(ctx context.Context, userId string) ([]*entity.ChargePoint, error)
 
-	GetPaymentMethods(userId string) ([]*entity.PaymentMethod, error)
-	SavePaymentMethod(paymentMethod *entity.PaymentMethod) error
-	UpdatePaymentMethod(paymentMethod *entity.PaymentMethod) error
-	DeletePaymentMethod(paymentMethod *entity.PaymentMethod) error
-	GetLastOrder() (*entity.PaymentOrder, error)
-	SavePaymentOrder(order *entity.PaymentOrder) error
-	GetPaymentOrderByTransaction(transactionId int) (*entity.PaymentOrder, error)
+	GetPaymentMethods(ctx context.Context, userId string) ([]*entity.PaymentMethod, error)
+	SavePaymentMethod(ctx context.Context, paymentMethod *entity.PaymentMethod) error
+	UpdatePaymentMethod(ctx context.Context, paymentMethod *entity.PaymentMethod) error
+	DeletePaymentMethod(ctx context.Context, paymentMethod *entity.PaymentMethod) error
+	GetLastOrder(ctx context.Context) (*entity.PaymentOrder, error)
+	SavePaymentOrder(ctx context.Context, order *entity.PaymentOrder) error
+	GetPaymentOrderByTransaction(ctx context.Context, transactionId int) (*entity.PaymentOrder, error)
 }

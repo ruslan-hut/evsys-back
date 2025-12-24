@@ -1,6 +1,7 @@
 package reports
 
 import (
+	"context"
 	"evsys-back/internal/lib/sl"
 	"log/slog"
 	"time"
@@ -22,13 +23,13 @@ func New(repo Repository, log *slog.Logger) *Reports {
 	}
 }
 
-func (r *Reports) TotalsByMonth(from, to time.Time, userGroup string) ([]interface{}, error) {
+func (r *Reports) TotalsByMonth(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
 	log := r.log.With(
 		slog.Time("from", from),
 		slog.Time("to", to),
 		slog.String("userGroup", userGroup),
 	)
-	data, err := r.repo.TotalsByMonth(from, to, userGroup)
+	data, err := r.repo.TotalsByMonth(ctx, from, to, userGroup)
 	if err != nil {
 		log.Error("totals by month failed", sl.Err(err))
 		return []interface{}{}, nil
@@ -43,13 +44,13 @@ func (r *Reports) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 	return data, nil
 }
 
-func (r *Reports) TotalsByUsers(from, to time.Time, userGroup string) ([]interface{}, error) {
+func (r *Reports) TotalsByUsers(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
 	log := r.log.With(
 		slog.Time("from", from),
 		slog.Time("to", to),
 		slog.String("userGroup", userGroup),
 	)
-	data, err := r.repo.TotalsByUsers(from, to, userGroup)
+	data, err := r.repo.TotalsByUsers(ctx, from, to, userGroup)
 	if err != nil {
 		log.Error("totals by users failed", sl.Err(err))
 		return []interface{}{}, nil
@@ -64,13 +65,13 @@ func (r *Reports) TotalsByUsers(from, to time.Time, userGroup string) ([]interfa
 	return data, nil
 }
 
-func (r *Reports) TotalsByCharger(from, to time.Time, userGroup string) ([]interface{}, error) {
+func (r *Reports) TotalsByCharger(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
 	log := r.log.With(
 		slog.Time("from", from),
 		slog.Time("to", to),
 		slog.String("userGroup", userGroup),
 	)
-	data, err := r.repo.TotalsByCharger(from, to, userGroup)
+	data, err := r.repo.TotalsByCharger(ctx, from, to, userGroup)
 	if err != nil {
 		log.Error("totals by charger failed", sl.Err(err))
 		return []interface{}{}, nil

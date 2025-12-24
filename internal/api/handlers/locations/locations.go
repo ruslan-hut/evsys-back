@@ -1,6 +1,7 @@
 package locations
 
 import (
+	"context"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
@@ -15,23 +16,24 @@ import (
 )
 
 type Locations interface {
-	GetLocations(accessLevel int) (interface{}, error)
-	GetChargePoints(accessLevel int, search string) (interface{}, error)
-	GetChargePoint(accessLevel int, id string) (interface{}, error)
-	SaveChargePoint(accessLevel int, chargePoint *entity.ChargePoint) error
+	GetLocations(ctx context.Context, accessLevel int) (interface{}, error)
+	GetChargePoints(ctx context.Context, accessLevel int, search string) (interface{}, error)
+	GetChargePoint(ctx context.Context, accessLevel int, id string) (interface{}, error)
+	SaveChargePoint(ctx context.Context, accessLevel int, chargePoint *entity.ChargePoint) error
 }
 
 func ListLocations(logger *slog.Logger, handler Locations) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 		log := logger.With(
 			sl.Module("handlers.locations"),
 			slog.String("user", user.Username),
 			slog.Int("access_level", user.AccessLevel),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		data, err := handler.GetLocations(user.AccessLevel)
+		data, err := handler.GetLocations(ctx, user.AccessLevel)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get locations")
 			render.Status(r, 204)
@@ -46,7 +48,8 @@ func ListLocations(logger *slog.Logger, handler Locations) http.HandlerFunc {
 
 func ListChargePoints(logger *slog.Logger, handler Locations) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 		search := chi.URLParam(r, "search")
 
 		log := logger.With(
@@ -54,10 +57,10 @@ func ListChargePoints(logger *slog.Logger, handler Locations) http.HandlerFunc {
 			slog.String("user", user.Username),
 			slog.Int("access_level", user.AccessLevel),
 			slog.String("search", search),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		data, err := handler.GetChargePoints(user.AccessLevel, search)
+		data, err := handler.GetChargePoints(ctx, user.AccessLevel, search)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get charge points")
 			render.Status(r, 204)
@@ -72,7 +75,8 @@ func ListChargePoints(logger *slog.Logger, handler Locations) http.HandlerFunc {
 
 func ChargePointRead(logger *slog.Logger, handler Locations) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 		id := chi.URLParam(r, "id")
 
 		log := logger.With(
@@ -80,10 +84,10 @@ func ChargePointRead(logger *slog.Logger, handler Locations) http.HandlerFunc {
 			slog.String("user", user.Username),
 			slog.Int("access_level", user.AccessLevel),
 			slog.String("id", id),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		data, err := handler.GetChargePoint(user.AccessLevel, id)
+		data, err := handler.GetChargePoint(ctx, user.AccessLevel, id)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get charge point")
 			render.Status(r, 204)
@@ -98,7 +102,8 @@ func ChargePointRead(logger *slog.Logger, handler Locations) http.HandlerFunc {
 
 func ChargePointSave(logger *slog.Logger, handler Locations) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 		id := chi.URLParam(r, "id")
 
 		log := logger.With(
@@ -106,7 +111,7 @@ func ChargePointSave(logger *slog.Logger, handler Locations) http.HandlerFunc {
 			slog.String("user", user.Username),
 			slog.Int("access_level", user.AccessLevel),
 			slog.String("id", id),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		var chargePoint entity.ChargePoint
@@ -117,7 +122,7 @@ func ChargePointSave(logger *slog.Logger, handler Locations) http.HandlerFunc {
 			return
 		}
 
-		err := handler.SaveChargePoint(user.AccessLevel, &chargePoint)
+		err := handler.SaveChargePoint(ctx, user.AccessLevel, &chargePoint)
 		if err != nil {
 			log.With(sl.Err(err)).Error("save charge point")
 			render.Status(r, 204)

@@ -39,15 +39,15 @@ type Server struct {
 }
 
 type StatusReader interface {
-	GetTransactionAfter(userId string, after time.Time) (*entity.Transaction, error)
-	GetTransaction(transactionId int) (*entity.Transaction, error)
-	GetLastMeterValues(transactionId int, from time.Time) ([]*entity.TransactionMeter, error)
+	GetTransactionAfter(ctx context.Context, userId string, after time.Time) (*entity.Transaction, error)
+	GetTransaction(ctx context.Context, transactionId int) (*entity.Transaction, error)
+	GetLastMeterValues(ctx context.Context, transactionId int, from time.Time) ([]*entity.TransactionMeter, error)
 
 	SaveStatus(userId string, stage entity.Stage, transactionId int) (time.Time, error)
 	GetStatus(userId string) (*entity.UserStatus, bool)
 	ClearStatus(userId string)
 
-	ReadLogAfter(timeStart time.Time) ([]*entity.FeatureMessage, error)
+	ReadLogAfter(ctx context.Context, timeStart time.Time) ([]*entity.FeatureMessage, error)
 }
 
 type Core interface {
@@ -60,7 +60,7 @@ type Core interface {
 	payments.Payments
 	report.Reports
 
-	UserTag(user *entity.User) (string, error)
+	UserTag(ctx context.Context, user *entity.User) (string, error)
 	WsRequest(request *entity.UserRequest) error
 }
 
@@ -315,13 +315,17 @@ func (c *Client) readPump() {
 		}
 
 		if c.user == nil {
-			c.user, err = c.core.AuthenticateByToken(userRequest.Token)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			c.user, err = c.core.AuthenticateByToken(ctx, userRequest.Token)
+			cancel()
 			if err != nil {
 				c.sendResponse(entity.Error, fmt.Sprintf("check token: %v", err))
 				continue
 			}
 
-			c.id, err = c.core.UserTag(c.user)
+			ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+			c.id, err = c.core.UserTag(ctx, c.user)
+			cancel()
 			if err != nil {
 				c.sendResponse(entity.Error, fmt.Sprintf("get user tag: %v", err))
 				continue
@@ -437,7 +441,9 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 			if c.isClosed {
 				return
 			}
-			transaction, err := c.statusReader.GetTransactionAfter(c.id, timeStart)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			transaction, err := c.statusReader.GetTransactionAfter(ctx, c.id, timeStart)
+			cancel()
 			if err != nil {
 				c.logger.Error("get transaction", sl.Err(err))
 				continue
@@ -475,7 +481,9 @@ func (c *Client) listenForTransactionStart(timeStart time.Time) {
 
 func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int) {
 
-	_, err := c.statusReader.GetTransaction(transactionId)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	_, err := c.statusReader.GetTransaction(ctx, transactionId)
+	cancel()
 	if err != nil {
 		c.wsResponse(&entity.WsResponse{
 			Status: entity.Error,
@@ -509,7 +517,9 @@ func (c *Client) listenForTransactionStop(timeStart time.Time, transactionId int
 			if c.isClosed {
 				return
 			}
-			transaction, err := c.statusReader.GetTransaction(transactionId)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			transaction, err := c.statusReader.GetTransaction(ctx, transactionId)
+			cancel()
 			if err != nil {
 				c.logger.Error("get transaction", sl.Err(err))
 				continue
@@ -566,7 +576,9 @@ func (c *Client) listenForTransactionState(transactionId int) {
 		if !ok {
 			return
 		}
-		values, _ := c.statusReader.GetLastMeterValues(transactionId, lastMeterValue)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		values, _ := c.statusReader.GetLastMeterValues(ctx, transactionId, lastMeterValue)
+		cancel()
 		if values == nil {
 			continue
 		}
@@ -607,7 +619,9 @@ func (c *Client) listenForLogUpdates() {
 		if c.isClosed {
 			return
 		}
-		messages, _ := c.statusReader.ReadLogAfter(lastMessageTime)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		messages, _ := c.statusReader.ReadLogAfter(ctx, lastMessageTime)
+		cancel()
 		if messages == nil {
 			continue
 		}
@@ -640,7 +654,9 @@ func (s *Server) listenForUpdates() {
 	}()
 
 	for range ticker.C {
-		messages, _ := s.statusReader.ReadLogAfter(lastMessageTime)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		messages, _ := s.statusReader.ReadLogAfter(ctx, lastMessageTime)
+		cancel()
 		if messages == nil {
 			continue
 		}

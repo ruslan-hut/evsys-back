@@ -1,6 +1,7 @@
 package transactions
 
 import (
+	"context"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
@@ -15,24 +16,25 @@ import (
 )
 
 type Transactions interface {
-	GetActiveTransactions(userId string) (interface{}, error)
-	GetTransactions(userId, period string) (interface{}, error)
-	GetTransaction(userId string, accessLevel, id int) (interface{}, error)
-	GetRecentChargePoints(userId string) (interface{}, error)
+	GetActiveTransactions(ctx context.Context, userId string) (interface{}, error)
+	GetTransactions(ctx context.Context, userId, period string) (interface{}, error)
+	GetTransaction(ctx context.Context, userId string, accessLevel, id int) (interface{}, error)
+	GetRecentChargePoints(ctx context.Context, userId string) (interface{}, error)
 }
 
 func ListActive(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 
 		log := logger.With(
 			sl.Module("handlers.transactions"),
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		data, err := handler.GetActiveTransactions(user.UserId)
+		data, err := handler.GetActiveTransactions(ctx, user.UserId)
 		if err != nil {
 			log.With(sl.Err(err)).Error("active transactions")
 			render.Status(r, 204)
@@ -47,7 +49,8 @@ func ListActive(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 
 func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 		period := chi.URLParam(r, "period")
 
 		log := logger.With(
@@ -55,10 +58,10 @@ func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
 			slog.String("period", period),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		data, err := handler.GetTransactions(user.UserId, period)
+		data, err := handler.GetTransactions(ctx, user.UserId, period)
 		if err != nil {
 			log.With(sl.Err(err)).Error("transactions list")
 			render.Status(r, 204)
@@ -73,7 +76,8 @@ func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 
 func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 		id := chi.URLParam(r, "id")
 
 		log := logger.With(
@@ -82,7 +86,7 @@ func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 			sl.Secret("user_id", user.UserId),
 			slog.Int("access_level", user.AccessLevel),
 			slog.String("id", id),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		transactionId, err := strconv.Atoi(id)
@@ -93,7 +97,7 @@ func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 			return
 		}
 
-		data, err := handler.GetTransaction(user.UserId, user.AccessLevel, transactionId)
+		data, err := handler.GetTransaction(ctx, user.UserId, user.AccessLevel, transactionId)
 		if err != nil {
 			log.With(sl.Err(err)).Error("transaction info")
 			render.Status(r, 204)
@@ -108,17 +112,18 @@ func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 
 func RecentUserChargePoints(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 
 		log := logger.With(
 			sl.Module("handlers.transactions"),
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
 			slog.Int("access_level", user.AccessLevel),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		data, err := handler.GetRecentChargePoints(user.UserId)
+		data, err := handler.GetRecentChargePoints(ctx, user.UserId)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get recent charge points")
 			render.Status(r, 204)

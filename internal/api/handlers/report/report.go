@@ -1,6 +1,7 @@
 package report
 
 import (
+	"context"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/request"
@@ -15,22 +16,23 @@ import (
 )
 
 type Reports interface {
-	MonthlyStats(user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
-	UsersStats(user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
-	ChargerStats(user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
+	MonthlyStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
+	UsersStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
+	ChargerStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
 }
 
 func MonthlyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 
 		log := logger.With(
 			sl.Module("handlers.report"),
 			slog.String("author", user.Username),
 			slog.String("role", user.Role),
 			slog.Int("access_level", user.AccessLevel),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		from, err := request.GetDate(r, "from")
@@ -60,7 +62,7 @@ func MonthlyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 			slog.String("group", group),
 		)
 
-		data, err := handler.MonthlyStats(user, from, to, group)
+		data, err := handler.MonthlyStats(ctx, user, from, to, group)
 		if err != nil {
 			log.Error("get report failed", sl.Err(err))
 			render.Status(r, 400)
@@ -76,14 +78,15 @@ func MonthlyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 func UsersStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 
 		log := logger.With(
 			sl.Module("handlers.report"),
 			slog.String("author", user.Username),
 			slog.String("role", user.Role),
 			slog.Int("access_level", user.AccessLevel),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		from, err := request.GetDate(r, "from")
@@ -113,7 +116,7 @@ func UsersStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 			slog.String("group", group),
 		)
 
-		data, err := handler.UsersStats(user, from, to, group)
+		data, err := handler.UsersStats(ctx, user, from, to, group)
 		if err != nil {
 			log.Error("get report failed", sl.Err(err))
 			render.Status(r, 400)
@@ -129,14 +132,15 @@ func UsersStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 func ChargerStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 
 		log := logger.With(
 			sl.Module("handlers.report"),
 			slog.String("author", user.Username),
 			slog.String("role", user.Role),
 			slog.Int("access_level", user.AccessLevel),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		from, err := request.GetDate(r, "from")
@@ -166,7 +170,7 @@ func ChargerStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 			slog.String("group", group),
 		)
 
-		data, err := handler.ChargerStats(user, from, to, group)
+		data, err := handler.ChargerStats(ctx, user, from, to, group)
 		if err != nil {
 			log.Error("get report failed", sl.Err(err))
 			render.Status(r, 400)

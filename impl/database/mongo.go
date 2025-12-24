@@ -86,7 +86,7 @@ func (m *MongoDB) Close() error {
 	return nil
 }
 
-func (m *MongoDB) read(table, dataType string) (interface{}, error) {
+func (m *MongoDB) read(ctx context.Context, table, dataType string) (interface{}, error) {
 	var logMessages interface{}
 	timeFieldName := "timestamp"
 
@@ -100,7 +100,6 @@ func (m *MongoDB) read(table, dataType string) (interface{}, error) {
 		return nil, fmt.Errorf("unknown data type: %s", dataType)
 	}
 
-	ctx := context.Background()
 	collection := m.client.Database(m.database).Collection(table)
 	filter := bson.D{}
 	opts := options.Find().SetSort(bson.D{{timeFieldName, -1}})
@@ -117,22 +116,21 @@ func (m *MongoDB) read(table, dataType string) (interface{}, error) {
 	return logMessages, nil
 }
 
-func (m *MongoDB) ReadLog(logName string) (interface{}, error) {
+func (m *MongoDB) ReadLog(ctx context.Context, logName string) (interface{}, error) {
 	switch logName {
 	case "sys":
-		return m.read(collectionSysLog, entity.FeatureMessageType)
+		return m.read(ctx, collectionSysLog, entity.FeatureMessageType)
 	case "back":
-		return m.read(collectionBackLog, entity.LogMessageType)
+		return m.read(ctx, collectionBackLog, entity.LogMessageType)
 	case "pay":
-		return m.read(collectionPaymentLog, entity.LogMessageType)
+		return m.read(ctx, collectionPaymentLog, entity.LogMessageType)
 	default:
 		return nil, fmt.Errorf("unknown log name: %s", logName)
 	}
 }
 
 // ReadLogAfter returns array of log messages in a normal , filtered by timeStart
-func (m *MongoDB) ReadLogAfter(timeStart time.Time) ([]*entity.FeatureMessage, error) {
-	ctx := context.Background()
+func (m *MongoDB) ReadLogAfter(ctx context.Context, timeStart time.Time) ([]*entity.FeatureMessage, error) {
 	collection := m.client.Database(m.database).Collection(collectionSysLog)
 	var pipe []bson.M
 	pipe = append(pipe, bson.M{"$match": bson.M{"timestamp": bson.M{"$gt": timeStart}}})
@@ -150,8 +148,7 @@ func (m *MongoDB) ReadLogAfter(timeStart time.Time) ([]*entity.FeatureMessage, e
 	return result, nil
 }
 
-func (m *MongoDB) GetConfig(name string) (interface{}, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetConfig(ctx context.Context, name string) (interface{}, error) {
 	collection := m.client.Database(m.database).Collection(collectionConfig)
 	filter := bson.D{{"name", name}}
 	var configData interface{}
@@ -162,8 +159,7 @@ func (m *MongoDB) GetConfig(name string) (interface{}, error) {
 	return configData, nil
 }
 
-func (m *MongoDB) GetUser(username string) (*entity.User, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetUser(ctx context.Context, username string) (*entity.User, error) {
 	collection := m.client.Database(m.database).Collection(collectionUsers)
 	filter := bson.D{{"username", username}}
 	var userData entity.User
@@ -175,8 +171,7 @@ func (m *MongoDB) GetUser(username string) (*entity.User, error) {
 }
 
 // GetUserInfo get user info: data of a user, merged with tags, payment methods, payment plans
-func (m *MongoDB) GetUserInfo(_ int, username string) (*entity.UserInfo, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetUserInfo(ctx context.Context, _ int, username string) (*entity.UserInfo, error) {
 	pipeline := mongo.Pipeline{
 		{
 			{"$match", bson.M{"username": username}},
@@ -227,8 +222,7 @@ func (m *MongoDB) GetUserInfo(_ int, username string) (*entity.UserInfo, error) 
 	return &info, nil
 }
 
-func (m *MongoDB) GetUsers() ([]*entity.User, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetUsers(ctx context.Context) ([]*entity.User, error) {
 	collection := m.client.Database(m.database).Collection(collectionUsers)
 	filter := bson.D{}
 	projection := bson.M{"password": 0, "token": 0}
@@ -243,8 +237,7 @@ func (m *MongoDB) GetUsers() ([]*entity.User, error) {
 	return users, nil
 }
 
-func (m *MongoDB) GetUserById(userId string) (*entity.User, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetUserById(ctx context.Context, userId string) (*entity.User, error) {
 	collection := m.client.Database(m.database).Collection(collectionUsers)
 	filter := bson.D{{"user_id", userId}}
 	var userData entity.User
@@ -255,8 +248,7 @@ func (m *MongoDB) GetUserById(userId string) (*entity.User, error) {
 	return &userData, nil
 }
 
-func (m *MongoDB) GetUserTags(userId string) ([]entity.UserTag, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetUserTags(ctx context.Context, userId string) ([]entity.UserTag, error) {
 	collection := m.client.Database(m.database).Collection(collectionUserTags)
 	filter := bson.M{"$and": []bson.M{{"user_id": userId}, {"is_enabled": true}}}
 	var userTags []entity.UserTag
@@ -270,8 +262,7 @@ func (m *MongoDB) GetUserTags(userId string) ([]entity.UserTag, error) {
 	return userTags, nil
 }
 
-func (m *MongoDB) GetUserTag(idTag string) (*entity.UserTag, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetUserTag(ctx context.Context, idTag string) (*entity.UserTag, error) {
 	collection := m.client.Database(m.database).Collection(collectionUserTags)
 	filter := bson.D{{"id_tag", idTag}}
 	var userTag entity.UserTag
@@ -281,20 +272,18 @@ func (m *MongoDB) GetUserTag(idTag string) (*entity.UserTag, error) {
 	return &userTag, nil
 }
 
-func (m *MongoDB) AddUserTag(userTag *entity.UserTag) error {
-	t, _ := m.GetUserTag(userTag.IdTag)
+func (m *MongoDB) AddUserTag(ctx context.Context, userTag *entity.UserTag) error {
+	t, _ := m.GetUserTag(ctx, userTag.IdTag)
 	if t != nil {
 		return fmt.Errorf("user tag %s already exists for user %s", t.IdTag, t.UserId)
 	}
-	ctx := context.Background()
 	collection := m.client.Database(m.database).Collection(collectionUserTags)
 	_, err := collection.InsertOne(ctx, userTag)
 	return err
 }
 
 // CheckUserTag check unique of idTag
-func (m *MongoDB) CheckUserTag(idTag string) error {
-	ctx := context.Background()
+func (m *MongoDB) CheckUserTag(ctx context.Context, idTag string) error {
 	collection := m.client.Database(m.database).Collection(collectionUserTags)
 	filter := bson.D{{"id_tag", idTag}}
 	var userTag entity.UserTag
@@ -305,8 +294,7 @@ func (m *MongoDB) CheckUserTag(idTag string) error {
 	return nil
 }
 
-func (m *MongoDB) UpdateTagLastSeen(userTag *entity.UserTag) error {
-	ctx := context.Background()
+func (m *MongoDB) UpdateTagLastSeen(ctx context.Context, userTag *entity.UserTag) error {
 	collection := m.client.Database(m.database).Collection(collectionUserTags)
 	filter := bson.D{{"id_tag", userTag.IdTag}}
 	update := bson.M{"$set": bson.D{
@@ -316,8 +304,7 @@ func (m *MongoDB) UpdateTagLastSeen(userTag *entity.UserTag) error {
 	return err
 }
 
-func (m *MongoDB) UpdateLastSeen(user *entity.User) error {
-	ctx := context.Background()
+func (m *MongoDB) UpdateLastSeen(ctx context.Context, user *entity.User) error {
 	collection := m.client.Database(m.database).Collection(collectionUsers)
 	filter := bson.D{{"username", user.Username}}
 	update := bson.M{"$set": bson.D{
@@ -328,16 +315,14 @@ func (m *MongoDB) UpdateLastSeen(user *entity.User) error {
 	return err
 }
 
-func (m *MongoDB) AddUser(user *entity.User) error {
-	ctx := context.Background()
+func (m *MongoDB) AddUser(ctx context.Context, user *entity.User) error {
 	collection := m.client.Database(m.database).Collection(collectionUsers)
 	_, err := collection.InsertOne(ctx, user)
 	return err
 }
 
 // CheckUsername check unique username
-func (m *MongoDB) CheckUsername(username string) error {
-	ctx := context.Background()
+func (m *MongoDB) CheckUsername(ctx context.Context, username string) error {
 	collection := m.client.Database(m.database).Collection(collectionUsers)
 	filter := bson.D{{"username", username}}
 	var userData entity.User
@@ -348,8 +333,7 @@ func (m *MongoDB) CheckUsername(username string) error {
 	return nil
 }
 
-func (m *MongoDB) CheckToken(token string) (*entity.User, error) {
-	ctx := context.Background()
+func (m *MongoDB) CheckToken(ctx context.Context, token string) (*entity.User, error) {
 	collection := m.client.Database(m.database).Collection(collectionUsers)
 	filter := bson.D{{"token", token}}
 	var userData entity.User
@@ -360,8 +344,7 @@ func (m *MongoDB) CheckToken(token string) (*entity.User, error) {
 	return &userData, nil
 }
 
-func (m *MongoDB) GetChargePoints(level int, searchTerm string) ([]*entity.ChargePoint, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetChargePoints(ctx context.Context, level int, searchTerm string) ([]*entity.ChargePoint, error) {
 	var searchRegex = bson.M{"$regex": primitive.Regex{Pattern: ".*" + searchTerm + ".*", Options: "i"}}
 
 	pipeline := mongo.Pipeline{
@@ -399,8 +382,7 @@ func (m *MongoDB) GetChargePoints(level int, searchTerm string) ([]*entity.Charg
 	return chargePoints, nil
 }
 
-func (m *MongoDB) GetChargePoint(level int, id string) (*entity.ChargePoint, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetChargePoint(ctx context.Context, level int, id string) (*entity.ChargePoint, error) {
 	collection := m.client.Database(m.database).Collection(collectionChargePoints)
 	filter := bson.M{"$and": []bson.M{{"charge_point_id": id}, {"access_level": bson.M{"$lte": level}}}}
 
@@ -429,8 +411,7 @@ func (m *MongoDB) GetChargePoint(level int, id string) (*entity.ChargePoint, err
 	return &chargePoint, nil
 }
 
-func (m *MongoDB) UpdateChargePoint(level int, chargePoint *entity.ChargePoint) error {
-	ctx := context.Background()
+func (m *MongoDB) UpdateChargePoint(ctx context.Context, level int, chargePoint *entity.ChargePoint) error {
 	collection := m.client.Database(m.database).Collection(collectionChargePoints)
 	filter := bson.M{"$and": []bson.M{
 		{"charge_point_id": chargePoint.Id},
@@ -478,10 +459,10 @@ func (m *MongoDB) GetConnector(chargePointId string, connectorId int) (*entity.C
 	return &connector, nil
 }
 
-func (m *MongoDB) getTransactionState(userId string, level int, transaction *entity.Transaction) (*entity.ChargeState, error) {
+func (m *MongoDB) getTransactionState(ctx context.Context, userId string, level int, transaction *entity.Transaction) (*entity.ChargeState, error) {
 	var chargeState entity.ChargeState
 
-	chargePoint, err := m.GetChargePoint(level, transaction.ChargePointId)
+	chargePoint, err := m.GetChargePoint(ctx, level, transaction.ChargePointId)
 	if err != nil {
 		return nil, fmt.Errorf("get charge point: %v", err)
 	}
@@ -504,7 +485,7 @@ func (m *MongoDB) getTransactionState(userId string, level int, transaction *ent
 
 	if !transaction.IsFinished {
 
-		lastMeter, _ := m.GetLastMeterValue(transaction.TransactionId)
+		lastMeter, _ := m.GetLastMeterValue(ctx, transaction.TransactionId)
 		if lastMeter != nil {
 			if lastMeter.Value > transaction.MeterStart {
 				consumed = lastMeter.Value - transaction.MeterStart
@@ -513,7 +494,7 @@ func (m *MongoDB) getTransactionState(userId string, level int, transaction *ent
 			powerRate = lastMeter.PowerRate
 		}
 
-		meterValues, err = m.GetMeterValues(transaction.TransactionId, transaction.TimeStart)
+		meterValues, err = m.GetMeterValues(ctx, transaction.TransactionId, transaction.TimeStart)
 
 		if len(meterValues) == 0 && lastMeter != nil {
 			meterValues = append(meterValues, lastMeter)
@@ -551,20 +532,19 @@ func (m *MongoDB) getTransactionState(userId string, level int, transaction *ent
 	return &chargeState, nil
 }
 
-func (m *MongoDB) GetTransactionState(userId string, level int, id int) (*entity.ChargeState, error) {
-	transaction, err := m.GetTransaction(id)
+func (m *MongoDB) GetTransactionState(ctx context.Context, userId string, level int, id int) (*entity.ChargeState, error) {
+	transaction, err := m.GetTransaction(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	chargeState, err := m.getTransactionState(userId, level, transaction)
+	chargeState, err := m.getTransactionState(ctx, userId, level, transaction)
 	if err != nil {
 		return nil, err
 	}
 	return chargeState, nil
 }
 
-func (m *MongoDB) GetTransaction(id int) (*entity.Transaction, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetTransaction(ctx context.Context, id int) (*entity.Transaction, error) {
 	collection := m.client.Database(m.database).Collection(collectionTransactions)
 	filter := bson.D{{"transaction_id", id}}
 	var transaction entity.Transaction
@@ -591,9 +571,8 @@ func (m *MongoDB) UpdateTransaction(transaction *entity.Transaction) error {
 	return nil
 }
 
-func (m *MongoDB) GetActiveTransactions(userId string) ([]*entity.ChargeState, error) {
-	ctx := context.Background()
-	user, err := m.GetUserById(userId)
+func (m *MongoDB) GetActiveTransactions(ctx context.Context, userId string) ([]*entity.ChargeState, error) {
+	user, err := m.GetUserById(ctx, userId)
 	if err != nil {
 		return nil, fmt.Errorf("get user: %v", err)
 	}
@@ -601,7 +580,7 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]*entity.ChargeState, e
 		return nil, fmt.Errorf("user not found")
 	}
 
-	tags, err := m.GetUserTags(userId)
+	tags, err := m.GetUserTags(ctx, userId)
 	if err != nil {
 		return nil, fmt.Errorf("get user tags: %v", err)
 	}
@@ -633,7 +612,7 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]*entity.ChargeState, e
 
 	var chargeStates []*entity.ChargeState
 	for _, transaction := range transactions {
-		chargeState, _ := m.getTransactionState(userId, user.AccessLevel, &transaction)
+		chargeState, _ := m.getTransactionState(ctx, userId, user.AccessLevel, &transaction)
 		if chargeState != nil {
 			chargeStates = append(chargeStates, chargeState)
 		}
@@ -642,9 +621,8 @@ func (m *MongoDB) GetActiveTransactions(userId string) ([]*entity.ChargeState, e
 }
 
 // GetTransactionsToBill get list of transactions to bill
-func (m *MongoDB) GetTransactionsToBill(userId string) ([]*entity.Transaction, error) {
-	ctx := context.Background()
-	tags, err := m.GetUserTags(userId)
+func (m *MongoDB) GetTransactionsToBill(ctx context.Context, userId string) ([]*entity.Transaction, error) {
+	tags, err := m.GetUserTags(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
@@ -675,9 +653,8 @@ func (m *MongoDB) GetTransactionsToBill(userId string) ([]*entity.Transaction, e
 }
 
 // GetTransactions gets list of a user's transactions; if period is empty, returns last 100 transactions
-func (m *MongoDB) GetTransactions(userId string, period string) ([]*entity.Transaction, error) {
-	ctx := context.Background()
-	tags, err := m.GetUserTags(userId)
+func (m *MongoDB) GetTransactions(ctx context.Context, userId string, period string) ([]*entity.Transaction, error) {
+	tags, err := m.GetUserTags(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
@@ -721,8 +698,7 @@ func (m *MongoDB) GetTransactions(userId string, period string) ([]*entity.Trans
 	return transactions, nil
 }
 
-func (m *MongoDB) GetTransactionByTag(idTag string, timeStart time.Time) (*entity.Transaction, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetTransactionByTag(ctx context.Context, idTag string, timeStart time.Time) (*entity.Transaction, error) {
 	collection := m.client.Database(m.database).Collection(collectionTransactions)
 	filter := bson.D{
 		{"id_tag", strings.ToUpper(idTag)},
@@ -735,8 +711,7 @@ func (m *MongoDB) GetTransactionByTag(idTag string, timeStart time.Time) (*entit
 	return &transaction, nil
 }
 
-func (m *MongoDB) GetLastMeterValue(transactionId int) (*entity.TransactionMeter, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetLastMeterValue(ctx context.Context, transactionId int) (*entity.TransactionMeter, error) {
 	collection := m.client.Database(m.database).Collection(collectionMeterValues)
 	filter := bson.D{
 		{"transaction_id", transactionId},
@@ -749,8 +724,7 @@ func (m *MongoDB) GetLastMeterValue(transactionId int) (*entity.TransactionMeter
 	return &value, nil
 }
 
-func (m *MongoDB) GetMeterValues(transactionId int, from time.Time) ([]*entity.TransactionMeter, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetMeterValues(ctx context.Context, transactionId int, from time.Time) ([]*entity.TransactionMeter, error) {
 	filter := bson.D{
 		{"transaction_id", transactionId},
 		{"measurand", "Energy.Active.Import.Register"},
@@ -769,10 +743,9 @@ func (m *MongoDB) GetMeterValues(transactionId int, from time.Time) ([]*entity.T
 	return meterValues, nil
 }
 
-func (m *MongoDB) GetRecentUserChargePoints(userId string) ([]*entity.ChargePoint, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetRecentUserChargePoints(ctx context.Context, userId string) ([]*entity.ChargePoint, error) {
 	// Get last 3 transactions for user's tags
-	tags, err := m.GetUserTags(userId)
+	tags, err := m.GetUserTags(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
@@ -809,7 +782,7 @@ func (m *MongoDB) GetRecentUserChargePoints(userId string) ([]*entity.ChargePoin
 
 	// Get charge points
 	if len(chargePointIds) == 0 {
-		return m.GetChargePoints(0, "")
+		return m.GetChargePoints(ctx, 0, "")
 	}
 
 	pipeline := mongo.Pipeline{
@@ -835,8 +808,7 @@ func (m *MongoDB) GetRecentUserChargePoints(userId string) ([]*entity.ChargePoin
 	return chargePoints, nil
 }
 
-func (m *MongoDB) AddInviteCode(invite *entity.Invite) error {
-	ctx := context.Background()
+func (m *MongoDB) AddInviteCode(ctx context.Context, invite *entity.Invite) error {
 	collection := m.client.Database(m.database).Collection(collectionInvites)
 	_, err := collection.InsertOne(ctx, invite)
 	if err != nil {
@@ -845,8 +817,7 @@ func (m *MongoDB) AddInviteCode(invite *entity.Invite) error {
 	return nil
 }
 
-func (m *MongoDB) CheckInviteCode(code string) (bool, error) {
-	ctx := context.Background()
+func (m *MongoDB) CheckInviteCode(ctx context.Context, code string) (bool, error) {
 	collection := m.client.Database(m.database).Collection(collectionInvites)
 	filter := bson.D{{"code", code}}
 	var inviteCode entity.Invite
@@ -856,8 +827,7 @@ func (m *MongoDB) CheckInviteCode(code string) (bool, error) {
 	return true, nil
 }
 
-func (m *MongoDB) DeleteInviteCode(code string) error {
-	ctx := context.Background()
+func (m *MongoDB) DeleteInviteCode(ctx context.Context, code string) error {
 	collection := m.client.Database(m.database).Collection(collectionInvites)
 	filter := bson.D{{"code", code}}
 	_, err := collection.DeleteOne(ctx, filter)
@@ -883,13 +853,12 @@ func (m *MongoDB) GetPaymentParameters(orderId string) (*entity.PaymentParameter
 	return &paymentParameters, nil
 }
 
-func (m *MongoDB) SavePaymentMethod(paymentMethod *entity.PaymentMethod) error {
-	saved, _ := m.GetPaymentMethod(paymentMethod.Identifier, paymentMethod.UserId)
+func (m *MongoDB) SavePaymentMethod(ctx context.Context, paymentMethod *entity.PaymentMethod) error {
+	saved, _ := m.GetPaymentMethod(ctx, paymentMethod.Identifier, paymentMethod.UserId)
 	if saved != nil {
 		return fmt.Errorf("payment method with identifier %s... already exists", paymentMethod.Identifier[0:10])
 	}
 
-	ctx := context.Background()
 	collection := m.client.Database(m.database).Collection(collectionPaymentMethods)
 	_, err := collection.InsertOne(ctx, paymentMethod)
 	if err != nil {
@@ -899,8 +868,7 @@ func (m *MongoDB) SavePaymentMethod(paymentMethod *entity.PaymentMethod) error {
 }
 
 // UpdatePaymentMethod update user-editable fields for payment method
-func (m *MongoDB) UpdatePaymentMethod(paymentMethod *entity.PaymentMethod) error {
-	ctx := context.Background()
+func (m *MongoDB) UpdatePaymentMethod(ctx context.Context, paymentMethod *entity.PaymentMethod) error {
 	collection := m.client.Database(m.database).Collection(collectionPaymentMethods)
 
 	// if current method is default, then set all other methods to not default
@@ -926,8 +894,7 @@ func (m *MongoDB) UpdatePaymentMethod(paymentMethod *entity.PaymentMethod) error
 }
 
 // DeletePaymentMethod delete payment method by identifier
-func (m *MongoDB) DeletePaymentMethod(paymentMethod *entity.PaymentMethod) error {
-	ctx := context.Background()
+func (m *MongoDB) DeletePaymentMethod(ctx context.Context, paymentMethod *entity.PaymentMethod) error {
 	isDefault := paymentMethod.IsDefault
 
 	collection := m.client.Database(m.database).Collection(collectionPaymentMethods)
@@ -957,8 +924,7 @@ func (m *MongoDB) DeletePaymentMethod(paymentMethod *entity.PaymentMethod) error
 }
 
 // GetPaymentMethods get payment methods by user id
-func (m *MongoDB) GetPaymentMethods(userId string) ([]*entity.PaymentMethod, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetPaymentMethods(ctx context.Context, userId string) ([]*entity.PaymentMethod, error) {
 	collection := m.client.Database(m.database).Collection(collectionPaymentMethods)
 	filter := bson.D{{"user_id", userId}}
 	var paymentMethods []*entity.PaymentMethod
@@ -973,8 +939,7 @@ func (m *MongoDB) GetPaymentMethods(userId string) ([]*entity.PaymentMethod, err
 }
 
 // GetPaymentMethod get payment method by identifier
-func (m *MongoDB) GetPaymentMethod(identifier, userId string) (*entity.PaymentMethod, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetPaymentMethod(ctx context.Context, identifier, userId string) (*entity.PaymentMethod, error) {
 	collection := m.client.Database(m.database).Collection(collectionPaymentMethods)
 	filter := bson.D{{"identifier", identifier}, {"user_id", userId}}
 	var paymentMethod entity.PaymentMethod
@@ -984,8 +949,7 @@ func (m *MongoDB) GetPaymentMethod(identifier, userId string) (*entity.PaymentMe
 	return &paymentMethod, nil
 }
 
-func (m *MongoDB) GetLastOrder() (*entity.PaymentOrder, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetLastOrder(ctx context.Context) (*entity.PaymentOrder, error) {
 	collection := m.client.Database(m.database).Collection(collectionPaymentOrders)
 	filter := bson.D{}
 	var order entity.PaymentOrder
@@ -996,8 +960,7 @@ func (m *MongoDB) GetLastOrder() (*entity.PaymentOrder, error) {
 }
 
 // GetPaymentOrderByTransaction get payment order by transaction id
-func (m *MongoDB) GetPaymentOrderByTransaction(transactionId int) (*entity.PaymentOrder, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetPaymentOrderByTransaction(ctx context.Context, transactionId int) (*entity.PaymentOrder, error) {
 	collection := m.client.Database(m.database).Collection(collectionPaymentOrders)
 	filter := bson.D{{"transaction_id", transactionId}, {"is_completed", false}}
 	var order entity.PaymentOrder
@@ -1019,8 +982,7 @@ func (m *MongoDB) GetPaymentOrder(id int) (*entity.PaymentOrder, error) {
 }
 
 // SavePaymentOrder insert or update order
-func (m *MongoDB) SavePaymentOrder(order *entity.PaymentOrder) error {
-	ctx := context.Background()
+func (m *MongoDB) SavePaymentOrder(ctx context.Context, order *entity.PaymentOrder) error {
 	filter := bson.D{{"order", order.Order}}
 	set := bson.M{"$set": order}
 	collection := m.client.Database(m.database).Collection(collectionPaymentOrders)
@@ -1060,8 +1022,7 @@ func parsePeriod(period string) (time1, time2 time.Time, err error) {
 }
 
 // GetLocations get all locations with all nested charge points and connectors
-func (m *MongoDB) GetLocations() ([]*entity.Location, error) {
-	ctx := context.Background()
+func (m *MongoDB) GetLocations(ctx context.Context) ([]*entity.Location, error) {
 	pipeline := bson.A{
 		bson.D{
 			{"$match", bson.M{

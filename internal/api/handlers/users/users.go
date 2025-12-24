@@ -1,6 +1,7 @@
 package users
 
 import (
+	"context"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
@@ -15,11 +16,11 @@ import (
 )
 
 type Users interface {
-	AuthenticateByToken(token string) (*entity.User, error)
-	AuthenticateUser(username, password string) (*entity.User, error)
-	AddUser(user *entity.User) (*entity.User, error)
-	GetUser(author *entity.User, username string) (*entity.UserInfo, error)
-	GetUsers(user *entity.User) ([]*entity.User, error)
+	AuthenticateByToken(ctx context.Context, token string) (*entity.User, error)
+	AuthenticateUser(ctx context.Context, username, password string) (*entity.User, error)
+	AddUser(ctx context.Context, user *entity.User) (*entity.User, error)
+	GetUser(ctx context.Context, author *entity.User, username string) (*entity.UserInfo, error)
+	GetUsers(ctx context.Context, user *entity.User) ([]*entity.User, error)
 }
 
 func Authenticate(logger *slog.Logger, handler Users) http.HandlerFunc {
@@ -38,13 +39,14 @@ func Authenticate(logger *slog.Logger, handler Users) http.HandlerFunc {
 		}
 		log = log.With(slog.String("username", user.Username))
 
+		ctx := r.Context()
 		var data interface{}
 		var err error
 
 		if user.Username == "" {
-			data, err = handler.AuthenticateByToken(user.Password)
+			data, err = handler.AuthenticateByToken(ctx, user.Password)
 		} else {
-			data, err = handler.AuthenticateUser(user.Username, user.Password)
+			data, err = handler.AuthenticateUser(ctx, user.Username, user.Password)
 		}
 
 		if err != nil {
@@ -75,7 +77,8 @@ func Register(logger *slog.Logger, handler Users) http.HandlerFunc {
 		}
 		log = log.With(slog.String("username", user.Username))
 
-		data, err := handler.AddUser(&user)
+		ctx := r.Context()
+		data, err := handler.AddUser(ctx, &user)
 		if err != nil {
 			log.Error("save user", sl.Err(err))
 			render.Status(r, 500)
@@ -91,7 +94,8 @@ func Register(logger *slog.Logger, handler Users) http.HandlerFunc {
 func Info(logger *slog.Logger, handler Users) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 		name := chi.URLParam(r, "name")
 
 		log := logger.With(
@@ -100,10 +104,10 @@ func Info(logger *slog.Logger, handler Users) http.HandlerFunc {
 			slog.String("author", user.Username),
 			slog.String("role", user.Role),
 			slog.Int("access_level", user.AccessLevel),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		data, err := handler.GetUser(user, name)
+		data, err := handler.GetUser(ctx, user, name)
 		if err != nil {
 			log.Error("get user", sl.Err(err))
 			render.Status(r, 400)
@@ -119,17 +123,18 @@ func Info(logger *slog.Logger, handler Users) http.HandlerFunc {
 func List(logger *slog.Logger, handler Users) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		user := cont.GetUser(r.Context())
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
 
 		log := logger.With(
 			sl.Module("handlers.users"),
 			slog.String("author", user.Username),
 			slog.String("role", user.Role),
 			slog.Int("access_level", user.AccessLevel),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
+			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		data, err := handler.GetUsers(user)
+		data, err := handler.GetUsers(ctx, user)
 		if err != nil {
 			log.Error("get users", sl.Err(err))
 			render.Status(r, 400)
