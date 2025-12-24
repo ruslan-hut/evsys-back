@@ -8,15 +8,23 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 )
 
 type CentralSystem struct {
-	url   string
-	token string
+	url    string
+	token  string
+	client *http.Client
 }
 
 func NewCentralSystem(url, token string) *CentralSystem {
-	return &CentralSystem{url: url, token: token}
+	return &CentralSystem{
+		url:   url,
+		token: token,
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+	}
 }
 
 func (cs *CentralSystem) SendCommand(command *entity.CentralSystemCommand) *entity.CentralSystemResponse {
@@ -36,8 +44,7 @@ func (cs *CentralSystem) SendCommand(command *entity.CentralSystemCommand) *enti
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cs.token))
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := cs.client.Do(req)
 	if err != nil {
 		response.SetError(fmt.Sprintf("sending command %s: %v", command.FeatureName, err))
 		return response

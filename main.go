@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"evsys-back/config"
 	"evsys-back/impl/authenticator"
 	"evsys-back/impl/central-system"
@@ -15,6 +16,10 @@ import (
 	"evsys-back/internal/lib/sl"
 	"flag"
 	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 var mongo *database.MongoDB
@@ -91,12 +96,42 @@ func main() {
 	server := http.NewServer(conf, log, coreHandler)
 	if conf.Mongo.Enabled {
 		server.SetStatusReader(statusreader.New(log, mongo))
-	} else {
-		server.SetStatusReader(statusreader.New(log, mockDb))
 	}
 
-	err = server.Start()
-	if err != nil {
-		log.Error("server start", sl.Err(err))
+	// Graceful shutdown setup
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	// Start server in goroutine
+	go func() {
+		if err := server.Start(); err != nil {
+			log.Error("server start", sl.Err(err))
+		}
+	}()
+
+	log.Info("server started", slog.String("port", conf.Listen.Port))
+
+	// Wait for shutdown signal
+	<-shutdown
+	log.Info("shutting down...")
+
+	// Create shutdown context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Shutdown server
+	if err := server.Shutdown(ctx); err != nil {
+		log.Error("server shutdown", sl.Err(err))
 	}
+
+	// Close MongoDB connection
+	if mongo != nil {
+		if err := mongo.Close(); err != nil {
+			log.Error("mongodb close", sl.Err(err))
+		} else {
+			log.Info("mongodb connection closed")
+		}
+	}
+
+	log.Info("shutdown complete")
 }

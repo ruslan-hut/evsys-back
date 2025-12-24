@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"evsys-back/config"
 	"evsys-back/entity"
@@ -181,6 +182,10 @@ func (s *Server) Start() error {
 	}
 
 	return err
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	return s.httpServer.Shutdown(ctx)
 }
 
 type SubscriptionType string

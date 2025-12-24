@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"time"
@@ -8,13 +9,8 @@ import (
 
 // TotalsByMonth returns the total consumed watts, average watts, and count of transactions by month
 func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interface{}, error) {
-	connection, err := m.connect()
-	if err != nil {
-		return nil, err
-	}
-	defer m.disconnect(connection)
-
-	collection := connection.Database(m.database).Collection(collectionTransactions)
+	ctx := context.Background()
+	collection := m.client.Database(m.database).Collection(collectionTransactions)
 
 	pipeline := mongo.Pipeline{
 		// Filter transactions
@@ -92,12 +88,12 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 		}}},
 	}
 
-	cursor, err := collection.Aggregate(m.ctx, pipeline)
+	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, m.findError(err)
 	}
 	var lines []*ReportLine
-	if err = cursor.All(m.ctx, &lines); err != nil {
+	if err = cursor.All(ctx, &lines); err != nil {
 		return nil, err
 	}
 	result := make([]interface{}, len(lines))
@@ -109,13 +105,8 @@ func (m *MongoDB) TotalsByMonth(from, to time.Time, userGroup string) ([]interfa
 
 // TotalsByUsers returns the total consumed watts, average watts, and count of transactions by user
 func (m *MongoDB) TotalsByUsers(from, to time.Time, userGroup string) ([]interface{}, error) {
-	connection, err := m.connect()
-	if err != nil {
-		return nil, err
-	}
-	defer m.disconnect(connection)
-
-	collection := connection.Database(m.database).Collection(collectionTransactions)
+	ctx := context.Background()
+	collection := m.client.Database(m.database).Collection(collectionTransactions)
 
 	pipeline := mongo.Pipeline{
 		// Stage 0: Filter transactions
@@ -196,12 +187,12 @@ func (m *MongoDB) TotalsByUsers(from, to time.Time, userGroup string) ([]interfa
 		}}},
 	}
 
-	cursor, err := collection.Aggregate(m.ctx, pipeline)
+	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, m.findError(err)
 	}
 	var lines []*ReportLine
-	if err = cursor.All(m.ctx, &lines); err != nil {
+	if err = cursor.All(ctx, &lines); err != nil {
 		return nil, err
 	}
 	result := make([]interface{}, len(lines))
@@ -212,13 +203,8 @@ func (m *MongoDB) TotalsByUsers(from, to time.Time, userGroup string) ([]interfa
 }
 
 func (m *MongoDB) TotalsByCharger(from, to time.Time, userGroup string) ([]interface{}, error) {
-	connection, err := m.connect()
-	if err != nil {
-		return nil, err
-	}
-	defer m.disconnect(connection)
-
-	collection := connection.Database(m.database).Collection(collectionTransactions)
+	ctx := context.Background()
+	collection := m.client.Database(m.database).Collection(collectionTransactions)
 
 	pipeline := mongo.Pipeline{
 		// Stage 0: Filter transactions
@@ -299,12 +285,12 @@ func (m *MongoDB) TotalsByCharger(from, to time.Time, userGroup string) ([]inter
 		}}},
 	}
 
-	cursor, err := collection.Aggregate(m.ctx, pipeline)
+	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, m.findError(err)
 	}
 	var lines []*ReportLine
-	if err = cursor.All(m.ctx, &lines); err != nil {
+	if err = cursor.All(ctx, &lines); err != nil {
 		return nil, err
 	}
 	result := make([]interface{}, len(lines))
