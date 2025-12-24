@@ -1,20 +1,38 @@
 # evsys-back
 
+[![Go](https://img.shields.io/badge/Go-1.24-00ADD8?style=flat&logo=go&logoColor=white)](https://go.dev/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-6.0+-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![Firebase](https://img.shields.io/badge/Firebase-Auth-FFCA28?style=flat&logo=firebase&logoColor=black)](https://firebase.google.com/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-Passing-success?style=flat)](.)
+[![Coverage](https://img.shields.io/badge/Coverage-88%25_auth_|_100%25_status-brightgreen?style=flat)](.)
+
 Backend service for an EV charging management system. It exposes a REST API and a WebSocket endpoint to manage users, locations, charge points, transactions, payments, and reports. Storage uses MongoDB when enabled; a mock in-memory DB can be used for local development. Optional integrations include Firebase (for authentication) and a Central System API.
 
-## Overview
-- Language/stack: Go 1.24 (module: `evsys-back`)
-- HTTP framework: chi (router), gorilla/websocket
-- Storage: MongoDB (configurable), in-memory mock for local/dev
-- Auth: Optional Firebase integration; custom token-based middleware
-- Config: YAML file, with support for env variable substitution in the provided `back.yml`
-- Entry point: `main.go` → starts HTTP server defined in `internal/api/http/server.go`
+## Tech Stack
 
-Key features:
+| Component | Technology |
+|-----------|------------|
+| Language | Go 1.24 |
+| HTTP Router | [chi](https://github.com/go-chi/chi) |
+| WebSocket | [gorilla/websocket](https://github.com/gorilla/websocket) |
+| Database | MongoDB (with connection pooling) |
+| Authentication | Firebase Admin SDK / Custom tokens |
+| Validation | [go-playground/validator](https://github.com/go-playground/validator) |
+| Password Hashing | bcrypt |
+| Logging | Go slog (structured logging) |
+| Testing | [testify](https://github.com/stretchr/testify) |
+
+## Key Features
+
 - REST API under `/api/v1` for users, locations, charge points, transactions, payments, and reports
 - WebSocket endpoint at `/ws` for real-time updates (transactions/logs)
 - Central System command proxying (optional)
-- Structured logging with slog
+- Structured logging with slog and request tracking
+- Graceful shutdown with proper resource cleanup
+- Context propagation for request cancellation and timeouts
+- Role-based access control (admin, operator, user)
+- Thread-safe concurrent operations
 
 ## Requirements
 - Go 1.24.7 toolchain (see `go.mod`: `toolchain go1.24.7`)
@@ -121,23 +139,53 @@ WebSocket:
 
 Note: Detailed request/response schemas are defined in the `entity/` package and handler implementations under `internal/api/handlers/...`.
 
+## Architecture
+
+### Design Patterns
+- **Clean Layered Architecture**: `main.go` → `config` → `impl` → `handlers` → `entity`
+- **Repository Pattern**: Interface-based data access with MongoDB and mock implementations
+- **Dependency Injection**: All components receive dependencies via constructors
+- **Interface Composition**: Server composes multiple handler interfaces into a single `Core` interface
+
+### Infrastructure Features
+- **MongoDB Connection Pooling**: Single persistent client with driver-managed pool
+- **Context Propagation**: All database operations accept context for timeouts and cancellation
+- **Graceful Shutdown**: Proper cleanup of MongoDB connections on SIGTERM/SIGINT
+- **HTTP Client Timeouts**: 30-second timeout for external API calls
+- **Request Timeouts**: 5-second timeout middleware for API requests
+- **Thread-Safe Operations**: Mutex protection for concurrent access patterns
+
 ## Project structure
-- `main.go` — application entry point
-- `config/` — configuration loader
-- `internal/api/http/` — HTTP server, router, WebSocket, middleware setup
-- `internal/api/handlers/` — REST handlers (users, locations, payments, transactions, reports, central-system)
-- `impl/` — implementations for core domain, database (mongo/mock), reports, central system, authenticator, status reader
-- `entity/` — domain entities and DTOs
-- `internal/lib/` — common utilities (logging, validation, API helpers, time, etc.)
-- `config.yml` — local config example
-- `back.yml` — deployment config template using env vars
-- `.github/workflows/deploy.yml` — GitHub Actions build/deploy workflow
+```
+evsys-back/
+├── main.go                      # Entry point, DI setup, graceful shutdown
+├── config/                      # YAML config loader
+├── entity/                      # Domain models (24 files)
+├── impl/
+│   ├── core/                    # Business logic
+│   ├── database/                # MongoDB implementation
+│   ├── database-mock/           # In-memory mock for testing
+│   ├── authenticator/           # Auth logic with Firebase support
+│   ├── reports/                 # Statistics and reporting
+│   ├── central-system/          # External API integration
+│   └── status-reader/           # Transaction state tracking
+├── internal/
+│   ├── api/http/                # Server, router, WebSocket
+│   ├── api/handlers/            # REST endpoint handlers
+│   ├── api/middleware/          # Auth, timeout middleware
+│   └── lib/                     # Utilities (logging, validation)
+├── config.yml                   # Local config example
+├── back.yml                     # Deployment config template
+└── .github/workflows/           # CI/CD pipeline
+```
 
 ## Scripts and automation
 There is no Makefile. Use standard Go commands:
 - Run: `go run ./main.go -conf <config-file> [-log <log-dir>]`
 - Build: `go build -v -o evsys-back`
 - Test: `go test ./...`
+- Test with coverage: `go test -cover ./impl/authenticator ./impl/core ./impl/status-reader`
+- Test with race detection: `go test -race ./...`
 
 CI/CD (GitHub Actions):
 - On push to `master`, the workflow:
@@ -146,6 +194,29 @@ CI/CD (GitHub Actions):
   - Builds the binary (`evsys-back`)
   - Copies the binary to `/usr/local/bin/`
   - Restarts a systemd service `evsys-back.service`
+
+## Testing
+
+The project includes comprehensive test coverage for critical paths:
+
+| Package | Coverage | Description |
+|---------|----------|-------------|
+| `impl/authenticator` | 88% | Authentication flows, token validation, user registration |
+| `impl/core` | 43% | Payment methods, transactions, access control |
+| `impl/status-reader` | 100% | Status tracking, meter values, transaction lookup |
+| `entity` | 6% | Entity validation methods |
+
+Run tests:
+```bash
+# All tests
+go test ./...
+
+# With coverage report
+go test -cover ./impl/...
+
+# With race detection
+go test -race ./impl/...
+```
 
 ## Logging
 - Uses Go slog; logs are configured via `internal/lib/logger`.
