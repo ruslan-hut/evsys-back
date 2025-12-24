@@ -70,6 +70,8 @@ func (sr *StatusReader) SaveStatus(userId string, stage entity.Stage, transactio
 }
 
 func (sr *StatusReader) GetStatus(userId string) (*entity.UserStatus, bool) {
+	sr.mux.Lock()
+	defer sr.mux.Unlock()
 	status, ok := sr.status[userId]
 	if !ok {
 		return nil, false
