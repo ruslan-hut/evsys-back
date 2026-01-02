@@ -22,7 +22,7 @@ type Users interface {
 	GetUser(ctx context.Context, author *entity.User, username string) (*entity.UserInfo, error)
 	GetUsers(ctx context.Context, user *entity.User) ([]*entity.User, error)
 	CreateUser(ctx context.Context, author *entity.User, user *entity.User) (*entity.User, error)
-	UpdateUser(ctx context.Context, author *entity.User, username string, user *entity.User) (*entity.User, error)
+	UpdateUser(ctx context.Context, author *entity.User, username string, updates *entity.UserUpdate) (*entity.User, error)
 	DeleteUser(ctx context.Context, author *entity.User, username string) error
 }
 
@@ -215,15 +215,15 @@ func Update(logger *slog.Logger, handler Users) http.HandlerFunc {
 			return
 		}
 
-		var user entity.User
-		if err := render.Bind(r, &user); err != nil {
+		var updates entity.UserUpdate
+		if err := render.Bind(r, &updates); err != nil {
 			log.Error("decode user data", sl.Err(err))
 			render.Status(r, 400)
 			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode user data: %v", err)))
 			return
 		}
 
-		data, err := handler.UpdateUser(ctx, author, username, &user)
+		data, err := handler.UpdateUser(ctx, author, username, &updates)
 		if err != nil {
 			log.Error("update user", sl.Err(err))
 			if err.Error() == "user not found" {

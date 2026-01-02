@@ -43,6 +43,20 @@ func (u *User) Bind(_ *http.Request) error {
 	return validate.Struct(u)
 }
 
+// UserUpdate is used for update requests where password is optional
+type UserUpdate struct {
+	Name        string `json:"name" validate:"omitempty"`
+	Email       string `json:"email" validate:"omitempty"`
+	Password    string `json:"password" validate:"omitempty,min=6"`
+	Role        string `json:"role" validate:"omitempty"`
+	AccessLevel int    `json:"access_level" validate:"omitempty,min=0,max=10"`
+	PaymentPlan string `json:"payment_plan" validate:"omitempty"`
+}
+
+func (u *UserUpdate) Bind(_ *http.Request) error {
+	return validate.Struct(u)
+}
+
 func (u *User) IsAdmin() bool {
 	return u.Role == roleAdmin
 }

@@ -376,7 +376,7 @@ func (a *Authenticator) CreateUser(ctx context.Context, user *entity.User) error
 }
 
 // UpdateUser updates an existing user's information
-func (a *Authenticator) UpdateUser(ctx context.Context, username string, updates *entity.User) (*entity.User, error) {
+func (a *Authenticator) UpdateUser(ctx context.Context, username string, updates *entity.UserUpdate) (*entity.User, error) {
 	a.mux.Lock()
 	defer a.mux.Unlock()
 
@@ -394,18 +394,13 @@ func (a *Authenticator) UpdateUser(ctx context.Context, username string, updates
 		user.Email = updates.Email
 	}
 	if updates.Password != "" {
-		if len(updates.Password) < 6 {
-			return nil, fmt.Errorf("password must be at least 6 characters")
-		}
 		user.Password = a.generatePasswordHash(updates.Password)
 		if user.Password == "" {
 			return nil, fmt.Errorf("failed to hash password")
 		}
 	}
-	if updates.Role != "" || updates.Role == "" && user.Role != "" {
-		// allow setting role to empty (regular user)
-		user.Role = updates.Role
-	}
+	// allow setting role to empty (regular user) or any other value
+	user.Role = updates.Role
 	if updates.AccessLevel >= 0 && updates.AccessLevel <= 10 {
 		user.AccessLevel = updates.AccessLevel
 	}

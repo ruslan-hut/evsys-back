@@ -118,14 +118,14 @@ func (c *Core) CreateUser(ctx context.Context, author *entity.User, user *entity
 	return user, nil
 }
 
-func (c *Core) UpdateUser(ctx context.Context, author *entity.User, username string, user *entity.User) (*entity.User, error) {
+func (c *Core) UpdateUser(ctx context.Context, author *entity.User, username string, updates *entity.UserUpdate) (*entity.User, error) {
 	if c.auth == nil {
 		return nil, fmt.Errorf("authenticator not set")
 	}
 	if !author.IsPowerUser() {
 		return nil, fmt.Errorf("access denied: insufficient permissions")
 	}
-	updated, err := c.auth.UpdateUser(ctx, username, user)
+	updated, err := c.auth.UpdateUser(ctx, username, updates)
 	if err != nil {
 		return nil, err
 	}
