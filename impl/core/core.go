@@ -103,6 +103,48 @@ func (c *Core) GetUsers(ctx context.Context, user *entity.User) ([]*entity.User,
 	return c.auth.GetUsers(ctx, user)
 }
 
+func (c *Core) CreateUser(ctx context.Context, author *entity.User, user *entity.User) (*entity.User, error) {
+	if c.auth == nil {
+		return nil, fmt.Errorf("authenticator not set")
+	}
+	if !author.IsPowerUser() {
+		return nil, fmt.Errorf("access denied: insufficient permissions")
+	}
+	err := c.auth.CreateUser(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+	user.Password = ""
+	return user, nil
+}
+
+func (c *Core) UpdateUser(ctx context.Context, author *entity.User, username string, user *entity.User) (*entity.User, error) {
+	if c.auth == nil {
+		return nil, fmt.Errorf("authenticator not set")
+	}
+	if !author.IsPowerUser() {
+		return nil, fmt.Errorf("access denied: insufficient permissions")
+	}
+	updated, err := c.auth.UpdateUser(ctx, username, user)
+	if err != nil {
+		return nil, err
+	}
+	if updated != nil {
+		updated.Password = ""
+	}
+	return updated, nil
+}
+
+func (c *Core) DeleteUser(ctx context.Context, author *entity.User, username string) error {
+	if c.auth == nil {
+		return fmt.Errorf("authenticator not set")
+	}
+	if !author.IsPowerUser() {
+		return fmt.Errorf("access denied: insufficient permissions")
+	}
+	return c.auth.DeleteUser(ctx, username)
+}
+
 func (c *Core) UserTag(ctx context.Context, user *entity.User) (string, error) {
 	if c.auth == nil {
 		return "", fmt.Errorf("authenticator not set")

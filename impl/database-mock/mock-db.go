@@ -167,6 +167,44 @@ func (db *MockDB) AddUser(_ context.Context, user *entity.User) error {
 	if user.UserId != "" {
 		db.usersById[user.UserId] = user
 	}
+	if user.Token != "" {
+		db.tokens[user.Token] = user
+	}
+	return nil
+}
+
+func (db *MockDB) UpdateUser(_ context.Context, user *entity.User) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	existing, ok := db.users[user.Username]
+	if !ok {
+		return fmt.Errorf("user not found")
+	}
+	// Update existing user fields
+	existing.Name = user.Name
+	existing.Email = user.Email
+	existing.Role = user.Role
+	existing.AccessLevel = user.AccessLevel
+	existing.PaymentPlan = user.PaymentPlan
+	existing.Password = user.Password
+	return nil
+}
+
+func (db *MockDB) DeleteUser(_ context.Context, username string) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	user, ok := db.users[username]
+	if !ok {
+		return fmt.Errorf("user not found")
+	}
+	// Remove from all maps
+	delete(db.users, username)
+	if user.UserId != "" {
+		delete(db.usersById, user.UserId)
+	}
+	if user.Token != "" {
+		delete(db.tokens, user.Token)
+	}
 	return nil
 }
 

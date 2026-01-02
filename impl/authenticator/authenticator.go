@@ -314,3 +314,136 @@ func (a *Authenticator) HasAccess(user *entity.User, subSystem string) error {
 	}
 	return fmt.Errorf("access to %s denied", subSystem)
 }
+
+// CreateUser creates a new user (admin operation, no invite code required)
+func (a *Authenticator) CreateUser(ctx context.Context, user *entity.User) error {
+	if user.Password == "" {
+		return fmt.Errorf("password is required")
+	}
+	if user.Username == "" {
+		return fmt.Errorf("username is required")
+	}
+	if len(user.Username) < 3 {
+		return fmt.Errorf("username must be at least 3 characters")
+	}
+	if len(user.Password) < 6 {
+		return fmt.Errorf("password must be at least 6 characters")
+	}
+	a.mux.Lock()
+	defer a.mux.Unlock()
+
+	// check if username exists
+	existedUser, _ := a.database.GetUser(ctx, user.Username)
+	if existedUser != nil {
+		return fmt.Errorf("username already exists")
+	}
+
+	// hash the password
+	user.Password = a.generatePasswordHash(user.Password)
+	if user.Password == "" {
+		return fmt.Errorf("failed to hash password")
+	}
+
+	// assign defaults
+	if user.PaymentPlan == "" {
+		user.PaymentPlan = defaultPaymentPlan
+	}
+	if user.Group == "" {
+		user.Group = defaultUserGroupId
+	}
+	if user.AccessLevel < 0 || user.AccessLevel > 10 {
+		user.AccessLevel = 0
+	}
+
+	// generate unique user id
+	user.UserId = a.getUserId(ctx)
+	user.DateRegistered = time.Now()
+
+	// generate token for the new user
+	user.Token = a.generateKey(tokenLength)
+
+	err := a.database.AddUser(ctx, user)
+	if err != nil {
+		return fmt.Errorf("failed to create user: %w", err)
+	}
+
+	a.logger.With(
+		slog.String("username", user.Username),
+		sl.Secret("user_id", user.UserId),
+	).Info("user created by admin")
+
+	return nil
+}
+
+// UpdateUser updates an existing user's information
+func (a *Authenticator) UpdateUser(ctx context.Context, username string, updates *entity.User) (*entity.User, error) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+
+	// get existing user
+	user, err := a.database.GetUser(ctx, username)
+	if err != nil || user == nil {
+		return nil, fmt.Errorf("user not found")
+	}
+
+	// apply updates (only non-empty fields)
+	if updates.Name != "" {
+		user.Name = updates.Name
+	}
+	if updates.Email != "" {
+		user.Email = updates.Email
+	}
+	if updates.Password != "" {
+		if len(updates.Password) < 6 {
+			return nil, fmt.Errorf("password must be at least 6 characters")
+		}
+		user.Password = a.generatePasswordHash(updates.Password)
+		if user.Password == "" {
+			return nil, fmt.Errorf("failed to hash password")
+		}
+	}
+	if updates.Role != "" || updates.Role == "" && user.Role != "" {
+		// allow setting role to empty (regular user)
+		user.Role = updates.Role
+	}
+	if updates.AccessLevel >= 0 && updates.AccessLevel <= 10 {
+		user.AccessLevel = updates.AccessLevel
+	}
+	if updates.PaymentPlan != "" {
+		user.PaymentPlan = updates.PaymentPlan
+	}
+
+	err = a.database.UpdateUser(ctx, user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update user: %w", err)
+	}
+
+	a.logger.With(
+		slog.String("username", user.Username),
+	).Info("user updated")
+
+	return user, nil
+}
+
+// DeleteUser deletes a user from the system
+func (a *Authenticator) DeleteUser(ctx context.Context, username string) error {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+
+	// check if user exists
+	user, err := a.database.GetUser(ctx, username)
+	if err != nil || user == nil {
+		return fmt.Errorf("user not found")
+	}
+
+	err = a.database.DeleteUser(ctx, username)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	a.logger.With(
+		slog.String("username", username),
+	).Info("user deleted")
+
+	return nil
+}

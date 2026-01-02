@@ -13,4 +13,7 @@ type Authenticator interface {
 	GetUserTag(ctx context.Context, user *entity.User) (string, error)
 	CommandAccess(user *entity.User, command string) error
 	HasAccess(user *entity.User, subSystem string) error
+	CreateUser(ctx context.Context, user *entity.User) error
+	UpdateUser(ctx context.Context, username string, user *entity.User) (*entity.User, error)
+	DeleteUser(ctx context.Context, username string) error
 }

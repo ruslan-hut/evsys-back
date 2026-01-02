@@ -10,6 +10,8 @@ type Repository interface {
 	GetUserById(ctx context.Context, userId string) (*entity.User, error)
 	UpdateLastSeen(ctx context.Context, user *entity.User) error
 	AddUser(ctx context.Context, user *entity.User) error
+	UpdateUser(ctx context.Context, user *entity.User) error
+	DeleteUser(ctx context.Context, username string) error
 	CheckUsername(ctx context.Context, username string) error
 	CheckToken(ctx context.Context, token string) (*entity.User, error)
 	AddInviteCode(ctx context.Context, invite *entity.Invite) error

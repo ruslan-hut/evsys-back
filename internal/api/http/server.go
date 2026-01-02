@@ -103,6 +103,9 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 
 			r.Get("/users/info/{name}", users.Info(log, core))
 			r.Get("/users/list", users.List(log, core))
+			r.Post("/users/create", users.Create(log, core))
+			r.Put("/users/update/{username}", users.Update(log, core))
+			r.Delete("/users/delete/{username}", users.Delete(log, core))
 			//router.Get("/users/invites", s.generateInvites)
 
 			r.Post("/csc", centralsystem.Command(log, core))

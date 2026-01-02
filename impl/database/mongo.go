@@ -321,6 +321,40 @@ func (m *MongoDB) AddUser(ctx context.Context, user *entity.User) error {
 	return err
 }
 
+func (m *MongoDB) UpdateUser(ctx context.Context, user *entity.User) error {
+	collection := m.client.Database(m.database).Collection(collectionUsers)
+	filter := bson.D{{"username", user.Username}}
+	update := bson.M{"$set": bson.D{
+		{"name", user.Name},
+		{"email", user.Email},
+		{"role", user.Role},
+		{"access_level", user.AccessLevel},
+		{"payment_plan", user.PaymentPlan},
+		{"password", user.Password},
+	}}
+	result, err := collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("user not found")
+	}
+	return nil
+}
+
+func (m *MongoDB) DeleteUser(ctx context.Context, username string) error {
+	collection := m.client.Database(m.database).Collection(collectionUsers)
+	filter := bson.D{{"username", username}}
+	result, err := collection.DeleteOne(ctx, filter)
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return fmt.Errorf("user not found")
+	}
+	return nil
+}
+
 // CheckUsername check unique username
 func (m *MongoDB) CheckUsername(ctx context.Context, username string) error {
 	collection := m.client.Database(m.database).Collection(collectionUsers)

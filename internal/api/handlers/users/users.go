@@ -21,6 +21,9 @@ type Users interface {
 	AddUser(ctx context.Context, user *entity.User) (*entity.User, error)
 	GetUser(ctx context.Context, author *entity.User, username string) (*entity.UserInfo, error)
 	GetUsers(ctx context.Context, user *entity.User) ([]*entity.User, error)
+	CreateUser(ctx context.Context, author *entity.User, user *entity.User) (*entity.User, error)
+	UpdateUser(ctx context.Context, author *entity.User, username string, user *entity.User) (*entity.User, error)
+	DeleteUser(ctx context.Context, author *entity.User, username string) error
 }
 
 func Authenticate(logger *slog.Logger, handler Users) http.HandlerFunc {
@@ -144,5 +147,137 @@ func List(logger *slog.Logger, handler Users) http.HandlerFunc {
 		log.Info("users list")
 
 		render.JSON(w, r, data)
+	}
+}
+
+func Create(logger *slog.Logger, handler Users) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		author := cont.GetUser(ctx)
+
+		log := logger.With(
+			sl.Module("handlers.users"),
+			slog.String("author", author.Username),
+			slog.String("role", author.Role),
+			slog.Int("access_level", author.AccessLevel),
+			slog.String("request_id", middleware.GetReqID(ctx)),
+		)
+
+		if !author.IsPowerUser() {
+			log.Warn("access denied: not admin or operator")
+			render.Status(r, 403)
+			render.JSON(w, r, response.Error(2001, "Insufficient permissions"))
+			return
+		}
+
+		var user entity.User
+		if err := render.Bind(r, &user); err != nil {
+			log.Error("decode user data", sl.Err(err))
+			render.Status(r, 400)
+			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode user data: %v", err)))
+			return
+		}
+		log = log.With(slog.String("new_username", user.Username))
+
+		data, err := handler.CreateUser(ctx, author, &user)
+		if err != nil {
+			log.Error("create user", sl.Err(err))
+			render.Status(r, 400)
+			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to create user: %v", err)))
+			return
+		}
+		log.Info("user created")
+
+		render.Status(r, 201)
+		render.JSON(w, r, data)
+	}
+}
+
+func Update(logger *slog.Logger, handler Users) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		author := cont.GetUser(ctx)
+		username := chi.URLParam(r, "username")
+
+		log := logger.With(
+			sl.Module("handlers.users"),
+			slog.String("author", author.Username),
+			slog.String("target_user", username),
+			slog.String("role", author.Role),
+			slog.Int("access_level", author.AccessLevel),
+			slog.String("request_id", middleware.GetReqID(ctx)),
+		)
+
+		if !author.IsPowerUser() {
+			log.Warn("access denied: not admin or operator")
+			render.Status(r, 403)
+			render.JSON(w, r, response.Error(2001, "Insufficient permissions"))
+			return
+		}
+
+		var user entity.User
+		if err := render.Bind(r, &user); err != nil {
+			log.Error("decode user data", sl.Err(err))
+			render.Status(r, 400)
+			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode user data: %v", err)))
+			return
+		}
+
+		data, err := handler.UpdateUser(ctx, author, username, &user)
+		if err != nil {
+			log.Error("update user", sl.Err(err))
+			if err.Error() == "user not found" {
+				render.Status(r, 404)
+			} else {
+				render.Status(r, 400)
+			}
+			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to update user: %v", err)))
+			return
+		}
+		log.Info("user updated")
+
+		render.JSON(w, r, data)
+	}
+}
+
+func Delete(logger *slog.Logger, handler Users) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		author := cont.GetUser(ctx)
+		username := chi.URLParam(r, "username")
+
+		log := logger.With(
+			sl.Module("handlers.users"),
+			slog.String("author", author.Username),
+			slog.String("target_user", username),
+			slog.String("role", author.Role),
+			slog.Int("access_level", author.AccessLevel),
+			slog.String("request_id", middleware.GetReqID(ctx)),
+		)
+
+		if !author.IsPowerUser() {
+			log.Warn("access denied: not admin or operator")
+			render.Status(r, 403)
+			render.JSON(w, r, response.Error(2001, "Insufficient permissions"))
+			return
+		}
+
+		err := handler.DeleteUser(ctx, author, username)
+		if err != nil {
+			log.Error("delete user", sl.Err(err))
+			if err.Error() == "user not found" {
+				render.Status(r, 404)
+			} else {
+				render.Status(r, 400)
+			}
+			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to delete user: %v", err)))
+			return
+		}
+		log.Info("user deleted")
+
+		render.JSON(w, r, map[string]interface{}{
+			"success": true,
+			"message": "User deleted successfully",
+		})
 	}
 }

@@ -100,6 +100,9 @@ The API supports CORS with the following headers:
 |----------|-------------|
 | [GET /users/info/{name}](api-endpoints.md#get-apiv1usersinfoname) | Get user information |
 | [GET /users/list](api-endpoints.md#get-apiv1userslist) | List all users |
+| [POST /users/create](api-endpoints.md#post-apiv1userscreate) | Create new user (admin/operator) |
+| [PUT /users/update/{username}](api-endpoints.md#put-apiv1usersupdateusername) | Update user (admin/operator) |
+| [DELETE /users/delete/{username}](api-endpoints.md#delete-apiv1usersdeleteusername) | Delete user (admin/operator) |
 
 #### Locations & Charge Points
 | Endpoint | Description |

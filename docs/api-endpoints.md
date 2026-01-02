@@ -15,6 +15,9 @@ Detailed documentation for all REST API endpoints.
 - [Users](#users)
   - [GET /users/info/{name}](#get-apiv1usersinfoname)
   - [GET /users/list](#get-apiv1userslist)
+  - [POST /users/create](#post-apiv1userscreate)
+  - [PUT /users/update/{username}](#put-apiv1usersupdateusername)
+  - [DELETE /users/delete/{username}](#delete-apiv1usersdeleteusername)
 - [Locations](#locations)
   - [GET /locations](#get-apiv1locations)
   - [GET /chp](#get-apiv1chp)
@@ -304,6 +307,152 @@ Returns an array of [User](#user-object) objects.
   }
 ]
 ```
+
+---
+
+### POST /api/v1/users/create
+
+Create a new user account (admin/operator only).
+
+**Request Body:**
+
+```json
+{
+  "username": "newuser@example.com",
+  "password": "password123",
+  "name": "New User",
+  "email": "newuser@example.com",
+  "role": "user",
+  "access_level": 1,
+  "payment_plan": "standard"
+}
+```
+
+**Request Fields:**
+
+| Field | Type | Required | Validation | Description |
+|-------|------|----------|------------|-------------|
+| username | string | Yes | Min 3 chars, unique | Username |
+| password | string | Yes | Min 6 chars | Password |
+| name | string | No | - | Display name |
+| email | string | No | Valid email format | Email address |
+| role | string | No | `admin`, `operator`, or empty | User role (empty = regular user) |
+| access_level | integer | No | 0-10, default: 0 | Access level |
+| payment_plan | string | No | - | Payment plan ID |
+
+**Success Response (201 Created):**
+
+```json
+{
+  "user_id": "abc123...",
+  "username": "newuser@example.com",
+  "name": "New User",
+  "email": "newuser@example.com",
+  "role": "user",
+  "access_level": 1,
+  "payment_plan": "standard",
+  "date_registered": "2024-01-15T10:30:00Z"
+}
+```
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 400 | Invalid input data or username already exists |
+| 403 | Insufficient permissions (not admin/operator) |
+
+---
+
+### PUT /api/v1/users/update/{username}
+
+Update an existing user's information (admin/operator only).
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| username | string | Yes | Username of the user to update |
+
+**Request Body:**
+
+All fields are optional. Only provided fields will be updated.
+
+```json
+{
+  "name": "Updated Name",
+  "email": "updated@example.com",
+  "password": "newpassword123",
+  "role": "operator",
+  "access_level": 5,
+  "payment_plan": "premium"
+}
+```
+
+**Request Fields:**
+
+| Field | Type | Required | Validation | Description |
+|-------|------|----------|------------|-------------|
+| name | string | No | - | Display name |
+| email | string | No | Valid email format | Email address |
+| password | string | No | Min 6 chars | New password (only if changing) |
+| role | string | No | `admin`, `operator`, or empty | User role |
+| access_level | integer | No | 0-10 | Access level |
+| payment_plan | string | No | - | Payment plan ID |
+
+**Note:** Username cannot be changed.
+
+**Success Response (200 OK):**
+
+```json
+{
+  "user_id": "abc123...",
+  "username": "user@example.com",
+  "name": "Updated Name",
+  "email": "updated@example.com",
+  "role": "operator",
+  "access_level": 5,
+  "payment_plan": "premium",
+  "date_registered": "2024-01-01T00:00:00Z",
+  "last_seen": "2024-01-15T10:30:00Z"
+}
+```
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 400 | Invalid input data |
+| 403 | Insufficient permissions (not admin/operator) |
+| 404 | User not found |
+
+---
+
+### DELETE /api/v1/users/delete/{username}
+
+Delete a user account (admin/operator only).
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| username | string | Yes | Username of the user to delete |
+
+**Success Response (200 OK):**
+
+```json
+{
+  "success": true,
+  "message": "User deleted successfully"
+}
+```
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 403 | Insufficient permissions (not admin/operator) |
+| 404 | User not found |
 
 ---
 
