@@ -12,6 +12,7 @@ import (
 	"evsys-back/internal/api/handlers/report"
 	"evsys-back/internal/api/handlers/transactions"
 	"evsys-back/internal/api/handlers/users"
+	"evsys-back/internal/api/handlers/usertags"
 	"evsys-back/internal/api/middleware/authenticate"
 	"evsys-back/internal/api/middleware/timeout"
 	"evsys-back/internal/lib/sl"
@@ -54,6 +55,7 @@ type Core interface {
 	helper.Helper
 	authenticate.Authenticate
 	users.Users
+	usertags.UserTags
 	locations.Locations
 	centralsystem.CentralSystem
 	transactions.Transactions
@@ -107,6 +109,12 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 			r.Put("/users/update/{username}", users.Update(log, core))
 			r.Delete("/users/delete/{username}", users.Delete(log, core))
 			//router.Get("/users/invites", s.generateInvites)
+
+			r.Get("/user-tags/list", usertags.List(log, core))
+			r.Get("/user-tags/info/{idTag}", usertags.Info(log, core))
+			r.Post("/user-tags/create", usertags.Create(log, core))
+			r.Put("/user-tags/update/{idTag}", usertags.Update(log, core))
+			r.Delete("/user-tags/delete/{idTag}", usertags.Delete(log, core))
 
 			r.Post("/csc", centralsystem.Command(log, core))
 

@@ -16,4 +16,10 @@ type Authenticator interface {
 	CreateUser(ctx context.Context, user *entity.User) error
 	UpdateUser(ctx context.Context, username string, updates *entity.UserUpdate) (*entity.User, error)
 	DeleteUser(ctx context.Context, username string) error
+	// User tag management
+	ListUserTags(ctx context.Context) ([]*entity.UserTag, error)
+	GetUserTagByIdTag(ctx context.Context, idTag string) (*entity.UserTag, error)
+	CreateUserTag(ctx context.Context, tag *entity.UserTagCreate) (*entity.UserTag, error)
+	UpdateUserTag(ctx context.Context, idTag string, updates *entity.UserTagUpdate) (*entity.UserTag, error)
+	DeleteUserTag(ctx context.Context, idTag string) error
 }

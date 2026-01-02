@@ -270,6 +270,69 @@ func (db *MockDB) UpdateTagLastSeen(_ context.Context, userTag *entity.UserTag) 
 	return nil
 }
 
+func (db *MockDB) GetAllUserTags(_ context.Context) ([]*entity.UserTag, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	result := make([]*entity.UserTag, 0)
+	for _, tags := range db.userTags {
+		for i := range tags {
+			result = append(result, &tags[i])
+		}
+	}
+	return result, nil
+}
+
+func (db *MockDB) GetUserTagByIdTag(_ context.Context, idTag string) (*entity.UserTag, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	for _, tags := range db.userTags {
+		for i := range tags {
+			if tags[i].IdTag == idTag {
+				return &tags[i], nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("tag not found")
+}
+
+func (db *MockDB) UpdateUserTag(_ context.Context, userTag *entity.UserTag) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	for userId, tags := range db.userTags {
+		for i := range tags {
+			if tags[i].IdTag == userTag.IdTag {
+				// If user changed, move tag to new user
+				if tags[i].UserId != userTag.UserId {
+					// Remove from old user
+					db.userTags[userId] = append(tags[:i], tags[i+1:]...)
+					// Add to new user
+					db.userTags[userTag.UserId] = append(db.userTags[userTag.UserId], *userTag)
+				} else {
+					// Update in place
+					tags[i] = *userTag
+				}
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("tag not found")
+}
+
+func (db *MockDB) DeleteUserTag(_ context.Context, idTag string) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	for userId, tags := range db.userTags {
+		for i := range tags {
+			if tags[i].IdTag == idTag {
+				db.userTags[userId] = append(tags[:i], tags[i+1:]...)
+				delete(db.allTags, idTag)
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("tag not found")
+}
+
 // --- Invite Codes ---
 
 func (db *MockDB) AddInviteCode(_ context.Context, invite *entity.Invite) error {

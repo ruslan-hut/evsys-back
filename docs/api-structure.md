@@ -104,6 +104,15 @@ The API supports CORS with the following headers:
 | [PUT /users/update/{username}](api-endpoints.md#put-apiv1usersupdateusername) | Update user (admin/operator) |
 | [DELETE /users/delete/{username}](api-endpoints.md#delete-apiv1usersdeleteusername) | Delete user (admin/operator) |
 
+#### User Tags
+| Endpoint | Description |
+|----------|-------------|
+| [GET /user-tags/list](api-endpoints.md#get-apiv1user-tagslist) | List all user tags (admin/operator) |
+| [GET /user-tags/info/{idTag}](api-endpoints.md#get-apiv1user-tagsinfoidtag) | Get user tag details (admin/operator) |
+| [POST /user-tags/create](api-endpoints.md#post-apiv1user-tagscreate) | Create user tag (admin/operator) |
+| [PUT /user-tags/update/{idTag}](api-endpoints.md#put-apiv1user-tagsupdateidtag) | Update user tag (admin/operator) |
+| [DELETE /user-tags/delete/{idTag}](api-endpoints.md#delete-apiv1user-tagsdeleteidtag) | Delete user tag (admin/operator) |
+
 #### Locations & Charge Points
 | Endpoint | Description |
 |----------|-------------|

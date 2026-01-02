@@ -5,11 +5,12 @@ import (
 	"evsys-back/entity"
 	"evsys-back/internal/lib/sl"
 	"fmt"
-	"golang.org/x/crypto/bcrypt"
 	"log/slog"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -439,6 +440,156 @@ func (a *Authenticator) DeleteUser(ctx context.Context, username string) error {
 	a.logger.With(
 		slog.String("username", username),
 	).Info("user deleted")
+
+	return nil
+}
+
+// ListUserTags returns all user tags in the system
+func (a *Authenticator) ListUserTags(ctx context.Context) ([]*entity.UserTag, error) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	return a.database.GetAllUserTags(ctx)
+}
+
+// GetUserTagByIdTag returns a user tag by its ID tag
+func (a *Authenticator) GetUserTagByIdTag(ctx context.Context, idTag string) (*entity.UserTag, error) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+	tag, err := a.database.GetUserTagByIdTag(ctx, idTag)
+	if err != nil || tag == nil {
+		return nil, fmt.Errorf("tag not found")
+	}
+	return tag, nil
+}
+
+// CreateUserTag creates a new user tag
+func (a *Authenticator) CreateUserTag(ctx context.Context, tag *entity.UserTagCreate) (*entity.UserTag, error) {
+	if tag.IdTag == "" {
+		return nil, fmt.Errorf("id_tag is required")
+	}
+	if tag.Username == "" {
+		return nil, fmt.Errorf("username is required")
+	}
+
+	a.mux.Lock()
+	defer a.mux.Unlock()
+
+	// check if user exists
+	user, err := a.database.GetUser(ctx, tag.Username)
+	if err != nil || user == nil {
+		return nil, fmt.Errorf("user not found")
+	}
+
+	// check if tag already exists
+	if a.database.CheckUserTag(ctx, tag.IdTag) != nil {
+		return nil, fmt.Errorf("id_tag already exists")
+	}
+
+	// set defaults
+	isEnabled := true
+	if tag.IsEnabled != nil {
+		isEnabled = *tag.IsEnabled
+	}
+	local := false
+	if tag.Local != nil {
+		local = *tag.Local
+	}
+
+	// use provided user_id or get from user
+	userId := tag.UserId
+	if userId == "" {
+		userId = user.UserId
+	}
+
+	newTag := &entity.UserTag{
+		Username:       tag.Username,
+		UserId:         userId,
+		IdTag:          tag.IdTag,
+		Source:         tag.Source,
+		IsEnabled:      isEnabled,
+		Local:          local,
+		Note:           tag.Note,
+		DateRegistered: time.Now(),
+	}
+
+	err = a.database.AddUserTag(ctx, newTag)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user tag: %w", err)
+	}
+
+	a.logger.With(
+		slog.String("id_tag", tag.IdTag),
+		slog.String("username", tag.Username),
+	).Info("user tag created")
+
+	return newTag, nil
+}
+
+// UpdateUserTag updates an existing user tag
+func (a *Authenticator) UpdateUserTag(ctx context.Context, idTag string, updates *entity.UserTagUpdate) (*entity.UserTag, error) {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+
+	// get existing tag
+	tag, err := a.database.GetUserTagByIdTag(ctx, idTag)
+	if err != nil || tag == nil {
+		return nil, fmt.Errorf("tag not found")
+	}
+
+	// apply updates
+	if updates.Username != "" && updates.Username != tag.Username {
+		// verify new user exists
+		user, err := a.database.GetUser(ctx, updates.Username)
+		if err != nil || user == nil {
+			return nil, fmt.Errorf("user not found")
+		}
+		tag.Username = updates.Username
+		tag.UserId = user.UserId
+	}
+	if updates.Source != "" {
+		tag.Source = updates.Source
+	}
+	if updates.IsEnabled != nil {
+		tag.IsEnabled = *updates.IsEnabled
+	}
+	if updates.Local != nil {
+		tag.Local = *updates.Local
+	}
+	if updates.Note != "" {
+		tag.Note = updates.Note
+	}
+
+	err = a.database.UpdateUserTag(ctx, tag)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update user tag: %w", err)
+	}
+
+	a.logger.With(
+		slog.String("id_tag", idTag),
+	).Info("user tag updated")
+
+	return tag, nil
+}
+
+// DeleteUserTag deletes a user tag
+func (a *Authenticator) DeleteUserTag(ctx context.Context, idTag string) error {
+	a.mux.Lock()
+	defer a.mux.Unlock()
+
+	// check if tag exists
+	tag, err := a.database.GetUserTagByIdTag(ctx, idTag)
+	if err != nil || tag == nil {
+		return fmt.Errorf("tag not found")
+	}
+
+	err = a.database.DeleteUserTag(ctx, idTag)
+	if err != nil {
+		return fmt.Errorf("failed to delete user tag: %w", err)
+	}
+
+	a.logger.With(
+		slog.String("id_tag", idTag),
+	).Info("user tag deleted")
 
 	return nil
 }

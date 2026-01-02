@@ -155,6 +155,56 @@ func (c *Core) UserTag(ctx context.Context, user *entity.User) (string, error) {
 	return c.auth.GetUserTag(ctx, user)
 }
 
+func (c *Core) ListUserTags(ctx context.Context, author *entity.User) ([]*entity.UserTag, error) {
+	if c.auth == nil {
+		return nil, fmt.Errorf("authenticator not set")
+	}
+	if !author.IsPowerUser() {
+		return nil, fmt.Errorf("access denied: insufficient permissions")
+	}
+	return c.auth.ListUserTags(ctx)
+}
+
+func (c *Core) GetUserTag(ctx context.Context, author *entity.User, idTag string) (*entity.UserTag, error) {
+	if c.auth == nil {
+		return nil, fmt.Errorf("authenticator not set")
+	}
+	if !author.IsPowerUser() {
+		return nil, fmt.Errorf("access denied: insufficient permissions")
+	}
+	return c.auth.GetUserTagByIdTag(ctx, idTag)
+}
+
+func (c *Core) CreateUserTag(ctx context.Context, author *entity.User, tag *entity.UserTagCreate) (*entity.UserTag, error) {
+	if c.auth == nil {
+		return nil, fmt.Errorf("authenticator not set")
+	}
+	if !author.IsPowerUser() {
+		return nil, fmt.Errorf("access denied: insufficient permissions")
+	}
+	return c.auth.CreateUserTag(ctx, tag)
+}
+
+func (c *Core) UpdateUserTag(ctx context.Context, author *entity.User, idTag string, updates *entity.UserTagUpdate) (*entity.UserTag, error) {
+	if c.auth == nil {
+		return nil, fmt.Errorf("authenticator not set")
+	}
+	if !author.IsPowerUser() {
+		return nil, fmt.Errorf("access denied: insufficient permissions")
+	}
+	return c.auth.UpdateUserTag(ctx, idTag, updates)
+}
+
+func (c *Core) DeleteUserTag(ctx context.Context, author *entity.User, idTag string) error {
+	if c.auth == nil {
+		return fmt.Errorf("authenticator not set")
+	}
+	if !author.IsPowerUser() {
+		return fmt.Errorf("access denied: insufficient permissions")
+	}
+	return c.auth.DeleteUserTag(ctx, idTag)
+}
+
 func (c *Core) GetLocations(ctx context.Context, accessLevel int) (interface{}, error) {
 	if accessLevel < MaxAccessLevel {
 		return nil, fmt.Errorf("access denied")

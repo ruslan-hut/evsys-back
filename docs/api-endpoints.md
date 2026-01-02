@@ -18,6 +18,12 @@ Detailed documentation for all REST API endpoints.
   - [POST /users/create](#post-apiv1userscreate)
   - [PUT /users/update/{username}](#put-apiv1usersupdateusername)
   - [DELETE /users/delete/{username}](#delete-apiv1usersdeleteusername)
+- [User Tags](#user-tags)
+  - [GET /user-tags/list](#get-apiv1user-tagslist)
+  - [GET /user-tags/info/{idTag}](#get-apiv1user-tagsinfoidtag)
+  - [POST /user-tags/create](#post-apiv1user-tagscreate)
+  - [PUT /user-tags/update/{idTag}](#put-apiv1user-tagsupdateidtag)
+  - [DELETE /user-tags/delete/{idTag}](#delete-apiv1user-tagsdeleteidtag)
 - [Locations](#locations)
   - [GET /locations](#get-apiv1locations)
   - [GET /chp](#get-apiv1chp)
@@ -453,6 +459,206 @@ Delete a user account (admin/operator only).
 |--------|-------------|
 | 403 | Insufficient permissions (not admin/operator) |
 | 404 | User not found |
+
+---
+
+## User Tags
+
+All user tag endpoints require authentication and admin/operator role.
+
+### GET /api/v1/user-tags/list
+
+List all user tags in the system.
+
+**Success Response:**
+
+Returns an array of [UserTag](#usertag-object) objects.
+
+```json
+[
+  {
+    "username": "user@example.com",
+    "user_id": "uid123",
+    "id_tag": "TAG001",
+    "source": "manual",
+    "is_enabled": true,
+    "local": false,
+    "note": "Main RFID card",
+    "date_registered": "2024-01-01T00:00:00Z",
+    "last_seen": "2024-01-15T10:30:00Z"
+  }
+]
+```
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 401 | Not authenticated |
+| 403 | Insufficient permissions (not admin/operator) |
+
+---
+
+### GET /api/v1/user-tags/info/{idTag}
+
+Get details for a specific user tag.
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| idTag | string | Yes | The tag identifier |
+
+**Success Response:**
+
+Returns a [UserTag](#usertag-object) object.
+
+```json
+{
+  "username": "user@example.com",
+  "user_id": "uid123",
+  "id_tag": "TAG001",
+  "source": "manual",
+  "is_enabled": true,
+  "local": false,
+  "note": "Main RFID card",
+  "date_registered": "2024-01-01T00:00:00Z",
+  "last_seen": "2024-01-15T10:30:00Z"
+}
+```
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 401 | Not authenticated |
+| 403 | Insufficient permissions (not admin/operator) |
+| 404 | Tag not found |
+
+---
+
+### POST /api/v1/user-tags/create
+
+Create a new user tag.
+
+**Request Body:**
+
+```json
+{
+  "username": "user@example.com",
+  "user_id": "uid123",
+  "id_tag": "TAG002",
+  "source": "manual",
+  "is_enabled": true,
+  "local": false,
+  "note": "Secondary card"
+}
+```
+
+**Request Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| username | string | Yes | Associated username |
+| user_id | string | No | User ID (auto-populated from username if not provided) |
+| id_tag | string | Yes | Unique tag identifier (e.g., RFID number) |
+| source | string | No | Tag source/origin |
+| is_enabled | boolean | No | Whether tag is active (default: true) |
+| local | boolean | No | Local flag (default: false) |
+| note | string | No | Administrative notes |
+
+**Success Response (201 Created):**
+
+Returns the created [UserTag](#usertag-object) object.
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 400 | Invalid input data or id_tag already exists |
+| 401 | Not authenticated |
+| 403 | Insufficient permissions (not admin/operator) |
+| 404 | Username not found |
+
+---
+
+### PUT /api/v1/user-tags/update/{idTag}
+
+Update an existing user tag.
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| idTag | string | Yes | The tag identifier to update |
+
+**Request Body:**
+
+All fields are optional. Only provided fields will be updated.
+
+```json
+{
+  "username": "newuser@example.com",
+  "source": "rfid",
+  "is_enabled": false,
+  "local": true,
+  "note": "Updated note"
+}
+```
+
+**Request Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| username | string | No | Change associated user |
+| source | string | No | Tag source/origin |
+| is_enabled | boolean | No | Whether tag is active |
+| local | boolean | No | Local flag |
+| note | string | No | Administrative notes |
+
+**Note:** The `id_tag` cannot be changed after creation.
+
+**Success Response (200 OK):**
+
+Returns the updated [UserTag](#usertag-object) object.
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 400 | Invalid input data |
+| 401 | Not authenticated |
+| 403 | Insufficient permissions (not admin/operator) |
+| 404 | Tag not found or username not found |
+
+---
+
+### DELETE /api/v1/user-tags/delete/{idTag}
+
+Delete a user tag.
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| idTag | string | Yes | The tag identifier to delete |
+
+**Success Response (200 OK):**
+
+```json
+{
+  "success": true,
+  "message": "Tag deleted successfully"
+}
+```
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 401 | Not authenticated |
+| 403 | Insufficient permissions (not admin/operator) |
+| 404 | Tag not found |
 
 ---
 

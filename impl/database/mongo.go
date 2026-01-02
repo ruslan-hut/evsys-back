@@ -304,6 +304,57 @@ func (m *MongoDB) UpdateTagLastSeen(ctx context.Context, userTag *entity.UserTag
 	return err
 }
 
+func (m *MongoDB) GetAllUserTags(ctx context.Context) ([]*entity.UserTag, error) {
+	collection := m.client.Database(m.database).Collection(collectionUserTags)
+	var userTags []*entity.UserTag
+	cursor, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	if err = cursor.All(ctx, &userTags); err != nil {
+		return nil, err
+	}
+	return userTags, nil
+}
+
+func (m *MongoDB) GetUserTagByIdTag(ctx context.Context, idTag string) (*entity.UserTag, error) {
+	return m.GetUserTag(ctx, idTag)
+}
+
+func (m *MongoDB) UpdateUserTag(ctx context.Context, userTag *entity.UserTag) error {
+	collection := m.client.Database(m.database).Collection(collectionUserTags)
+	filter := bson.D{{"id_tag", userTag.IdTag}}
+	update := bson.M{"$set": bson.D{
+		{"username", userTag.Username},
+		{"user_id", userTag.UserId},
+		{"source", userTag.Source},
+		{"is_enabled", userTag.IsEnabled},
+		{"local", userTag.Local},
+		{"note", userTag.Note},
+	}}
+	result, err := collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("tag not found")
+	}
+	return nil
+}
+
+func (m *MongoDB) DeleteUserTag(ctx context.Context, idTag string) error {
+	collection := m.client.Database(m.database).Collection(collectionUserTags)
+	filter := bson.D{{"id_tag", idTag}}
+	result, err := collection.DeleteOne(ctx, filter)
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return fmt.Errorf("tag not found")
+	}
+	return nil
+}
+
 func (m *MongoDB) UpdateLastSeen(ctx context.Context, user *entity.User) error {
 	collection := m.client.Database(m.database).Collection(collectionUsers)
 	filter := bson.D{{"username", user.Username}}
