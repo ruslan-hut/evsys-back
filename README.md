@@ -105,39 +105,13 @@ Commands:
   The server will bind to `listen.bind_ip:listen.port`. TLS can be enabled via config if desired.
 - Build: `go build -v -o evsys-back`
 
-## REST and WebSocket endpoints
-Base path for REST: `/api/v1`
+## API Documentation
 
-Auth-required group (middleware `authenticate`):
-- GET `/api/v1/locations` — list locations
-- GET `/api/v1/chp` and `/api/v1/chp/{search}` — list charge points
-- GET `/api/v1/point/{id}` — read charge point
-- POST `/api/v1/point/{id}` — update/save charge point
-- GET `/api/v1/users/info/{name}` — user info
-- GET `/api/v1/users/list` — list users
-- POST `/api/v1/csc` — central system command
-- GET `/api/v1/transactions/active` — active transactions
-- GET `/api/v1/transactions/list` and `/api/v1/transactions/list/{period}` — list transactions
-- GET `/api/v1/transactions/info/{id}` — transaction details
-- GET `/api/v1/payment/methods` — list payment methods
-- POST `/api/v1/payment/save` — save payment method
-- POST `/api/v1/payment/update` — update payment method
-- POST `/api/v1/payment/delete` — delete payment method
-- POST `/api/v1/payment/order` — create payment order
-- GET `/api/v1/report/month` — monthly statistics
-- GET `/api/v1/report/user` — user statistics
-- GET `/api/v1/report/charger` — charger statistics
-- GET `/api/v1/log/{name}` — read log
+The API exposes REST endpoints under `/api/v1` and a WebSocket endpoint at `/ws`.
 
-Public (no auth):
-- GET `/api/v1/config/{name}` — read config by name
-- POST `/api/v1/users/authenticate` — authenticate user
-- POST `/api/v1/users/register` — register user
-
-WebSocket:
-- `GET /ws` — real-time updates; subscription controlled by messages over the socket. CORS origin check is open (allows all).
-
-Note: Detailed request/response schemas are defined in the `entity/` package and handler implementations under `internal/api/handlers/...`.
+For complete API documentation, see:
+- **[API Structure Overview](docs/api-structure.md)** — Architecture, authentication, response format, and WebSocket interface
+- **[API Endpoints Reference](docs/api-endpoints.md)** — Detailed endpoint descriptions with request/response schemas
 
 ## Architecture
 
