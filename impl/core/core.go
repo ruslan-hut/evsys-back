@@ -304,6 +304,24 @@ func (c *Core) GetTransactions(ctx context.Context, userId, period string) (inte
 	return transactions, nil
 }
 
+func (c *Core) GetFilteredTransactions(ctx context.Context, user *entity.User, filter *entity.TransactionFilter) (interface{}, error) {
+	if !user.IsPowerUser() {
+		return nil, fmt.Errorf("access denied: insufficient permissions")
+	}
+	transactions, err := c.repo.GetFilteredTransactions(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if transactions == nil {
+		empty := make([]*entity.Transaction, 0)
+		return empty, nil
+	}
+	for _, t := range transactions {
+		t.MeterValues = NormalizeMeterValues(t.MeterValues, NormalizedMeterValuesLength)
+	}
+	return transactions, nil
+}
+
 func (c *Core) GetTransaction(ctx context.Context, userId string, accessLevel, id int) (interface{}, error) {
 	state, err := c.repo.GetTransactionState(ctx, userId, accessLevel, id)
 	if err != nil {

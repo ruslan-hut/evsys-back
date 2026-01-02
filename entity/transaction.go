@@ -2,6 +2,20 @@ package entity
 
 import "time"
 
+// TransactionFilter represents query parameters for filtering transactions
+type TransactionFilter struct {
+	From          *time.Time // Start date filter (inclusive)
+	To            *time.Time // End date filter (inclusive)
+	Username      string     // Filter by username (via UserTag.username)
+	IdTag         string     // Filter by RFID tag ID
+	ChargePointId string     // Filter by charge point identifier
+}
+
+// HasFilters returns true if any filter is set
+func (f *TransactionFilter) HasFilters() bool {
+	return f.From != nil || f.To != nil || f.Username != "" || f.IdTag != "" || f.ChargePointId != ""
+}
+
 type Transaction struct {
 	TransactionId int                 `json:"transaction_id" bson:"transaction_id"`
 	IsFinished    bool                `json:"is_finished" bson:"is_finished"`

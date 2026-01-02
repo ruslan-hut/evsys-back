@@ -18,6 +18,7 @@ type Repository interface {
 
 	GetActiveTransactions(ctx context.Context, userId string) ([]*entity.ChargeState, error)
 	GetTransactions(ctx context.Context, userId string, period string) ([]*entity.Transaction, error)
+	GetFilteredTransactions(ctx context.Context, filter *entity.TransactionFilter) ([]*entity.Transaction, error)
 	GetTransactionState(ctx context.Context, userId string, level int, id int) (*entity.ChargeState, error)
 	GetRecentUserChargePoints(ctx context.Context, userId string) ([]*entity.ChargePoint, error)
 

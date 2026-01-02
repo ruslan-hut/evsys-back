@@ -2,6 +2,7 @@ package transactions
 
 import (
 	"context"
+	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
@@ -9,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -18,6 +20,7 @@ import (
 type Transactions interface {
 	GetActiveTransactions(ctx context.Context, userId string) (interface{}, error)
 	GetTransactions(ctx context.Context, userId, period string) (interface{}, error)
+	GetFilteredTransactions(ctx context.Context, user *entity.User, filter *entity.TransactionFilter) (interface{}, error)
 	GetTransaction(ctx context.Context, userId string, accessLevel, id int) (interface{}, error)
 	GetRecentChargePoints(ctx context.Context, userId string) (interface{}, error)
 }
@@ -61,6 +64,22 @@ func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
+		// Check for query parameters (new filtering for power users)
+		filter := parseTransactionFilter(r)
+		if user.IsPowerUser() && filter.HasFilters() {
+			data, err := handler.GetFilteredTransactions(ctx, user, filter)
+			if err != nil {
+				log.With(sl.Err(err)).Error("filtered transactions list")
+				render.Status(r, 204)
+				render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to read transactions: %v", err)))
+				return
+			}
+			log.Info("filtered transactions list")
+			render.JSON(w, r, data)
+			return
+		}
+
+		// Legacy behavior: get user's own transactions
 		data, err := handler.GetTransactions(ctx, user.UserId, period)
 		if err != nil {
 			log.With(sl.Err(err)).Error("transactions list")
@@ -72,6 +91,36 @@ func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 
 		render.JSON(w, r, data)
 	}
+}
+
+// parseTransactionFilter extracts filter parameters from query string
+func parseTransactionFilter(r *http.Request) *entity.TransactionFilter {
+	filter := &entity.TransactionFilter{}
+
+	// Parse 'from' date (format: YYYY-MM-DD)
+	if fromStr := r.URL.Query().Get("from"); fromStr != "" {
+		if t, err := time.Parse("2006-01-02", fromStr); err == nil {
+			filter.From = &t
+		}
+	}
+
+	// Parse 'to' date (format: YYYY-MM-DDTHH:mm:ss or YYYY-MM-DD)
+	if toStr := r.URL.Query().Get("to"); toStr != "" {
+		// Try full datetime format first
+		if t, err := time.Parse("2006-01-02T15:04:05", toStr); err == nil {
+			filter.To = &t
+		} else if t, err := time.Parse("2006-01-02", toStr); err == nil {
+			// If just date, set to end of day
+			endOfDay := t.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+			filter.To = &endOfDay
+		}
+	}
+
+	filter.Username = r.URL.Query().Get("username")
+	filter.IdTag = r.URL.Query().Get("id_tag")
+	filter.ChargePointId = r.URL.Query().Get("charge_point_id")
+
+	return filter
 }
 
 func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {

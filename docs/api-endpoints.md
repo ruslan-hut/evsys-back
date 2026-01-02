@@ -820,11 +820,36 @@ Returns an array of [Transaction](#transaction-object) objects where `is_finishe
 
 ### GET /api/v1/transactions/list
 
-List all transactions for the authenticated user.
+List transactions for the authenticated user, with optional filtering for admin/operator users.
+
+**Query Parameters (Admin/Operator only):**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| from | string | No | Start date filter (inclusive), format: `YYYY-MM-DD` |
+| to | string | No | End date filter (inclusive), format: `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm:ss` |
+| username | string | No | Filter by user's username (via UserTag.username) |
+| id_tag | string | No | Filter by RFID tag ID |
+| charge_point_id | string | No | Filter by charge point identifier |
+
+**Behavior:**
+
+- **Regular users**: Returns the user's own transactions (no filters applied)
+- **Admin/Operator with filters**: Returns filtered transactions across all users
+- **Admin/Operator without filters**: Returns the user's own transactions (legacy behavior)
+
+**Example Requests:**
+
+```
+GET /api/v1/transactions/list?from=2024-01-01&to=2024-01-31T23:59:59
+GET /api/v1/transactions/list?username=john.doe
+GET /api/v1/transactions/list?charge_point_id=CP001
+GET /api/v1/transactions/list?from=2024-01-01&to=2024-01-31&charge_point_id=CP001
+```
 
 **Success Response:**
 
-Returns an array of [Transaction](#transaction-object) objects.
+Returns an array of [Transaction](#transaction-object) objects, sorted by `time_start` descending (newest first).
 
 ---
 

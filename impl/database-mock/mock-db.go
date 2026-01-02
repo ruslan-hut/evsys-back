@@ -443,6 +443,62 @@ func (db *MockDB) GetTransactions(_ context.Context, userId string, period strin
 	return txs, nil
 }
 
+func (db *MockDB) GetFilteredTransactions(_ context.Context, filter *entity.TransactionFilter) ([]*entity.Transaction, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+
+	// Build set of id_tags to filter by username
+	var usernameIdTags map[string]bool
+	if filter.Username != "" {
+		usernameIdTags = make(map[string]bool)
+		for _, tags := range db.userTags {
+			for _, tag := range tags {
+				if tag.Username == filter.Username {
+					usernameIdTags[tag.IdTag] = true
+				}
+			}
+		}
+		if len(usernameIdTags) == 0 {
+			return []*entity.Transaction{}, nil
+		}
+	}
+
+	txs := make([]*entity.Transaction, 0)
+	for _, tx := range db.transactions {
+		// Only finished transactions
+		if !tx.IsFinished {
+			continue
+		}
+
+		// Filter by username (via id_tags)
+		if usernameIdTags != nil && !usernameIdTags[tx.IdTag] {
+			continue
+		}
+
+		// Filter by id_tag
+		if filter.IdTag != "" && tx.IdTag != filter.IdTag {
+			continue
+		}
+
+		// Filter by charge_point_id
+		if filter.ChargePointId != "" && tx.ChargePointId != filter.ChargePointId {
+			continue
+		}
+
+		// Filter by date range
+		if filter.From != nil && tx.TimeStart.Before(*filter.From) {
+			continue
+		}
+		if filter.To != nil && tx.TimeStart.After(*filter.To) {
+			continue
+		}
+
+		txs = append(txs, tx)
+	}
+
+	return txs, nil
+}
+
 func (db *MockDB) GetTransactionsToBill(userId string) ([]*entity.Transaction, error) {
 	return nil, nil
 }

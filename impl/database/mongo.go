@@ -783,6 +783,73 @@ func (m *MongoDB) GetTransactions(ctx context.Context, userId string, period str
 	return transactions, nil
 }
 
+// GetFilteredTransactions returns transactions filtered by the provided criteria
+func (m *MongoDB) GetFilteredTransactions(ctx context.Context, filter *entity.TransactionFilter) ([]*entity.Transaction, error) {
+	collection := m.client.Database(m.database).Collection(collectionTransactions)
+
+	// Build dynamic filter
+	mongoFilter := bson.D{}
+
+	// Filter by username: lookup user's id_tags first
+	if filter.Username != "" {
+		tagsCollection := m.client.Database(m.database).Collection(collectionUserTags)
+		tagFilter := bson.D{{"username", filter.Username}}
+		cursor, err := tagsCollection.Find(ctx, tagFilter)
+		if err != nil {
+			return nil, m.findError(err)
+		}
+		var userTags []*entity.UserTag
+		if err = cursor.All(ctx, &userTags); err != nil {
+			return nil, err
+		}
+		if len(userTags) == 0 {
+			// No tags found for this user, return empty result
+			return []*entity.Transaction{}, nil
+		}
+		var idTags []string
+		for _, tag := range userTags {
+			idTags = append(idTags, strings.ToUpper(tag.IdTag))
+		}
+		mongoFilter = append(mongoFilter, bson.E{"id_tag", bson.D{{"$in", idTags}}})
+	}
+
+	// Filter by id_tag
+	if filter.IdTag != "" {
+		mongoFilter = append(mongoFilter, bson.E{"id_tag", strings.ToUpper(filter.IdTag)})
+	}
+
+	// Filter by charge_point_id
+	if filter.ChargePointId != "" {
+		mongoFilter = append(mongoFilter, bson.E{"charge_point_id", filter.ChargePointId})
+	}
+
+	// Filter by date range
+	if filter.From != nil {
+		mongoFilter = append(mongoFilter, bson.E{"time_start", bson.D{{"$gte", *filter.From}}})
+	}
+	if filter.To != nil {
+		mongoFilter = append(mongoFilter, bson.E{"time_start", bson.D{{"$lte", *filter.To}}})
+	}
+
+	// Only finished transactions
+	mongoFilter = append(mongoFilter, bson.E{"is_finished", true})
+
+	// Sort by time_start descending (newest first)
+	opts := options.Find().SetSort(bson.D{{"time_start", -1}})
+
+	cursor, err := collection.Find(ctx, mongoFilter, opts)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+
+	var transactions []*entity.Transaction
+	if err = cursor.All(ctx, &transactions); err != nil {
+		return nil, err
+	}
+
+	return transactions, nil
+}
+
 func (m *MongoDB) GetTransactionByTag(ctx context.Context, idTag string, timeStart time.Time) (*entity.Transaction, error) {
 	collection := m.client.Database(m.database).Collection(collectionTransactions)
 	filter := bson.D{
