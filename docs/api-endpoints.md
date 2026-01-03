@@ -836,6 +836,7 @@ Returns an array of [ChargeState](#chargestate-object) objects representing acti
     "consumed": 7500,
     "power_rate": 7200,
     "price": 263,
+    "payment_billed": 0,
     "status": "Charging",
     "is_charging": true,
     "can_stop": true,
@@ -934,7 +935,7 @@ Returns charge points from the user's recent transactions.
 
 ### GET /api/v1/transactions/info/{id}
 
-Get detailed information about a specific transaction.
+Get detailed state information about a specific transaction.
 
 **Path Parameters:**
 
@@ -944,51 +945,49 @@ Get detailed information about a specific transaction.
 
 **Success Response:**
 
+Returns a [ChargeState](#chargestate-object) object with transaction details and current state.
+
 ```json
 {
   "transaction_id": 12345,
-  "session_id": "sess_abc123",
-  "is_finished": true,
   "connector_id": 1,
+  "connector": {
+    "connector_id": 1,
+    "type": "CCS",
+    "status": "Finishing",
+    "power": 50000
+  },
   "charge_point_id": "CP001",
-  "id_tag": "TAG001",
-  "reservation_id": 100,
+  "charge_point_title": "Fast Charger 1",
+  "charge_point_address": "123 Main St",
+  "time_started": "2024-01-15T09:00:00Z",
   "meter_start": 0,
-  "meter_stop": 15000,
-  "time_start": "2024-01-15T09:00:00Z",
-  "time_stop": "2024-01-15T10:30:00Z",
-  "reason": "EVDisconnected",
-  "id_tag_note": "Primary card",
-  "username": "user@example.com",
-  "payment_amount": 525,
+  "duration": 5400,
+  "consumed": 15000,
+  "power_rate": 0,
+  "price": 525,
   "payment_billed": 525,
-  "payment_order": 1001,
-  "payment_plan": {
-    "plan_id": "standard",
-    "description": "Standard Plan",
-    "price_per_kwh": 35,
-    "price_per_hour": 0
-  },
-  "tariff": {
-    "tariff_id": "tariff_001",
-    "description": "Standard Tariff"
-  },
+  "status": "Finishing",
+  "is_charging": false,
+  "can_stop": false,
   "meter_values": [
     {
       "transaction_id": 12345,
-      "value": 5000,
+      "value": 15000,
       "power_rate": 7200,
-      "battery_level": 45,
-      "consumed_energy": 5000,
-      "price": 175,
-      "time": "2024-01-15T09:30:00Z",
-      "minute": 30,
-      "unit": "Wh",
-      "measurand": "Energy.Active.Import.Register",
-      "connector_id": 1,
-      "connector_status": "Charging"
+      "battery_level": 80,
+      "consumed_energy": 15000,
+      "price": 525,
+      "time": "2024-01-15T10:30:00Z",
+      "minute": 90
     }
   ],
+  "id_tag": "TAG001",
+  "payment_plan": {
+    "plan_id": "standard",
+    "description": "Standard Plan",
+    "price_per_kwh": 35
+  },
   "payment_method": {
     "identifier": "pm_123abc",
     "card_brand": "visa",
@@ -1000,50 +999,13 @@ Get detailed information about a specific transaction.
       "amount": 525,
       "is_completed": true
     }
-  ],
-  "user_tag": {
-    "username": "user@example.com",
-    "user_id": "uid123",
-    "id_tag": "TAG001"
-  },
-  "protocol_version": "ocpp1.6",
-  "evse_id": 1,
-  "metadata": {
-    "custom_field": "value"
-  }
+  ]
 }
 ```
 
 **Response Fields:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| transaction_id | integer | Unique transaction identifier |
-| session_id | string | Session identifier (optional) |
-| is_finished | boolean | Whether the transaction has completed |
-| connector_id | integer | Connector used for charging |
-| charge_point_id | string | Charge point identifier |
-| id_tag | string | RFID tag used to authorize |
-| reservation_id | integer | Associated reservation ID (optional, null if none) |
-| meter_start | integer | Starting meter value (Wh) |
-| meter_stop | integer | Ending meter value (Wh) |
-| time_start | string | Transaction start time (ISO 8601) |
-| time_stop | string | Transaction stop time (ISO 8601) |
-| reason | string | Stop reason (e.g., EVDisconnected, Remote, Local) |
-| id_tag_note | string | Note about the ID tag (optional) |
-| username | string | Associated username (optional) |
-| payment_amount | integer | Total amount in cents |
-| payment_billed | integer | Billed amount in cents |
-| payment_order | integer | Payment order ID |
-| payment_plan | object | [PaymentPlan](#paymentplan-object) used for pricing |
-| tariff | object | [Tariff](#tariff-object) applied (optional) |
-| meter_values | array | Array of [TransactionMeter](#transactionmeter-object) readings |
-| payment_method | object | [PaymentMethod](#paymentmethod-object) used (optional) |
-| payment_orders | array | Array of [PaymentOrder](#paymentorder-object) records |
-| user_tag | object | [UserTag](#usertag-object) that initiated the transaction |
-| protocol_version | string | OCPP protocol version (ocpp1.6, ocpp2.0.1, ocpp2.1) |
-| evse_id | integer | EVSE ID for OCPP 2.0+ (optional) |
-| metadata | object | Flexible metadata storage (optional) |
+See [ChargeState Object](#chargestate-object) for field descriptions.
 
 ---
 
@@ -1506,6 +1468,7 @@ Represents an active or recent charging session with real-time state information
   "consumed": 0,
   "power_rate": 0,
   "price": 0,
+  "payment_billed": 0,
   "status": "string",
   "is_charging": true,
   "can_stop": true,
@@ -1531,6 +1494,7 @@ Represents an active or recent charging session with real-time state information
 | consumed | integer | Energy consumed (Wh) |
 | power_rate | integer | Current power rate (W) |
 | price | integer | Current price in cents |
+| payment_billed | integer | Amount already billed in cents |
 | status | string | Connector status (e.g., Charging, Finishing) |
 | is_charging | boolean | Whether actively charging |
 | can_stop | boolean | Whether current user can stop the session |
