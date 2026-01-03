@@ -810,11 +810,64 @@ Returns the updated [ChargePoint](#chargepoint-object) object.
 
 ### GET /api/v1/transactions/active
 
-List all active (in-progress) transactions for the authenticated user.
+List all active (in-progress) charging sessions for the authenticated user.
 
 **Success Response:**
 
-Returns an array of [Transaction](#transaction-object) objects where `is_finished` is `false`.
+Returns an array of [ChargeState](#chargestate-object) objects representing active charging sessions.
+
+```json
+[
+  {
+    "transaction_id": 12345,
+    "connector_id": 1,
+    "connector": {
+      "connector_id": 1,
+      "type": "CCS",
+      "status": "Charging",
+      "power": 50000
+    },
+    "charge_point_id": "CP001",
+    "charge_point_title": "Fast Charger 1",
+    "charge_point_address": "123 Main St",
+    "time_started": "2024-01-15T09:00:00Z",
+    "meter_start": 0,
+    "duration": 1800,
+    "consumed": 7500,
+    "power_rate": 7200,
+    "price": 263,
+    "status": "Charging",
+    "is_charging": true,
+    "can_stop": true,
+    "meter_values": [
+      {
+        "transaction_id": 12345,
+        "value": 7500,
+        "power_rate": 7200,
+        "consumed_energy": 7500,
+        "price": 263,
+        "time": "2024-01-15T09:30:00Z",
+        "minute": 30
+      }
+    ],
+    "id_tag": "TAG001",
+    "payment_plan": {
+      "plan_id": "standard",
+      "price_per_kwh": 35
+    },
+    "payment_method": {
+      "identifier": "pm_123abc",
+      "card_brand": "visa",
+      "card_number": "****1234"
+    },
+    "payment_orders": []
+  }
+]
+```
+
+**Response Fields:**
+
+See [ChargeState Object](#chargestate-object) for field descriptions.
 
 ---
 
@@ -1434,6 +1487,58 @@ Connect to `/ws` for real-time updates. See [API Structure](api-structure.md#web
   "current_transaction_id": 0
 }
 ```
+
+### ChargeState Object
+
+Represents an active or recent charging session with real-time state information.
+
+```json
+{
+  "transaction_id": 0,
+  "connector_id": 0,
+  "connector": {},
+  "charge_point_id": "string",
+  "charge_point_title": "string",
+  "charge_point_address": "string",
+  "time_started": "2024-01-01T00:00:00Z",
+  "meter_start": 0,
+  "duration": 0,
+  "consumed": 0,
+  "power_rate": 0,
+  "price": 0,
+  "status": "string",
+  "is_charging": true,
+  "can_stop": true,
+  "meter_values": [],
+  "id_tag": "string",
+  "payment_plan": {},
+  "payment_method": {},
+  "payment_orders": []
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| transaction_id | integer | Unique transaction identifier |
+| connector_id | integer | Connector being used |
+| connector | object | [Connector](#connector-object) details |
+| charge_point_id | string | Charge point identifier |
+| charge_point_title | string | Charge point display name |
+| charge_point_address | string | Charge point address |
+| time_started | string | Session start time (ISO 8601) |
+| meter_start | integer | Starting meter value (Wh) |
+| duration | integer | Session duration in seconds |
+| consumed | integer | Energy consumed (Wh) |
+| power_rate | integer | Current power rate (W) |
+| price | integer | Current price in cents |
+| status | string | Connector status (e.g., Charging, Finishing) |
+| is_charging | boolean | Whether actively charging |
+| can_stop | boolean | Whether current user can stop the session |
+| meter_values | array | Array of [TransactionMeter](#transactionmeter-object) readings |
+| id_tag | string | RFID tag used to start the session |
+| payment_plan | object | [PaymentPlan](#paymentplan-object) applied |
+| payment_method | object | [PaymentMethod](#paymentmethod-object) used |
+| payment_orders | array | Array of [PaymentOrder](#paymentorder-object) records |
 
 ### Transaction Object
 

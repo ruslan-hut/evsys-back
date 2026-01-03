@@ -612,6 +612,10 @@ func (m *MongoDB) getTransactionState(ctx context.Context, userId string, level 
 		IsCharging:         transaction.IsFinished == false,
 		CanStop:            canStop,
 		MeterValues:        meterValues,
+		IdTag:              transaction.IdTag,
+		PaymentPlan:        transaction.Plan,
+		PaymentMethod:      transaction.PaymentMethod,
+		PaymentOrders:      transaction.PaymentOrders,
 	}
 
 	return &chargeState, nil

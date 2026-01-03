@@ -23,6 +23,10 @@ type ChargeState struct {
 	IsCharging         bool               `json:"is_charging" bson:"is_charging"`
 	CanStop            bool               `json:"can_stop" bson:"can_stop"`
 	MeterValues        []TransactionMeter `json:"meter_values" bson:"meter_values"`
+	IdTag              string             `json:"id_tag,omitempty" bson:"id_tag,omitempty"`
+	PaymentPlan        *PaymentPlan       `json:"payment_plan,omitempty" bson:"payment_plan,omitempty"`
+	PaymentMethod      *PaymentMethod     `json:"payment_method,omitempty" bson:"payment_method,omitempty"`
+	PaymentOrders      []PaymentOrder     `json:"payment_orders,omitempty" bson:"payment_orders,omitempty"`
 }
 
 func (cs *ChargeState) CheckState() {
