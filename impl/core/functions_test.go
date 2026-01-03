@@ -14,7 +14,7 @@ func TestNormalizeMeterValues(t *testing.T) {
 	})
 
 	t.Run("zero target length returns original", func(t *testing.T) {
-		values := []*entity.TransactionMeter{
+		values := []entity.TransactionMeter{
 			{ConsumedEnergy: 100, PowerRate: 1000},
 			{ConsumedEnergy: 200, PowerRate: 1500},
 		}
@@ -23,7 +23,7 @@ func TestNormalizeMeterValues(t *testing.T) {
 	})
 
 	t.Run("length less than or equal to target returns original", func(t *testing.T) {
-		values := []*entity.TransactionMeter{
+		values := []entity.TransactionMeter{
 			{ConsumedEnergy: 100, PowerRate: 1000},
 			{ConsumedEnergy: 200, PowerRate: 1500},
 		}
@@ -33,9 +33,9 @@ func TestNormalizeMeterValues(t *testing.T) {
 
 	t.Run("downsamples to target length", func(t *testing.T) {
 		// Create 120 meter values
-		values := make([]*entity.TransactionMeter, 120)
+		values := make([]entity.TransactionMeter, 120)
 		for i := 0; i < 120; i++ {
-			values[i] = &entity.TransactionMeter{
+			values[i] = entity.TransactionMeter{
 				ConsumedEnergy: i * 100,
 				PowerRate:      7000,
 			}
@@ -47,7 +47,7 @@ func TestNormalizeMeterValues(t *testing.T) {
 	})
 
 	t.Run("interpolation for non-integer indices", func(t *testing.T) {
-		values := []*entity.TransactionMeter{
+		values := []entity.TransactionMeter{
 			{ConsumedEnergy: 0, PowerRate: 0},
 			{ConsumedEnergy: 100, PowerRate: 1000},
 			{ConsumedEnergy: 200, PowerRate: 2000},
@@ -65,9 +65,9 @@ func TestNormalizeMeterValues(t *testing.T) {
 
 	t.Run("handles large downsample", func(t *testing.T) {
 		// Create 600 meter values
-		values := make([]*entity.TransactionMeter, 600)
+		values := make([]entity.TransactionMeter, 600)
 		for i := 0; i < 600; i++ {
-			values[i] = &entity.TransactionMeter{
+			values[i] = entity.TransactionMeter{
 				ConsumedEnergy: i * 10,
 				PowerRate:      7200,
 			}

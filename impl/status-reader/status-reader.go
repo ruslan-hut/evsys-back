@@ -13,7 +13,7 @@ import (
 type Repository interface {
 	GetTransactionByTag(ctx context.Context, userId string, after time.Time) (*entity.Transaction, error)
 	GetTransaction(ctx context.Context, transactionId int) (*entity.Transaction, error)
-	GetMeterValues(ctx context.Context, transactionId int, from time.Time) ([]*entity.TransactionMeter, error)
+	GetMeterValues(ctx context.Context, transactionId int, from time.Time) ([]entity.TransactionMeter, error)
 	ReadLogAfter(ctx context.Context, timeStart time.Time) ([]*entity.FeatureMessage, error)
 }
 
@@ -85,7 +85,7 @@ func (sr *StatusReader) ClearStatus(userId string) {
 	delete(sr.status, userId)
 }
 
-func (sr *StatusReader) GetLastMeterValues(ctx context.Context, transactionId int, from time.Time) ([]*entity.TransactionMeter, error) {
+func (sr *StatusReader) GetLastMeterValues(ctx context.Context, transactionId int, from time.Time) ([]entity.TransactionMeter, error) {
 	if sr.database == nil {
 		return nil, fmt.Errorf("database is not set for status reader")
 	}

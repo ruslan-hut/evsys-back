@@ -1385,22 +1385,53 @@ Connect to `/ws` for real-time updates. See [API Structure](api-structure.md#web
 ```json
 {
   "transaction_id": 0,
+  "session_id": "string",
   "is_finished": false,
   "connector_id": 0,
   "charge_point_id": "string",
   "id_tag": "string",
-  "reservation_id": "string",
+  "reservation_id": 0,
   "meter_start": 0,
   "meter_stop": 0,
   "time_start": "2024-01-01T00:00:00Z",
   "time_stop": "2024-01-01T00:00:00Z",
+  "reason": "string",
+  "id_tag_note": "string",
+  "username": "string",
   "payment_amount": 0,
   "payment_billed": 0,
   "payment_order": 0,
-  "payment_error": "string",
   "payment_plan": {},
+  "tariff": {},
   "meter_values": [],
-  "user_tag": {}
+  "payment_method": {},
+  "payment_orders": [],
+  "user_tag": {},
+  "protocol_version": "string",
+  "evse_id": 0,
+  "metadata": {}
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| session_id | string | Unique session identifier |
+| reason | string | Transaction stop reason |
+| id_tag_note | string | Note about the ID tag |
+| username | string | Associated username |
+| tariff | object | Pricing tariff details |
+| payment_method | object | Payment method used |
+| payment_orders | array | Multiple payment orders |
+| protocol_version | string | OCPP version (ocpp1.6, ocpp2.0.1, ocpp2.1) |
+| evse_id | integer | EVSE ID (OCPP 2.0+) |
+| metadata | object | Flexible metadata storage |
+
+### Tariff Object
+
+```json
+{
+  "tariff_id": "string",
+  "description": "string"
 }
 ```
 

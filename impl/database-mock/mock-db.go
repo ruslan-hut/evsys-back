@@ -18,7 +18,7 @@ type MockDB struct {
 	invites        map[string]*entity.Invite          // key: code
 	transactions   map[int]*entity.Transaction        // key: transactionId
 	chargeStates   map[int]*entity.ChargeState        // key: transactionId
-	meterValues    map[int][]*entity.TransactionMeter // key: transactionId
+	meterValues    map[int][]entity.TransactionMeter  // key: transactionId
 	paymentMethods map[string][]*entity.PaymentMethod // key: userId
 	paymentOrders  map[int]*entity.PaymentOrder       // key: orderId
 	ordersByTx     map[int]*entity.PaymentOrder       // key: transactionId
@@ -37,7 +37,7 @@ func NewMockDB() *MockDB {
 		invites:        make(map[string]*entity.Invite),
 		transactions:   make(map[int]*entity.Transaction),
 		chargeStates:   make(map[int]*entity.ChargeState),
-		meterValues:    make(map[int][]*entity.TransactionMeter),
+		meterValues:    make(map[int][]entity.TransactionMeter),
 		paymentMethods: make(map[string][]*entity.PaymentMethod),
 		paymentOrders:  make(map[int]*entity.PaymentOrder),
 		ordersByTx:     make(map[int]*entity.PaymentOrder),
@@ -57,7 +57,7 @@ func (db *MockDB) Reset() {
 	db.invites = make(map[string]*entity.Invite)
 	db.transactions = make(map[int]*entity.Transaction)
 	db.chargeStates = make(map[int]*entity.ChargeState)
-	db.meterValues = make(map[int][]*entity.TransactionMeter)
+	db.meterValues = make(map[int][]entity.TransactionMeter)
 	db.paymentMethods = make(map[string][]*entity.PaymentMethod)
 	db.paymentOrders = make(map[int]*entity.PaymentOrder)
 	db.ordersByTx = make(map[int]*entity.PaymentOrder)
@@ -519,17 +519,17 @@ func (db *MockDB) GetLastMeterValue(_ context.Context, transactionId int) (*enti
 	if !ok || len(values) == 0 {
 		return nil, nil
 	}
-	return values[len(values)-1], nil
+	return &values[len(values)-1], nil
 }
 
-func (db *MockDB) GetMeterValues(_ context.Context, transactionId int, from time.Time) ([]*entity.TransactionMeter, error) {
+func (db *MockDB) GetMeterValues(_ context.Context, transactionId int, from time.Time) ([]entity.TransactionMeter, error) {
 	db.mux.RLock()
 	defer db.mux.RUnlock()
 	values, ok := db.meterValues[transactionId]
 	if !ok {
 		return nil, nil
 	}
-	result := make([]*entity.TransactionMeter, 0)
+	result := make([]entity.TransactionMeter, 0)
 	for _, v := range values {
 		if v.Time.After(from) {
 			result = append(result, v)

@@ -42,7 +42,7 @@ type Server struct {
 type StatusReader interface {
 	GetTransactionAfter(ctx context.Context, userId string, after time.Time) (*entity.Transaction, error)
 	GetTransaction(ctx context.Context, transactionId int) (*entity.Transaction, error)
-	GetLastMeterValues(ctx context.Context, transactionId int, from time.Time) ([]*entity.TransactionMeter, error)
+	GetLastMeterValues(ctx context.Context, transactionId int, from time.Time) ([]entity.TransactionMeter, error)
 
 	SaveStatus(userId string, stage entity.Stage, transactionId int) (time.Time, error)
 	GetStatus(userId string) (*entity.UserStatus, bool)
@@ -593,23 +593,23 @@ func (c *Client) listenForTransactionState(transactionId int) {
 		if values == nil {
 			continue
 		}
-		for _, value := range values {
-			value.Timestamp = value.Time.Unix()
+		for i := range values {
+			values[i].Timestamp = values[i].Time.Unix()
 			c.wsResponse(&entity.WsResponse{
 				Status:          entity.Value,
 				Stage:           entity.Info,
-				Info:            value.Measurand,
-				Power:           value.ConsumedEnergy,
-				PowerRate:       value.PowerRate,
-				SoC:             value.BatteryLevel,
-				Price:           value.Price,
-				Minute:          value.Minute,
+				Info:            values[i].Measurand,
+				Power:           values[i].ConsumedEnergy,
+				PowerRate:       values[i].PowerRate,
+				SoC:             values[i].BatteryLevel,
+				Price:           values[i].Price,
+				Minute:          values[i].Minute,
 				Id:              transactionId,
-				ConnectorId:     value.ConnectorId,
-				ConnectorStatus: value.ConnectorStatus,
-				MeterValue:      value,
+				ConnectorId:     values[i].ConnectorId,
+				ConnectorStatus: values[i].ConnectorStatus,
+				MeterValue:      &values[i],
 			})
-			lastMeterValue = value.Time
+			lastMeterValue = values[i].Time
 			time.Sleep(1 * time.Second)
 		}
 	}

@@ -582,7 +582,7 @@ func (m *MongoDB) getTransactionState(ctx context.Context, userId string, level 
 		meterValues, err = m.GetMeterValues(ctx, transaction.TransactionId, transaction.TimeStart)
 
 		if len(meterValues) == 0 && lastMeter != nil {
-			meterValues = append(meterValues, lastMeter)
+			meterValues = append(meterValues, *lastMeter)
 		}
 
 		duration = int(time.Since(transaction.TimeStart).Seconds())
@@ -876,7 +876,7 @@ func (m *MongoDB) GetLastMeterValue(ctx context.Context, transactionId int) (*en
 	return &value, nil
 }
 
-func (m *MongoDB) GetMeterValues(ctx context.Context, transactionId int, from time.Time) ([]*entity.TransactionMeter, error) {
+func (m *MongoDB) GetMeterValues(ctx context.Context, transactionId int, from time.Time) ([]entity.TransactionMeter, error) {
 	filter := bson.D{
 		{"transaction_id", transactionId},
 		{"measurand", "Energy.Active.Import.Register"},
@@ -888,7 +888,7 @@ func (m *MongoDB) GetMeterValues(ctx context.Context, transactionId int, from ti
 	if err != nil {
 		return nil, err
 	}
-	var meterValues []*entity.TransactionMeter
+	var meterValues []entity.TransactionMeter
 	if err = cursor.All(ctx, &meterValues); err != nil {
 		return nil, m.findError(err)
 	}

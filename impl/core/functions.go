@@ -20,13 +20,13 @@ func (c *Core) checkSubsystemAccess(user *entity.User, subsystem string) error {
 	return nil
 }
 
-func NormalizeMeterValues(meterValues []*entity.TransactionMeter, newLength int) []*entity.TransactionMeter {
+func NormalizeMeterValues(meterValues []entity.TransactionMeter, newLength int) []entity.TransactionMeter {
 	if newLength == 0 || meterValues == nil || len(meterValues) <= newLength {
 		return meterValues
 	}
 	originalLength := len(meterValues)
 	scaleFactor := float64(originalLength) / float64(newLength)
-	normalized := make([]*entity.TransactionMeter, newLength)
+	normalized := make([]entity.TransactionMeter, newLength)
 	for i := 0; i < newLength; i++ {
 		originalIndex := float64(i) * scaleFactor
 		lowerIndex := int(math.Floor(originalIndex))

@@ -18,7 +18,7 @@ type mockRepository struct {
 	transactions     map[int]*entity.Transaction
 	transactionByTag *entity.Transaction
 	transactionErr   error
-	meterValues      []*entity.TransactionMeter
+	meterValues      []entity.TransactionMeter
 	meterErr         error
 	logMessages      []*entity.FeatureMessage
 	logErr           error
@@ -44,7 +44,7 @@ func (m *mockRepository) GetTransaction(_ context.Context, transactionId int) (*
 	return nil, nil
 }
 
-func (m *mockRepository) GetMeterValues(_ context.Context, _ int, _ time.Time) ([]*entity.TransactionMeter, error) {
+func (m *mockRepository) GetMeterValues(_ context.Context, _ int, _ time.Time) ([]entity.TransactionMeter, error) {
 	if m.meterErr != nil {
 		return nil, m.meterErr
 	}
@@ -258,7 +258,7 @@ func TestGetLastMeterValues(t *testing.T) {
 
 	t.Run("returns meter values", func(t *testing.T) {
 		repo := &mockRepository{
-			meterValues: []*entity.TransactionMeter{
+			meterValues: []entity.TransactionMeter{
 				{ConsumedEnergy: 1000, PowerRate: 7200},
 				{ConsumedEnergy: 2000, PowerRate: 7200},
 			},
@@ -273,7 +273,7 @@ func TestGetLastMeterValues(t *testing.T) {
 
 	t.Run("returns empty slice when no values", func(t *testing.T) {
 		repo := &mockRepository{
-			meterValues: []*entity.TransactionMeter{},
+			meterValues: []entity.TransactionMeter{},
 		}
 		sr := New(newTestLogger(), repo)
 
