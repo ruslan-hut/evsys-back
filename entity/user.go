@@ -15,9 +15,9 @@ type User struct {
 	Username       string    `json:"username" bson:"username" validate:"omitempty"`
 	Password       string    `json:"password" bson:"password" validate:"required"`
 	Name           string    `json:"name" bson:"name" validate:"omitempty"`
-	Role           string    `json:"role" bson:"role" validate:"omitempty"`
+	Role           string    `json:"role" bson:"role" validate:"omitempty,user_role"`
 	AccessLevel    int       `json:"access_level" bson:"access_level" validate:"omitempty,min=0,max=10"`
-	Email          string    `json:"email" bson:"email" validate:"omitempty"`
+	Email          string    `json:"email" bson:"email" validate:"omitempty,email_rfc"`
 	PaymentPlan    string    `json:"payment_plan" bson:"payment_plan" validate:"omitempty"`
 	Group          string    `json:"group" bson:"group" validate:"omitempty"`
 	Token          string    `json:"token" bson:"token" validate:"omitempty"`
@@ -46,9 +46,9 @@ func (u *User) Bind(_ *http.Request) error {
 // UserUpdate is used for update requests where password is optional
 type UserUpdate struct {
 	Name        string `json:"name" validate:"omitempty"`
-	Email       string `json:"email" validate:"omitempty"`
+	Email       string `json:"email" validate:"omitempty,email_rfc"`
 	Password    string `json:"password" validate:"omitempty,min=6"`
-	Role        string `json:"role" validate:"omitempty"`
+	Role        string `json:"role" validate:"omitempty,user_role"`
 	AccessLevel int    `json:"access_level" validate:"omitempty,min=0,max=10"`
 	PaymentPlan string `json:"payment_plan" validate:"omitempty"`
 }

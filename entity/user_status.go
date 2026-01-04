@@ -13,8 +13,8 @@ const (
 )
 
 type UserStatus struct {
-	UserId        string
+	UserId        string `validate:"required"`
 	Time          time.Time
-	Stage         Stage
-	TransactionId int
+	Stage         Stage `validate:"omitempty"`
+	TransactionId int   `validate:"min=0"`
 }

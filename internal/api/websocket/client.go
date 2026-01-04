@@ -137,8 +137,9 @@ func (c *Client) readPump() {
 			continue
 		}
 
-		if userRequest.Token == "" {
-			c.SendResponse(entity.Error, "token not found")
+		if err = userRequest.Validate(); err != nil {
+			c.logger.Error("read pump: validation", sl.Err(err))
+			c.SendResponse(entity.Error, fmt.Sprintf("validation: %v", err))
 			continue
 		}
 

@@ -22,7 +22,7 @@ type ChargePoint struct {
 	SerialNumber    string       `json:"serial_number,omitempty" bson:"serial_number" validate:"omitempty"`
 	Vendor          string       `json:"vendor,omitempty" bson:"vendor" validate:"omitempty"`
 	FirmwareVersion string       `json:"firmware_version,omitempty" bson:"firmware_version" validate:"omitempty"`
-	Status          string       `json:"status" bson:"status" validate:"omitempty"`
+	Status          string       `json:"status" bson:"status" validate:"omitempty,connector_status"`
 	ErrorCode       string       `json:"error_code" bson:"error_code" validate:"omitempty"`
 	Info            string       `json:"info,omitempty" bson:"info" validate:"omitempty"`
 	LastSeen        string       `json:"last_seen" bson:"last_seen" validate:"omitempty"` // deprecated
