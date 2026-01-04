@@ -2,8 +2,11 @@ package database
 
 import (
 	"context"
+	"evsys-back/entity"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"sort"
 	"time"
 )
 
@@ -295,4 +298,178 @@ func (m *MongoDB) TotalsByCharger(ctx context.Context, from, to time.Time, userG
 		result[i] = v
 	}
 	return result, err
+}
+
+// StationUptime calculates uptime/downtime for stations over a period
+// based on registered/unregistered events in sys_log
+func (m *MongoDB) StationUptime(ctx context.Context, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error) {
+	collection := m.client.Database(m.database).Collection(collectionSysLog)
+
+	// Build filter for events containing "registered"
+	filter := bson.D{
+		{"text", bson.D{{"$regex", "registered"}}},
+	}
+	if chargePointId != "" {
+		filter = append(filter, bson.E{"charge_point_id", chargePointId})
+	}
+
+	// Get all relevant events sorted by charge_point_id and timestamp
+	opts := options.Find().SetSort(bson.D{{"charge_point_id", 1}, {"timestamp", 1}})
+	cursor, err := collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	defer cursor.Close(ctx)
+
+	// Parse events
+	var events []struct {
+		ChargePointId string    `bson:"charge_point_id"`
+		Text          string    `bson:"text"`
+		Timestamp     time.Time `bson:"timestamp"`
+	}
+	if err = cursor.All(ctx, &events); err != nil {
+		return nil, err
+	}
+
+	// Group events by charge_point_id
+	eventsByStation := make(map[string][]struct {
+		Text      string
+		Timestamp time.Time
+	})
+	for _, e := range events {
+		eventsByStation[e.ChargePointId] = append(eventsByStation[e.ChargePointId], struct {
+			Text      string
+			Timestamp time.Time
+		}{e.Text, e.Timestamp})
+	}
+
+	// Calculate uptime for each station
+	var results []*entity.StationUptime
+	for cpId, stationEvents := range eventsByStation {
+		uptime := &entity.StationUptime{
+			ChargePointId: cpId,
+			FinalState:    entity.StateUnknown,
+		}
+
+		// Find initial state (last event before 'from')
+		currentState := entity.StateOffline // Default assumption
+		lastTime := from
+
+		for _, e := range stationEvents {
+			// Events before 'from' establish initial state
+			if e.Timestamp.Before(from) {
+				currentState = entity.StateFromText(e.Text)
+				continue
+			}
+
+			// Events after 'to' are ignored
+			if e.Timestamp.After(to) {
+				break
+			}
+
+			// Calculate duration in previous state
+			duration := e.Timestamp.Sub(lastTime)
+			if currentState == entity.StateOnline {
+				uptime.OnlineDuration += duration
+			} else {
+				uptime.OfflineDuration += duration
+			}
+
+			// Transition to new state
+			currentState = entity.StateFromText(e.Text)
+			lastTime = e.Timestamp
+		}
+
+		// Add tail interval from last event to 'to'
+		tailDuration := to.Sub(lastTime)
+		if currentState == entity.StateOnline {
+			uptime.OnlineDuration += tailDuration
+		} else {
+			uptime.OfflineDuration += tailDuration
+		}
+
+		uptime.FinalState = currentState
+
+		// Calculate uptime percentage
+		totalDuration := uptime.OnlineDuration + uptime.OfflineDuration
+		if totalDuration > 0 {
+			uptime.UptimePercent = float64(uptime.OnlineDuration) / float64(totalDuration) * 100
+		}
+
+		results = append(results, uptime)
+	}
+
+	// Sort results by charge_point_id
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].ChargePointId < results[j].ChargePointId
+	})
+
+	return results, nil
+}
+
+// StationStatus returns the current connection state for stations
+// based on the most recent registered/unregistered event
+func (m *MongoDB) StationStatus(ctx context.Context, chargePointId string) ([]*entity.StationStatus, error) {
+	collection := m.client.Database(m.database).Collection(collectionSysLog)
+
+	// Build match stage
+	matchStage := bson.D{
+		{"$match", bson.D{
+			{"text", bson.D{{"$regex", "registered"}}},
+		}},
+	}
+	if chargePointId != "" {
+		matchStage = bson.D{
+			{"$match", bson.D{
+				{"text", bson.D{{"$regex", "registered"}}},
+				{"charge_point_id", chargePointId},
+			}},
+		}
+	}
+
+	pipeline := mongo.Pipeline{
+		matchStage,
+		// Sort by charge_point_id and timestamp descending
+		{{"$sort", bson.D{
+			{"charge_point_id", 1},
+			{"timestamp", -1},
+		}}},
+		// Group by charge_point_id, take the first (most recent) event
+		{{"$group", bson.D{
+			{"_id", "$charge_point_id"},
+			{"text", bson.D{{"$first", "$text"}}},
+			{"timestamp", bson.D{{"$first", "$timestamp"}}},
+		}}},
+		// Sort by charge_point_id
+		{{"$sort", bson.D{{"_id", 1}}}},
+	}
+
+	cursor, err := collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	defer cursor.Close(ctx)
+
+	var docs []struct {
+		ChargePointId string    `bson:"_id"`
+		Text          string    `bson:"text"`
+		Timestamp     time.Time `bson:"timestamp"`
+	}
+	if err = cursor.All(ctx, &docs); err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	results := make([]*entity.StationStatus, len(docs))
+	for i, doc := range docs {
+		results[i] = &entity.StationStatus{
+			ChargePointId: doc.ChargePointId,
+			State:         entity.StateFromText(doc.Text),
+			Since:         doc.Timestamp,
+			Duration:      now.Sub(doc.Timestamp),
+			LastEventText: doc.Text,
+		}
+	}
+
+	return results, nil
 }

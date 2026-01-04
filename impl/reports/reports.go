@@ -2,6 +2,7 @@ package reports
 
 import (
 	"context"
+	"evsys-back/entity"
 	"evsys-back/internal/lib/sl"
 	"log/slog"
 	"time"
@@ -83,5 +84,45 @@ func (r *Reports) TotalsByCharger(ctx context.Context, from, to time.Time, userG
 	log.With(
 		slog.Int("count", len(data)),
 	).Debug("totals by charger")
+	return data, nil
+}
+
+func (r *Reports) StationUptime(ctx context.Context, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error) {
+	log := r.log.With(
+		slog.Time("from", from),
+		slog.Time("to", to),
+		slog.String("chargePointId", chargePointId),
+	)
+	data, err := r.repo.StationUptime(ctx, from, to, chargePointId)
+	if err != nil {
+		log.Error("station uptime failed", sl.Err(err))
+		return nil, err
+	}
+	if data == nil {
+		log.Debug("station uptime: no data")
+		return []*entity.StationUptime{}, nil
+	}
+	log.With(
+		slog.Int("count", len(data)),
+	).Debug("station uptime")
+	return data, nil
+}
+
+func (r *Reports) StationStatus(ctx context.Context, chargePointId string) ([]*entity.StationStatus, error) {
+	log := r.log.With(
+		slog.String("chargePointId", chargePointId),
+	)
+	data, err := r.repo.StationStatus(ctx, chargePointId)
+	if err != nil {
+		log.Error("station status failed", sl.Err(err))
+		return nil, err
+	}
+	if data == nil {
+		log.Debug("station status: no data")
+		return []*entity.StationStatus{}, nil
+	}
+	log.With(
+		slog.Int("count", len(data)),
+	).Debug("station status")
 	return data, nil
 }

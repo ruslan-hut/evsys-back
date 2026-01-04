@@ -19,6 +19,8 @@ type Reports interface {
 	MonthlyStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
 	UsersStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
 	ChargerStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
+	StationUptimeReport(ctx context.Context, user *entity.User, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error)
+	StationStatusReport(ctx context.Context, user *entity.User, chargePointId string) ([]*entity.StationStatus, error)
 }
 
 func MonthlyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
@@ -185,4 +187,104 @@ func ChargerStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 
 func wrongParameter(w http.ResponseWriter, r *http.Request, err error) {
 	render.JSON(w, r, response.Error(400, fmt.Sprintf("Invalid parameter: %v", err)))
+}
+
+func StationUptimeStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
+
+		log := logger.With(
+			sl.Module("handlers.report"),
+			slog.String("author", user.Username),
+			slog.String("role", user.Role),
+			slog.Int("access_level", user.AccessLevel),
+			slog.String("request_id", middleware.GetReqID(ctx)),
+		)
+
+		from, err := request.GetDate(r, "from")
+		if err != nil {
+			log.Error("wrong parameter", sl.Err(err))
+			wrongParameter(w, r, err)
+			return
+		}
+
+		to, err := request.GetDate(r, "to")
+		if err != nil {
+			log.Error("wrong parameter", sl.Err(err))
+			wrongParameter(w, r, err)
+			return
+		}
+
+		if to.Before(from) {
+			log.Error("invalid date range: to before from")
+			wrongParameter(w, r, fmt.Errorf("'to' must be after 'from'"))
+			return
+		}
+
+		chargePointId := r.URL.Query().Get("charge_point_id")
+
+		log = log.With(
+			slog.Time("from", from),
+			slog.Time("to", to),
+			slog.String("charge_point_id", chargePointId),
+		)
+
+		data, err := handler.StationUptimeReport(ctx, user, from, to, chargePointId)
+		if err != nil {
+			log.Error("get report failed", sl.Err(err))
+			render.Status(r, 400)
+			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get report data: %v", err)))
+			return
+		}
+
+		// Convert to JSON-friendly format
+		result := make([]entity.StationUptimeJSON, len(data))
+		for i, s := range data {
+			result[i] = s.ToJSON()
+		}
+
+		log.Info("station uptime report")
+		render.JSON(w, r, result)
+	}
+}
+
+func StationStatusStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
+
+		log := logger.With(
+			sl.Module("handlers.report"),
+			slog.String("author", user.Username),
+			slog.String("role", user.Role),
+			slog.Int("access_level", user.AccessLevel),
+			slog.String("request_id", middleware.GetReqID(ctx)),
+		)
+
+		chargePointId := r.URL.Query().Get("charge_point_id")
+
+		log = log.With(
+			slog.String("charge_point_id", chargePointId),
+		)
+
+		data, err := handler.StationStatusReport(ctx, user, chargePointId)
+		if err != nil {
+			log.Error("get report failed", sl.Err(err))
+			render.Status(r, 400)
+			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get report data: %v", err)))
+			return
+		}
+
+		// Convert to JSON-friendly format
+		result := make([]entity.StationStatusJSON, len(data))
+		for i, s := range data {
+			result[i] = s.ToJSON()
+		}
+
+		log.Info("station status report")
+		render.JSON(w, r, result)
+	}
 }

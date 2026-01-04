@@ -478,3 +478,19 @@ func (c *Core) ChargerStats(ctx context.Context, user *entity.User, from, to tim
 	}
 	return c.reports.TotalsByCharger(ctx, from, to, userGroup)
 }
+
+func (c *Core) StationUptimeReport(ctx context.Context, user *entity.User, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error) {
+	err := c.checkSubsystemAccess(user, subSystemReports)
+	if err != nil {
+		return nil, err
+	}
+	return c.reports.StationUptime(ctx, from, to, chargePointId)
+}
+
+func (c *Core) StationStatusReport(ctx context.Context, user *entity.User, chargePointId string) ([]*entity.StationStatus, error) {
+	err := c.checkSubsystemAccess(user, subSystemReports)
+	if err != nil {
+		return nil, err
+	}
+	return c.reports.StationStatus(ctx, chargePointId)
+}

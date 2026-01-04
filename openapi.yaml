@@ -960,6 +960,76 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /report/uptime:
+    get:
+      tags: [Reports]
+      summary: Station uptime report
+      description: Get uptime/downtime statistics for stations over a period
+      operationId: getStationUptimeReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: Start date (RFC3339 format)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          description: End date (RFC3339 format)
+          schema:
+            type: string
+            format: date-time
+        - name: charge_point_id
+          in: query
+          description: Optional filter by charge point ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Station uptime statistics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StationUptime'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /report/status:
+    get:
+      tags: [Reports]
+      summary: Station status report
+      description: Get current connection status for stations
+      operationId: getStationStatusReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: charge_point_id
+          in: query
+          description: Optional filter by charge point ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Station status data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StationStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /config/{name}:
     get:
       tags: [Config]
@@ -1714,3 +1784,73 @@ components:
         connector_id:
           type: integer
           minimum: 0
+
+    StationUptime:
+      type: object
+      description: Uptime/downtime statistics for a station over a period
+      properties:
+        charge_point_id:
+          type: string
+          description: Station identifier
+        online_seconds:
+          type: integer
+          format: int64
+          description: Total online time in seconds
+        offline_seconds:
+          type: integer
+          format: int64
+          description: Total offline time in seconds
+        online_minutes:
+          type: number
+          format: double
+          description: Total online time in minutes
+        offline_minutes:
+          type: number
+          format: double
+          description: Total offline time in minutes
+        uptime_percent:
+          type: number
+          format: double
+          description: Uptime percentage (0-100)
+        final_state:
+          type: string
+          enum: ["ONLINE", "OFFLINE", "UNKNOWN"]
+          description: Station state at end of period
+      required:
+        - charge_point_id
+        - online_seconds
+        - offline_seconds
+        - uptime_percent
+        - final_state
+
+    StationStatus:
+      type: object
+      description: Current connection status for a station
+      properties:
+        charge_point_id:
+          type: string
+          description: Station identifier
+        state:
+          type: string
+          enum: ["ONLINE", "OFFLINE", "UNKNOWN"]
+          description: Current connection state
+        since:
+          type: string
+          format: date-time
+          description: When current state began
+        duration_seconds:
+          type: integer
+          format: int64
+          description: Time in current state in seconds
+        duration_minutes:
+          type: number
+          format: double
+          description: Time in current state in minutes
+        last_event_text:
+          type: string
+          description: Text of last status event
+      required:
+        - charge_point_id
+        - state
+        - since
+        - duration_seconds

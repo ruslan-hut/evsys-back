@@ -682,3 +682,11 @@ func (db *MockDB) TotalsByUsers(_ context.Context, from, to time.Time, userGroup
 func (db *MockDB) TotalsByCharger(_ context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
 	return nil, nil
 }
+
+func (db *MockDB) StationUptime(_ context.Context, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error) {
+	return nil, nil
+}
+
+func (db *MockDB) StationStatus(_ context.Context, chargePointId string) ([]*entity.StationStatus, error) {
+	return nil, nil
+}

@@ -124,6 +124,8 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 			r.Get("/report/month", report.MonthlyStatistics(log, core))
 			r.Get("/report/user", report.UsersStatistics(log, core))
 			r.Get("/report/charger", report.ChargerStatistics(log, core))
+			r.Get("/report/uptime", report.StationUptimeStatistics(log, core))
+			r.Get("/report/status", report.StationStatusStatistics(log, core))
 
 			r.Get("/log/{name}", helper.Log(log, core))
 		})
