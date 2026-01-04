@@ -46,6 +46,8 @@ Detailed documentation for all REST API endpoints.
   - [GET /report/month](#get-apiv1reportmonth)
   - [GET /report/user](#get-apiv1reportuser)
   - [GET /report/charger](#get-apiv1reportcharger)
+  - [GET /report/uptime](#get-apiv1reportuptime)
+  - [GET /report/status](#get-apiv1reportstatus)
 - [Central System](#central-system)
   - [POST /csc](#post-apiv1csc)
 - [Utility](#utility)
@@ -1206,6 +1208,102 @@ Returns an array of per-charger statistics objects.
 
 ---
 
+### GET /api/v1/report/uptime
+
+Get station uptime/downtime statistics over a period.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| from | string | Yes | Start date (RFC3339 format, e.g., `2024-01-01T00:00:00Z`) |
+| to | string | Yes | End date (RFC3339 format, e.g., `2024-01-31T23:59:59Z`) |
+| charge_point_id | string | No | Filter by specific charge point ID |
+
+**Note:** `to` must be after `from`.
+
+**Success Response:**
+
+Returns an array of [StationUptime](#stationuptime-object) objects.
+
+```json
+[
+  {
+    "charge_point_id": "CP001",
+    "online_seconds": 2592000,
+    "offline_seconds": 86400,
+    "online_minutes": 43200.0,
+    "offline_minutes": 1440.0,
+    "uptime_percent": 96.77,
+    "final_state": "ONLINE"
+  },
+  {
+    "charge_point_id": "CP002",
+    "online_seconds": 2678400,
+    "offline_seconds": 0,
+    "online_minutes": 44640.0,
+    "offline_minutes": 0.0,
+    "uptime_percent": 100.0,
+    "final_state": "ONLINE"
+  }
+]
+```
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 400 | Invalid parameters or `to` before `from` |
+| 401 | Not authenticated |
+| 403 | Insufficient permissions (requires reports access) |
+
+---
+
+### GET /api/v1/report/status
+
+Get current connection status for stations.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| charge_point_id | string | No | Filter by specific charge point ID |
+
+**Success Response:**
+
+Returns an array of [StationStatus](#stationstatus-object) objects.
+
+```json
+[
+  {
+    "charge_point_id": "CP001",
+    "state": "ONLINE",
+    "since": "2024-01-30T14:30:00Z",
+    "duration_seconds": 86400,
+    "duration_minutes": 1440.0,
+    "last_event_text": "registered"
+  },
+  {
+    "charge_point_id": "CP002",
+    "state": "OFFLINE",
+    "since": "2024-01-31T08:15:00Z",
+    "duration_seconds": 3600,
+    "duration_minutes": 60.0,
+    "last_event_text": "unregistered"
+  }
+]
+```
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 400 | Invalid parameters |
+| 401 | Not authenticated |
+| 403 | Insufficient permissions (requires reports access) |
+
+---
+
 ## Central System
 
 ### POST /api/v1/csc
@@ -1659,3 +1757,53 @@ Represents an active or recent charging session with real-time state information
   "longitude": 0.0
 }
 ```
+
+### StationUptime Object
+
+Represents uptime/downtime statistics for a station over a period.
+
+```json
+{
+  "charge_point_id": "string",
+  "online_seconds": 0,
+  "offline_seconds": 0,
+  "online_minutes": 0.0,
+  "offline_minutes": 0.0,
+  "uptime_percent": 0.0,
+  "final_state": "ONLINE"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| charge_point_id | string | Station identifier |
+| online_seconds | integer | Total online time in seconds |
+| offline_seconds | integer | Total offline time in seconds |
+| online_minutes | number | Total online time in minutes |
+| offline_minutes | number | Total offline time in minutes |
+| uptime_percent | number | Uptime percentage (0-100) |
+| final_state | string | Station state at end of period: `ONLINE`, `OFFLINE`, or `UNKNOWN` |
+
+### StationStatus Object
+
+Represents the current connection status for a station.
+
+```json
+{
+  "charge_point_id": "string",
+  "state": "ONLINE",
+  "since": "2024-01-01T00:00:00Z",
+  "duration_seconds": 0,
+  "duration_minutes": 0.0,
+  "last_event_text": "string"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| charge_point_id | string | Station identifier |
+| state | string | Current connection state: `ONLINE`, `OFFLINE`, or `UNKNOWN` |
+| since | string | When current state began (ISO 8601) |
+| duration_seconds | integer | Time in current state in seconds |
+| duration_minutes | number | Time in current state in minutes |
+| last_event_text | string | Text of last status event (e.g., "registered", "unregistered") |

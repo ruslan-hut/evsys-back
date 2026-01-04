@@ -302,15 +302,23 @@ func (m *MongoDB) TotalsByCharger(ctx context.Context, from, to time.Time, userG
 
 // StationUptime calculates uptime/downtime for stations over a period
 // based on registered/unregistered events in sys_log
+// Only includes charge points that exist in charge_points collection and are enabled
 func (m *MongoDB) StationUptime(ctx context.Context, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error) {
+	// Get list of enabled charge point IDs
+	enabledCPs, err := m.getEnabledChargePointIds(ctx, chargePointId)
+	if err != nil {
+		return nil, err
+	}
+	if len(enabledCPs) == 0 {
+		return []*entity.StationUptime{}, nil
+	}
+
 	collection := m.client.Database(m.database).Collection(collectionSysLog)
 
-	// Build filter for events containing "registered"
+	// Build filter for events containing "registered" and matching enabled charge points
 	filter := bson.D{
 		{"text", bson.D{{"$regex", "registered"}}},
-	}
-	if chargePointId != "" {
-		filter = append(filter, bson.E{"charge_point_id", chargePointId})
+		{"charge_point_id", bson.D{{"$in", enabledCPs}}},
 	}
 
 	// Get all relevant events sorted by charge_point_id and timestamp
@@ -409,22 +417,25 @@ func (m *MongoDB) StationUptime(ctx context.Context, from, to time.Time, chargeP
 
 // StationStatus returns the current connection state for stations
 // based on the most recent registered/unregistered event
+// Only includes charge points that exist in charge_points collection and are enabled
 func (m *MongoDB) StationStatus(ctx context.Context, chargePointId string) ([]*entity.StationStatus, error) {
+	// Get list of enabled charge point IDs
+	enabledCPs, err := m.getEnabledChargePointIds(ctx, chargePointId)
+	if err != nil {
+		return nil, err
+	}
+	if len(enabledCPs) == 0 {
+		return []*entity.StationStatus{}, nil
+	}
+
 	collection := m.client.Database(m.database).Collection(collectionSysLog)
 
-	// Build match stage
+	// Build match stage with enabled charge points filter
 	matchStage := bson.D{
 		{"$match", bson.D{
 			{"text", bson.D{{"$regex", "registered"}}},
+			{"charge_point_id", bson.D{{"$in", enabledCPs}}},
 		}},
-	}
-	if chargePointId != "" {
-		matchStage = bson.D{
-			{"$match", bson.D{
-				{"text", bson.D{{"$regex", "registered"}}},
-				{"charge_point_id", chargePointId},
-			}},
-		}
 	}
 
 	pipeline := mongo.Pipeline{
@@ -472,4 +483,36 @@ func (m *MongoDB) StationStatus(ctx context.Context, chargePointId string) ([]*e
 	}
 
 	return results, nil
+}
+
+// getEnabledChargePointIds returns IDs of charge points that are enabled
+// If chargePointId is specified, returns only that ID if it's enabled
+func (m *MongoDB) getEnabledChargePointIds(ctx context.Context, chargePointId string) ([]string, error) {
+	collection := m.client.Database(m.database).Collection(collectionChargePoints)
+
+	filter := bson.D{{"is_enabled", true}}
+	if chargePointId != "" {
+		filter = append(filter, bson.E{Key: "charge_point_id", Value: chargePointId})
+	}
+
+	// Only fetch the charge_point_id field
+	opts := options.Find().SetProjection(bson.D{{"charge_point_id", 1}})
+	cursor, err := collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	defer cursor.Close(ctx)
+
+	var docs []struct {
+		ChargePointId string `bson:"charge_point_id"`
+	}
+	if err = cursor.All(ctx, &docs); err != nil {
+		return nil, err
+	}
+
+	ids := make([]string, len(docs))
+	for i, doc := range docs {
+		ids[i] = doc.ChargePointId
+	}
+	return ids, nil
 }

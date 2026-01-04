@@ -146,6 +146,8 @@ The API supports CORS with the following headers:
 | [GET /report/month](api-endpoints.md#get-apiv1reportmonth) | Monthly statistics |
 | [GET /report/user](api-endpoints.md#get-apiv1reportuser) | User statistics |
 | [GET /report/charger](api-endpoints.md#get-apiv1reportcharger) | Charger statistics |
+| [GET /report/uptime](api-endpoints.md#get-apiv1reportuptime) | Station uptime/downtime statistics |
+| [GET /report/status](api-endpoints.md#get-apiv1reportstatus) | Current station connection status |
 
 #### Central System
 | Endpoint | Description |
