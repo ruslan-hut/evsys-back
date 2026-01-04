@@ -1,0 +1,1716 @@
+openapi: 3.0.3
+info:
+  title: EV Charging Management API
+  description: |
+    REST API for EV charging infrastructure management.
+    Handles users, locations, charge points, transactions, and payments.
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: /api/v1
+    description: API v1
+
+tags:
+  - name: Authentication
+    description: User authentication and registration
+  - name: Users
+    description: User management operations
+  - name: User Tags
+    description: RFID tag management
+  - name: Locations
+    description: Locations and charge points
+  - name: Transactions
+    description: Charging transaction operations
+  - name: Payments
+    description: Payment methods and orders
+  - name: Central System
+    description: Charge point commands
+  - name: Reports
+    description: Statistics and reports
+  - name: Config
+    description: Configuration endpoints
+
+paths:
+  /users/authenticate:
+    post:
+      tags: [Authentication]
+      summary: Authenticate user
+      description: Authenticate user by username/password or token
+      operationId: authenticateUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRequest'
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/register:
+    post:
+      tags: [Authentication]
+      summary: Register new user
+      description: Register a new user account
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '200':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /users/list:
+    get:
+      tags: [Users]
+      summary: List all users
+      description: Get list of all users
+      operationId: listUsers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/info/{name}:
+    get:
+      tags: [Users]
+      summary: Get user info
+      description: Get detailed user information including payment plans and tags
+      operationId: getUserInfo
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Username
+      responses:
+        '200':
+          description: User information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/create:
+    post:
+      tags: [Users]
+      summary: Create user
+      description: Create a new user (power users only)
+      operationId: createUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /users/update/{username}:
+    put:
+      tags: [Users]
+      summary: Update user
+      description: Update an existing user (power users only)
+      operationId: updateUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Username to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/delete/{username}:
+    delete:
+      tags: [Users]
+      summary: Delete user
+      description: Delete a user (power users only)
+      operationId: deleteUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Username to delete
+      responses:
+        '200':
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /user-tags/list:
+    get:
+      tags: [User Tags]
+      summary: List user tags
+      description: Get all user tags (power users only)
+      operationId: listUserTags
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of user tags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserTag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /user-tags/info/{idTag}:
+    get:
+      tags: [User Tags]
+      summary: Get user tag
+      description: Get specific user tag information (power users only)
+      operationId: getUserTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: idTag
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Tag identifier
+      responses:
+        '200':
+          description: User tag information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserTag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /user-tags/create:
+    post:
+      tags: [User Tags]
+      summary: Create user tag
+      description: Create a new user tag (power users only)
+      operationId: createUserTag
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserTagCreate'
+      responses:
+        '201':
+          description: User tag created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserTag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /user-tags/update/{idTag}:
+    put:
+      tags: [User Tags]
+      summary: Update user tag
+      description: Update an existing user tag (power users only)
+      operationId: updateUserTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: idTag
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Tag identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserTagUpdate'
+      responses:
+        '200':
+          description: User tag updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserTag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /user-tags/delete/{idTag}:
+    delete:
+      tags: [User Tags]
+      summary: Delete user tag
+      description: Delete a user tag (power users only)
+      operationId: deleteUserTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: idTag
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Tag identifier
+      responses:
+        '200':
+          description: User tag deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /locations:
+    get:
+      tags: [Locations]
+      summary: List locations
+      description: Get all locations with charge points
+      operationId: listLocations
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Location'
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /chp:
+    get:
+      tags: [Locations]
+      summary: List charge points
+      description: Get all charge points
+      operationId: listChargePoints
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of charge points
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChargePoint'
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /chp/{search}:
+    get:
+      tags: [Locations]
+      summary: Search charge points
+      description: Search charge points by name or ID
+      operationId: searchChargePoints
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Search query
+      responses:
+        '200':
+          description: Filtered charge points
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChargePoint'
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /point/{id}:
+    get:
+      tags: [Locations]
+      summary: Get charge point
+      description: Get specific charge point details
+      operationId: getChargePoint
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Charge point ID
+      responses:
+        '200':
+          description: Charge point details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargePoint'
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Locations]
+      summary: Update charge point
+      description: Update charge point information
+      operationId: updateChargePoint
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Charge point ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChargePoint'
+      responses:
+        '200':
+          description: Charge point updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargePoint'
+        '204':
+          description: No content
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /transactions/active:
+    get:
+      tags: [Transactions]
+      summary: Get active transactions
+      description: Get currently active transactions for the user
+      operationId: getActiveTransactions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Active transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /transactions/list:
+    get:
+      tags: [Transactions]
+      summary: List transactions
+      description: Get user's transactions with optional filtering
+      operationId: listTransactions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Start date filter (YYYY-MM-DD)
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End date filter
+        - name: username
+          in: query
+          schema:
+            type: string
+          description: Filter by username (power users)
+        - name: id_tag
+          in: query
+          schema:
+            type: string
+          description: Filter by RFID tag (power users)
+        - name: charge_point_id
+          in: query
+          schema:
+            type: string
+          description: Filter by charge point (power users)
+      responses:
+        '200':
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /transactions/list/{period}:
+    get:
+      tags: [Transactions]
+      summary: List transactions by period
+      description: Get transactions for a specific period
+      operationId: listTransactionsByPeriod
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: period
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Period identifier (e.g., "2024-01")
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: username
+          in: query
+          schema:
+            type: string
+        - name: id_tag
+          in: query
+          schema:
+            type: string
+        - name: charge_point_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /transactions/info/{id}:
+    get:
+      tags: [Transactions]
+      summary: Get transaction
+      description: Get detailed transaction information
+      operationId: getTransaction
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Transaction ID
+      responses:
+        '200':
+          description: Transaction details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeState'
+        '204':
+          description: No content
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /transactions/recent:
+    get:
+      tags: [Transactions]
+      summary: Get recent charge points
+      description: Get user's recently used charge points
+      operationId: getRecentChargePoints
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Recent charge points
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChargePoint'
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /payment/methods:
+    get:
+      tags: [Payments]
+      summary: Get payment methods
+      description: Get user's payment methods
+      operationId: getPaymentMethods
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Payment methods
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentMethod'
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /payment/save:
+    post:
+      tags: [Payments]
+      summary: Save payment method
+      description: Save a new payment method
+      operationId: savePaymentMethod
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentMethod'
+      responses:
+        '200':
+          description: Payment method saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethod'
+        '204':
+          description: No content
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /payment/update:
+    post:
+      tags: [Payments]
+      summary: Update payment method
+      description: Update an existing payment method
+      operationId: updatePaymentMethod
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentMethod'
+      responses:
+        '200':
+          description: Payment method updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethod'
+        '204':
+          description: No content
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /payment/delete:
+    post:
+      tags: [Payments]
+      summary: Delete payment method
+      description: Delete a payment method
+      operationId: deletePaymentMethod
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentMethod'
+      responses:
+        '200':
+          description: Payment method deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethod'
+        '204':
+          description: No content
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /payment/order:
+    post:
+      tags: [Payments]
+      summary: Create payment order
+      description: Create or update a payment order
+      operationId: createPaymentOrder
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentOrder'
+      responses:
+        '200':
+          description: Payment order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentOrder'
+        '204':
+          description: No content
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /csc:
+    post:
+      tags: [Central System]
+      summary: Send command
+      description: Send command to central system for charge point control
+      operationId: sendCentralSystemCommand
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CentralSystemCommand'
+      responses:
+        '200':
+          description: Command response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CentralSystemResponse'
+        '204':
+          description: No content
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /report/month:
+    get:
+      tags: [Reports]
+      summary: Monthly report
+      description: Get monthly statistics report
+      operationId: getMonthlyReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Start date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End date
+        - name: group
+          in: query
+          schema:
+            type: string
+          description: Grouping parameter
+      responses:
+        '200':
+          description: Monthly report data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /report/user:
+    get:
+      tags: [Reports]
+      summary: User report
+      description: Get user statistics report
+      operationId: getUserReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: group
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User report data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /report/charger:
+    get:
+      tags: [Reports]
+      summary: Charger report
+      description: Get charge point statistics report
+      operationId: getChargerReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: group
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Charger report data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /config/{name}:
+    get:
+      tags: [Config]
+      summary: Get configuration
+      description: Get configuration by name (public endpoint)
+      operationId: getConfig
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Configuration name
+      responses:
+        '200':
+          description: Configuration data
+          content:
+            application/json:
+              schema:
+                type: object
+        '204':
+          description: No content
+
+  /log/{name}:
+    get:
+      tags: [Config]
+      summary: Get log
+      description: Get log data by name
+      operationId: getLog
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Log name
+      responses:
+        '200':
+          description: Log data
+          content:
+            application/json:
+              schema:
+                type: object
+        '204':
+          description: No content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Token-based authentication
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error_code:
+          type: integer
+          example: 2001
+        message:
+          type: string
+          example: "Failed to decode user data"
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Operation completed successfully"
+
+    AuthRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          description: Password or token
+      required:
+        - password
+
+    User:
+      type: object
+      properties:
+        username:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: ["", "admin", "operator"]
+        access_level:
+          type: integer
+          minimum: 0
+          maximum: 10
+        email:
+          type: string
+          format: email
+        payment_plan:
+          type: string
+        group:
+          type: string
+        token:
+          type: string
+        user_id:
+          type: string
+        date_registered:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+
+    UserResponse:
+      type: object
+      properties:
+        username:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        access_level:
+          type: integer
+        email:
+          type: string
+        payment_plan:
+          type: string
+        group:
+          type: string
+        token:
+          type: string
+        user_id:
+          type: string
+        date_registered:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+
+    UserCreate:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: ["", "admin", "operator"]
+        access_level:
+          type: integer
+          minimum: 0
+          maximum: 10
+        email:
+          type: string
+          format: email
+        payment_plan:
+          type: string
+        group:
+          type: string
+      required:
+        - password
+
+    UserUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        role:
+          type: string
+          enum: ["", "admin", "operator"]
+        access_level:
+          type: integer
+          minimum: 0
+          maximum: 10
+        payment_plan:
+          type: string
+
+    UserInfo:
+      type: object
+      properties:
+        username:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        access_level:
+          type: integer
+        email:
+          type: string
+        date_registered:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        payment_plans:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentPlan'
+        user_tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserTag'
+        payment_methods:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentMethod'
+
+    UserTag:
+      type: object
+      properties:
+        username:
+          type: string
+        user_id:
+          type: string
+        id_tag:
+          type: string
+        source:
+          type: string
+        is_enabled:
+          type: boolean
+        local:
+          type: boolean
+        note:
+          type: string
+        date_registered:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+
+    UserTagCreate:
+      type: object
+      properties:
+        username:
+          type: string
+        user_id:
+          type: string
+        id_tag:
+          type: string
+        source:
+          type: string
+        is_enabled:
+          type: boolean
+        local:
+          type: boolean
+        note:
+          type: string
+      required:
+        - username
+        - id_tag
+
+    UserTagUpdate:
+      type: object
+      properties:
+        username:
+          type: string
+        source:
+          type: string
+        is_enabled:
+          type: boolean
+        local:
+          type: boolean
+        note:
+          type: string
+
+    Location:
+      type: object
+      properties:
+        id:
+          type: string
+        roaming:
+          type: boolean
+        name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        postal_code:
+          type: string
+        country:
+          type: string
+        coordinates:
+          $ref: '#/components/schemas/GeoLocation'
+        power_limit:
+          type: integer
+        default_power_limit:
+          type: integer
+        charge_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChargePoint'
+
+    GeoLocation:
+      type: object
+      properties:
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+
+    ChargePoint:
+      type: object
+      properties:
+        charge_point_id:
+          type: string
+        is_enabled:
+          type: boolean
+        title:
+          type: string
+        description:
+          type: string
+        model:
+          type: string
+        serial_number:
+          type: string
+        vendor:
+          type: string
+        firmware_version:
+          type: string
+        status:
+          type: string
+          enum: ["", "Available", "Preparing", "Charging", "SuspendedEV", "SuspendedEVSE", "Finishing", "Reserved", "Unavailable", "Faulted"]
+        error_code:
+          type: string
+        info:
+          type: string
+        is_online:
+          type: boolean
+        event_time:
+          type: string
+          format: date-time
+        status_time:
+          type: string
+          format: date-time
+        address:
+          type: string
+        access_type:
+          type: string
+        access_level:
+          type: integer
+        location:
+          $ref: '#/components/schemas/GeoLocation'
+        connectors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Connector'
+      required:
+        - charge_point_id
+
+    Connector:
+      type: object
+      properties:
+        connector_id:
+          type: integer
+          minimum: 0
+        connector_id_name:
+          type: string
+        charge_point_id:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum: ["", "Available", "Preparing", "Charging", "SuspendedEV", "SuspendedEVSE", "Finishing", "Reserved", "Unavailable", "Faulted"]
+        status_time:
+          type: string
+          format: date-time
+        state:
+          type: string
+        info:
+          type: string
+        vendor_id:
+          type: string
+        error_code:
+          type: string
+        power:
+          type: integer
+          minimum: 0
+        current_transaction_id:
+          type: integer
+          minimum: 0
+
+    Transaction:
+      type: object
+      properties:
+        transaction_id:
+          type: integer
+          minimum: 1
+        session_id:
+          type: string
+        is_finished:
+          type: boolean
+        connector_id:
+          type: integer
+          minimum: 0
+        charge_point_id:
+          type: string
+        id_tag:
+          type: string
+        reservation_id:
+          type: integer
+        meter_start:
+          type: integer
+          minimum: 0
+        meter_stop:
+          type: integer
+          minimum: 0
+        time_start:
+          type: string
+          format: date-time
+        time_stop:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          enum: ["", "EmergencyStop", "EVDisconnected", "HardReset", "Local", "Other", "PowerLoss", "Reboot", "Remote", "SoftReset", "UnlockCommand", "DeAuthorized"]
+        id_tag_note:
+          type: string
+        username:
+          type: string
+        payment_amount:
+          type: integer
+          minimum: 0
+        payment_billed:
+          type: integer
+          minimum: 0
+        payment_order:
+          type: integer
+          minimum: 0
+        payment_plan:
+          $ref: '#/components/schemas/PaymentPlan'
+        tariff:
+          $ref: '#/components/schemas/Tariff'
+        meter_values:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionMeter'
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethod'
+        payment_orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentOrder'
+        user_tag:
+          $ref: '#/components/schemas/UserTag'
+        protocol_version:
+          type: string
+        evse_id:
+          type: integer
+        metadata:
+          type: object
+          additionalProperties: true
+
+    TransactionMeter:
+      type: object
+      properties:
+        transaction_id:
+          type: integer
+          minimum: 1
+        value:
+          type: integer
+          minimum: 0
+        power_rate:
+          type: integer
+          minimum: 0
+        battery_level:
+          type: integer
+          minimum: 0
+          maximum: 100
+        consumed_energy:
+          type: integer
+          minimum: 0
+        price:
+          type: integer
+          minimum: 0
+        time:
+          type: string
+          format: date-time
+        timestamp:
+          type: integer
+          format: int64
+        minute:
+          type: integer
+          format: int64
+          minimum: 0
+        unit:
+          type: string
+        measurand:
+          type: string
+        connector_id:
+          type: integer
+          minimum: 0
+        connector_status:
+          type: string
+          enum: ["", "Available", "Preparing", "Charging", "SuspendedEV", "SuspendedEVSE", "Finishing", "Reserved", "Unavailable", "Faulted"]
+
+    ChargeState:
+      type: object
+      properties:
+        transaction_id:
+          type: integer
+          minimum: 1
+        connector_id:
+          type: integer
+          minimum: 0
+        connector:
+          $ref: '#/components/schemas/Connector'
+        charge_point_id:
+          type: string
+        charge_point_title:
+          type: string
+        charge_point_address:
+          type: string
+        time_started:
+          type: string
+          format: date-time
+        meter_start:
+          type: integer
+          minimum: 0
+        duration:
+          type: integer
+          minimum: 0
+          description: Duration in seconds
+        consumed:
+          type: integer
+          minimum: 0
+          description: Consumed energy in Wh
+        power_rate:
+          type: integer
+          minimum: 0
+          description: Current power in W
+        price:
+          type: integer
+          minimum: 0
+        payment_billed:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum: ["", "Available", "Preparing", "Charging", "SuspendedEV", "SuspendedEVSE", "Finishing", "Reserved", "Unavailable", "Faulted"]
+        is_charging:
+          type: boolean
+        can_stop:
+          type: boolean
+        meter_values:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionMeter'
+        id_tag:
+          type: string
+        payment_plan:
+          $ref: '#/components/schemas/PaymentPlan'
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethod'
+        payment_orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentOrder'
+
+    PaymentMethod:
+      type: object
+      properties:
+        description:
+          type: string
+        identifier:
+          type: string
+        card_number:
+          type: string
+        card_type:
+          type: string
+        card_brand:
+          type: string
+        card_country:
+          type: string
+        expiry_date:
+          type: string
+        is_default:
+          type: boolean
+        user_id:
+          type: string
+        user_name:
+          type: string
+        fail_count:
+          type: integer
+        merchant_cof_txnid:
+          type: string
+      required:
+        - identifier
+
+    PaymentOrder:
+      type: object
+      properties:
+        transaction_id:
+          type: integer
+          minimum: 1
+        order:
+          type: integer
+          minimum: 1
+        user_id:
+          type: string
+        user_name:
+          type: string
+        amount:
+          type: integer
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        description:
+          type: string
+        identifier:
+          type: string
+        is_completed:
+          type: boolean
+        result:
+          type: string
+        date:
+          type: string
+        time_opened:
+          type: string
+          format: date-time
+        time_closed:
+          type: string
+          format: date-time
+        refund_amount:
+          type: integer
+          minimum: 0
+        refund_time:
+          type: string
+          format: date-time
+      required:
+        - transaction_id
+        - order
+        - user_id
+        - amount
+        - currency
+        - identifier
+
+    PaymentPlan:
+      type: object
+      properties:
+        plan_id:
+          type: string
+        description:
+          type: string
+        is_default:
+          type: boolean
+        is_active:
+          type: boolean
+        price_per_kwh:
+          type: integer
+          minimum: 0
+        price_per_hour:
+          type: integer
+          minimum: 0
+        start_time:
+          type: string
+        end_time:
+          type: string
+
+    Tariff:
+      type: object
+      properties:
+        tariff_id:
+          type: string
+        description:
+          type: string
+
+    CentralSystemCommand:
+      type: object
+      properties:
+        charge_point_id:
+          type: string
+        connector_id:
+          type: integer
+        feature_name:
+          type: string
+          description: Command name (e.g., RemoteStartTransaction, RemoteStopTransaction)
+        payload:
+          type: string
+      required:
+        - feature_name
+
+    CentralSystemResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: ["success", "error"]
+        info:
+          type: string
+        charge_point_id:
+          type: string
+        connector_id:
+          type: integer
+          minimum: 0
