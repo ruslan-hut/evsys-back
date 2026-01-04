@@ -315,15 +315,33 @@ func (m *MongoDB) StationUptime(ctx context.Context, from, to time.Time, chargeP
 
 	collection := m.client.Database(m.database).Collection(collectionSysLog)
 
-	// Build filter for events containing "registered" and matching enabled charge points
-	filter := bson.D{
+	// Build base filter for events containing "registered" and matching enabled charge points
+	baseFilter := bson.D{
 		{"text", bson.D{{"$regex", "registered"}}},
 		{"charge_point_id", bson.D{{"$in", enabledCPs}}},
 	}
 
+	// Find earliest record timestamp and adjust 'from' if needed
+	earliestOpts := options.FindOne().SetSort(bson.D{{"timestamp", 1}}).SetProjection(bson.D{{"timestamp", 1}})
+	var earliest struct {
+		Timestamp time.Time `bson:"timestamp"`
+	}
+	err = collection.FindOne(ctx, baseFilter, earliestOpts).Decode(&earliest)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return []*entity.StationUptime{}, nil
+		}
+		return nil, m.findError(err)
+	}
+
+	// Limit 'from' to earliest available data
+	if from.Before(earliest.Timestamp) {
+		from = earliest.Timestamp
+	}
+
 	// Get all relevant events sorted by charge_point_id and timestamp
 	opts := options.Find().SetSort(bson.D{{"charge_point_id", 1}, {"timestamp", 1}})
-	cursor, err := collection.Find(ctx, filter, opts)
+	cursor, err := collection.Find(ctx, baseFilter, opts)
 	if err != nil {
 		return nil, m.findError(err)
 	}
