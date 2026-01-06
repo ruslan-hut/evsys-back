@@ -154,7 +154,7 @@ func (m *MongoDB) TotalsByUsers(ctx context.Context, from, to time.Time, userGro
 		{{"$match", bson.D{
 			{"user_info.group", userGroup},
 		}}},
-		// Stage 6: Calculate consumed watts and group by year and month
+		// Stage 6: Calculate consumed watts and group by user_id (not name, to avoid merging different users with same name)
 		{{"$addFields", bson.D{
 			{"consumed_watts", bson.D{
 				{"$subtract", bson.A{"$meter_stop", "$meter_start"}},
@@ -162,26 +162,21 @@ func (m *MongoDB) TotalsByUsers(ctx context.Context, from, to time.Time, userGro
 		}}},
 		{{"$group", bson.D{
 			{"_id", bson.D{
-				//{"year", bson.D{{"$year", "$time_stop"}}},
-				//{"month", bson.D{{"$month", "$time_stop"}}},
-				{"user", "$user_info.name"},
+				{"user_id", "$user_info.user_id"},
 			}},
+			{"user", bson.D{{"$first", "$user_info.name"}}},
 			{"totalConsumed", bson.D{{"$sum", "$consumed_watts"}}},
 			{"avgWatts", bson.D{{"$avg", "$consumed_watts"}}},
 			{"count", bson.D{{"$sum", 1}}},
 		}}},
-		// Stage 7: Sort by year and month
+		// Stage 7: Sort by user name
 		{{"$sort", bson.D{
-			//{"_id.year", 1},
-			//{"_id.month", 1},
-			{"_id.user", 1},
+			{"user", 1},
 		}}},
 		// (Optional) Stage 8: Reshape the output if needed
 		{{"$project", bson.D{
 			{"_id", 0},
-			//{"year", "$_id.year"},
-			//{"month", "$_id.month"},
-			{"user", "$_id.user"},
+			{"user", 1},
 			{"totalConsumed", 1},
 			{"avgWatts", 1},
 			{"count", 1},

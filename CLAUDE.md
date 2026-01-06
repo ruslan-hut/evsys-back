@@ -100,3 +100,7 @@ CI/CD via GitHub Actions (`.github/workflows/deploy.yml`):
 - Replaces env placeholders in `back.yml`
 - Deploys to `/usr/local/bin/evsys-back`
 - Restarts systemd service `evsys-back.service`
+
+## User Preferences
+
+- **Do not run build/test commands** - The user will build and test by themselves
