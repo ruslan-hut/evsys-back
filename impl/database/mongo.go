@@ -830,10 +830,10 @@ func (m *MongoDB) GetFilteredTransactions(ctx context.Context, filter *entity.Tr
 
 	// Filter by date range
 	if filter.From != nil {
-		mongoFilter = append(mongoFilter, bson.E{"time_start", bson.D{{"$gte", *filter.From}}})
+		mongoFilter = append(mongoFilter, bson.E{"time_stop", bson.D{{"$gte", *filter.From}}})
 	}
 	if filter.To != nil {
-		mongoFilter = append(mongoFilter, bson.E{"time_start", bson.D{{"$lte", *filter.To}}})
+		mongoFilter = append(mongoFilter, bson.E{"time_stop", bson.D{{"$lte", *filter.To}}})
 	}
 
 	// Only finished transactions

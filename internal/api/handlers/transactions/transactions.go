@@ -74,7 +74,13 @@ func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 				render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to read transactions: %v", err)))
 				return
 			}
-			log.Info("filtered transactions list")
+			log.With(
+				slog.String("from", filter.From.String()),
+				slog.String("to", filter.To.String()),
+				slog.String("user", filter.Username),
+				slog.String("tag", filter.IdTag),
+				slog.String("charger", filter.ChargePointId),
+			).Info("filtered transactions list")
 			render.JSON(w, r, data)
 			return
 		}
