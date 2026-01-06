@@ -254,25 +254,19 @@ func (m *MongoDB) TotalsByCharger(ctx context.Context, from, to time.Time, userG
 		}}},
 		{{"$group", bson.D{
 			{"_id", bson.D{
-				//{"year", bson.D{{"$year", "$time_stop"}}},
-				//{"month", bson.D{{"$month", "$time_stop"}}},
 				{"charge_point", "$charge_point_id"},
 			}},
 			{"totalConsumed", bson.D{{"$sum", "$consumed_watts"}}},
 			{"avgWatts", bson.D{{"$avg", "$consumed_watts"}}},
 			{"count", bson.D{{"$sum", 1}}},
 		}}},
-		// Stage 7: Sort by year and month
+		// Stage 7: Sort by charge point
 		{{"$sort", bson.D{
-			//{"_id.year", 1},
-			//{"_id.month", 1},
 			{"_id.charge_point", 1},
 		}}},
-		// (Optional) Stage 8: Reshape the output if needed
+		// Stage 8: Reshape the output (uses "user" field for compatibility with ReportLine struct)
 		{{"$project", bson.D{
 			{"_id", 0},
-			//{"year", "$_id.year"},
-			//{"month", "$_id.month"},
 			{"user", "$_id.charge_point"},
 			{"totalConsumed", 1},
 			{"avgWatts", 1},

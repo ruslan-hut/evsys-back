@@ -773,8 +773,8 @@ func (m *MongoDB) GetTransactions(ctx context.Context, userId string, period str
 		filter := bson.D{
 			{"id_tag", bson.D{{"$in", idTags}}},
 			{"is_finished", true},
-			{"time_start", bson.D{{"$gte", time1}}},
-			{"time_start", bson.D{{"$lte", time2}}},
+			{"time_stop", bson.D{{"$gte", time1}}},
+			{"time_stop", bson.D{{"$lte", time2}}},
 		}
 		cursor, err = collection.Find(ctx, filter, options.Find().SetSort(bson.D{{"time_start", -1}}))
 	}
