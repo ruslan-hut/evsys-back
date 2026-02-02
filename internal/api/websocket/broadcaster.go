@@ -27,6 +27,12 @@ func NewBroadcaster(pool *Pool, sr StatusReader, logger *slog.Logger) *Broadcast
 
 // Start begins listening for updates and broadcasting them to subscribed clients
 func (b *Broadcaster) Start(ctx context.Context) {
+	if b.sr == nil {
+		// No status reader configured, nothing to broadcast
+		<-ctx.Done()
+		return
+	}
+
 	lastMessageTime := time.Now()
 	waitStep := 5
 	ticker := time.NewTicker(time.Duration(waitStep) * time.Second)

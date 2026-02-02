@@ -17,22 +17,23 @@ import (
 )
 
 const (
-	collectionSysLog         = "sys_log"
-	collectionBackLog        = "back_log"
-	collectionPaymentLog     = "payment_log"
-	collectionConfig         = "config"
-	collectionUsers          = "users"
-	collectionUserTags       = "user_tags"
-	collectionChargePoints   = "charge_points"
-	collectionConnectors     = "connectors"
-	collectionTransactions   = "transactions"
-	collectionMeterValues    = "meter_values"
-	collectionInvites        = "invites"
-	collectionPayment        = "payment"
-	collectionPaymentMethods = "payment_methods"
-	collectionPaymentOrders  = "payment_orders"
-	collectionPaymentPlans   = "payment_plans"
-	collectionLocations      = "locations"
+	collectionSysLog            = "sys_log"
+	collectionBackLog           = "back_log"
+	collectionPaymentLog        = "payment_log"
+	collectionConfig            = "config"
+	collectionUsers             = "users"
+	collectionUserTags          = "user_tags"
+	collectionChargePoints      = "charge_points"
+	collectionConnectors        = "connectors"
+	collectionTransactions      = "transactions"
+	collectionMeterValues       = "meter_values"
+	collectionInvites           = "invites"
+	collectionPayment           = "payment"
+	collectionPaymentMethods    = "payment_methods"
+	collectionPaymentOrders     = "payment_orders"
+	collectionPaymentPlans      = "payment_plans"
+	collectionLocations         = "locations"
+	collectionPreauthorizations = "preauthorizations"
 )
 
 type MongoDB struct {
@@ -1243,4 +1244,69 @@ func (m *MongoDB) GetLocations(ctx context.Context) ([]*entity.Location, error) 
 		return nil, err
 	}
 	return locations, nil
+}
+
+// SavePreauthorization saves a preauthorization record (insert or update)
+func (m *MongoDB) SavePreauthorization(ctx context.Context, preauth *entity.Preauthorization) error {
+	collection := m.client.Database(m.database).Collection(collectionPreauthorizations)
+	filter := bson.D{{"order_number", preauth.OrderNumber}}
+	set := bson.M{"$set": preauth}
+	_, err := collection.UpdateOne(ctx, filter, set, options.Update().SetUpsert(true))
+	return err
+}
+
+// GetPreauthorization retrieves a preauthorization by order number
+func (m *MongoDB) GetPreauthorization(ctx context.Context, orderNumber string) (*entity.Preauthorization, error) {
+	collection := m.client.Database(m.database).Collection(collectionPreauthorizations)
+	filter := bson.D{{"order_number", orderNumber}}
+	var preauth entity.Preauthorization
+	if err := collection.FindOne(ctx, filter).Decode(&preauth); err != nil {
+		return nil, m.findError(err)
+	}
+	return &preauth, nil
+}
+
+// GetPreauthorizationByTransaction retrieves a preauthorization by transaction ID
+func (m *MongoDB) GetPreauthorizationByTransaction(ctx context.Context, transactionId int) (*entity.Preauthorization, error) {
+	collection := m.client.Database(m.database).Collection(collectionPreauthorizations)
+	filter := bson.D{{"transaction_id", transactionId}}
+	var preauth entity.Preauthorization
+	if err := collection.FindOne(ctx, filter, options.FindOne().SetSort(bson.D{{"created_at", -1}})).Decode(&preauth); err != nil {
+		return nil, m.findError(err)
+	}
+	return &preauth, nil
+}
+
+// UpdatePreauthorization updates an existing preauthorization
+func (m *MongoDB) UpdatePreauthorization(ctx context.Context, preauth *entity.Preauthorization) error {
+	collection := m.client.Database(m.database).Collection(collectionPreauthorizations)
+	filter := bson.D{{"order_number", preauth.OrderNumber}}
+	update := bson.M{"$set": bson.D{
+		{"authorization_code", preauth.AuthorizationCode},
+		{"captured_amount", preauth.CapturedAmount},
+		{"status", preauth.Status},
+		{"error_code", preauth.ErrorCode},
+		{"error_message", preauth.ErrorMessage},
+		{"merchant_data", preauth.MerchantData},
+		{"updated_at", preauth.UpdatedAt},
+	}}
+	result, err := collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("preauthorization not found")
+	}
+	return nil
+}
+
+// GetLastPreauthorizationOrder retrieves the most recent preauthorization order
+func (m *MongoDB) GetLastPreauthorizationOrder(ctx context.Context) (*entity.Preauthorization, error) {
+	collection := m.client.Database(m.database).Collection(collectionPreauthorizations)
+	filter := bson.D{}
+	var preauth entity.Preauthorization
+	if err := collection.FindOne(ctx, filter, options.FindOne().SetSort(bson.D{{"created_at", -1}})).Decode(&preauth); err != nil {
+		return nil, m.findError(err)
+	}
+	return &preauth, nil
 }

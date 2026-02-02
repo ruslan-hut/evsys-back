@@ -8,6 +8,7 @@ import (
 	"evsys-back/impl/core"
 	"evsys-back/impl/database"
 	databasemock "evsys-back/impl/database-mock"
+	"evsys-back/impl/redsys"
 	"evsys-back/impl/reports"
 	statusreader "evsys-back/impl/status-reader"
 	"evsys-back/internal/api/http"
@@ -91,6 +92,21 @@ func main() {
 		).Info("connecting to central system")
 		cs := centralsystem.NewCentralSystem(conf.CentralSystem.Url, conf.CentralSystem.Token)
 		coreHandler.SetCentralSystem(cs)
+	}
+
+	if conf.Redsys.Enabled {
+		log.With(
+			slog.String("merchant_code", conf.Redsys.MerchantCode),
+			slog.String("terminal", conf.Redsys.Terminal),
+		).Info("initializing redsys client")
+		redsysClient := redsys.NewClient(redsys.Config{
+			MerchantCode: conf.Redsys.MerchantCode,
+			Terminal:     conf.Redsys.Terminal,
+			SecretKey:    conf.Redsys.SecretKey,
+			RestApiUrl:   conf.Redsys.RestApiUrl,
+			Currency:     conf.Redsys.Currency,
+		}, log)
+		coreHandler.SetRedsys(redsys.NewAdapter(redsysClient))
 	}
 
 	server := http.NewServer(conf, log, coreHandler)

@@ -22,3 +22,10 @@ mongo:
   user: ${MONGO_USER}
   password: ${MONGO_PASS}
   database: ${MONGO_DB}
+redsys:
+  enabled: ${REDSYS_ENABLED}
+  merchant_code: ${REDSYS_MERCHANT_CODE}
+  terminal: ${REDSYS_TERMINAL}
+  secret_key: ${REDSYS_SECRET_KEY}
+  rest_api_url: ${REDSYS_REST_API_URL}
+  currency: ${REDSYS_CURRENCY}

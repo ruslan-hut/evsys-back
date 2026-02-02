@@ -10,38 +10,42 @@ import (
 
 // MockDB provides an in-memory database implementation for testing
 type MockDB struct {
-	users          map[string]*entity.User            // key: username
-	usersById      map[string]*entity.User            // key: userId
-	tokens         map[string]*entity.User            // key: token
-	userTags       map[string][]entity.UserTag        // key: userId
-	allTags        map[string]bool                    // key: idTag (for uniqueness check)
-	invites        map[string]*entity.Invite          // key: code
-	transactions   map[int]*entity.Transaction        // key: transactionId
-	chargeStates   map[int]*entity.ChargeState        // key: transactionId
-	meterValues    map[int][]entity.TransactionMeter  // key: transactionId
-	paymentMethods map[string][]*entity.PaymentMethod // key: userId
-	paymentOrders  map[int]*entity.PaymentOrder       // key: orderId
-	ordersByTx     map[int]*entity.PaymentOrder       // key: transactionId
-	lastOrderId    int
-	mux            sync.RWMutex
+	users             map[string]*entity.User             // key: username
+	usersById         map[string]*entity.User             // key: userId
+	tokens            map[string]*entity.User             // key: token
+	userTags          map[string][]entity.UserTag         // key: userId
+	allTags           map[string]bool                     // key: idTag (for uniqueness check)
+	invites           map[string]*entity.Invite           // key: code
+	transactions      map[int]*entity.Transaction         // key: transactionId
+	chargeStates      map[int]*entity.ChargeState         // key: transactionId
+	meterValues       map[int][]entity.TransactionMeter   // key: transactionId
+	paymentMethods    map[string][]*entity.PaymentMethod  // key: userId
+	paymentOrders     map[int]*entity.PaymentOrder        // key: orderId
+	ordersByTx        map[int]*entity.PaymentOrder        // key: transactionId
+	preauthorizations map[string]*entity.Preauthorization // key: orderNumber
+	preauthByTx       map[int]*entity.Preauthorization    // key: transactionId
+	lastOrderId       int
+	mux               sync.RWMutex
 }
 
 // NewMockDB creates a new MockDB with initialized maps
 func NewMockDB() *MockDB {
 	return &MockDB{
-		users:          make(map[string]*entity.User),
-		usersById:      make(map[string]*entity.User),
-		tokens:         make(map[string]*entity.User),
-		userTags:       make(map[string][]entity.UserTag),
-		allTags:        make(map[string]bool),
-		invites:        make(map[string]*entity.Invite),
-		transactions:   make(map[int]*entity.Transaction),
-		chargeStates:   make(map[int]*entity.ChargeState),
-		meterValues:    make(map[int][]entity.TransactionMeter),
-		paymentMethods: make(map[string][]*entity.PaymentMethod),
-		paymentOrders:  make(map[int]*entity.PaymentOrder),
-		ordersByTx:     make(map[int]*entity.PaymentOrder),
-		lastOrderId:    0,
+		users:             make(map[string]*entity.User),
+		usersById:         make(map[string]*entity.User),
+		tokens:            make(map[string]*entity.User),
+		userTags:          make(map[string][]entity.UserTag),
+		allTags:           make(map[string]bool),
+		invites:           make(map[string]*entity.Invite),
+		transactions:      make(map[int]*entity.Transaction),
+		chargeStates:      make(map[int]*entity.ChargeState),
+		meterValues:       make(map[int][]entity.TransactionMeter),
+		paymentMethods:    make(map[string][]*entity.PaymentMethod),
+		paymentOrders:     make(map[int]*entity.PaymentOrder),
+		ordersByTx:        make(map[int]*entity.PaymentOrder),
+		preauthorizations: make(map[string]*entity.Preauthorization),
+		preauthByTx:       make(map[int]*entity.Preauthorization),
+		lastOrderId:       0,
 	}
 }
 
@@ -61,6 +65,8 @@ func (db *MockDB) Reset() {
 	db.paymentMethods = make(map[string][]*entity.PaymentMethod)
 	db.paymentOrders = make(map[int]*entity.PaymentOrder)
 	db.ordersByTx = make(map[int]*entity.PaymentOrder)
+	db.preauthorizations = make(map[string]*entity.Preauthorization)
+	db.preauthByTx = make(map[int]*entity.Preauthorization)
 	db.lastOrderId = 0
 }
 
@@ -689,4 +695,65 @@ func (db *MockDB) StationUptime(_ context.Context, from, to time.Time, chargePoi
 
 func (db *MockDB) StationStatus(_ context.Context, chargePointId string) ([]*entity.StationStatus, error) {
 	return nil, nil
+}
+
+// --- Preauthorizations ---
+
+func (db *MockDB) SavePreauthorization(_ context.Context, preauth *entity.Preauthorization) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	db.preauthorizations[preauth.OrderNumber] = preauth
+	if preauth.TransactionId > 0 {
+		db.preauthByTx[preauth.TransactionId] = preauth
+	}
+	return nil
+}
+
+func (db *MockDB) GetPreauthorization(_ context.Context, orderNumber string) (*entity.Preauthorization, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	preauth, ok := db.preauthorizations[orderNumber]
+	if !ok {
+		return nil, nil
+	}
+	return preauth, nil
+}
+
+func (db *MockDB) GetPreauthorizationByTransaction(_ context.Context, transactionId int) (*entity.Preauthorization, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	preauth, ok := db.preauthByTx[transactionId]
+	if !ok {
+		return nil, nil
+	}
+	return preauth, nil
+}
+
+func (db *MockDB) UpdatePreauthorization(_ context.Context, preauth *entity.Preauthorization) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	existing, ok := db.preauthorizations[preauth.OrderNumber]
+	if !ok {
+		return fmt.Errorf("preauthorization not found")
+	}
+	existing.AuthorizationCode = preauth.AuthorizationCode
+	existing.CapturedAmount = preauth.CapturedAmount
+	existing.Status = preauth.Status
+	existing.ErrorCode = preauth.ErrorCode
+	existing.ErrorMessage = preauth.ErrorMessage
+	existing.MerchantData = preauth.MerchantData
+	existing.UpdatedAt = preauth.UpdatedAt
+	return nil
+}
+
+func (db *MockDB) GetLastPreauthorizationOrder(_ context.Context) (*entity.Preauthorization, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	var latest *entity.Preauthorization
+	for _, preauth := range db.preauthorizations {
+		if latest == nil || preauth.CreatedAt.After(latest.CreatedAt) {
+			latest = preauth
+		}
+	}
+	return latest, nil
 }

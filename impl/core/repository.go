@@ -29,4 +29,11 @@ type Repository interface {
 	GetLastOrder(ctx context.Context) (*entity.PaymentOrder, error)
 	SavePaymentOrder(ctx context.Context, order *entity.PaymentOrder) error
 	GetPaymentOrderByTransaction(ctx context.Context, transactionId int) (*entity.PaymentOrder, error)
+
+	// Preauthorization methods
+	SavePreauthorization(ctx context.Context, preauth *entity.Preauthorization) error
+	GetPreauthorization(ctx context.Context, orderNumber string) (*entity.Preauthorization, error)
+	GetPreauthorizationByTransaction(ctx context.Context, transactionId int) (*entity.Preauthorization, error)
+	UpdatePreauthorization(ctx context.Context, preauth *entity.Preauthorization) error
+	GetLastPreauthorizationOrder(ctx context.Context) (*entity.Preauthorization, error)
 }

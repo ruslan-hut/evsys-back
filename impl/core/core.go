@@ -20,7 +20,30 @@ type Core struct {
 	auth    Authenticator
 	cs      CentralSystem
 	reports Reports
+	redsys  RedsysClient
 	log     *slog.Logger
+}
+
+// RedsysClient interface for Redsys operations
+type RedsysClient interface {
+	Capture(ctx context.Context, req CaptureRequest) (*CaptureResponse, error)
+	Cancel(ctx context.Context, req CaptureRequest) (*CaptureResponse, error)
+}
+
+// CaptureRequest for Redsys capture operations
+type CaptureRequest struct {
+	OrderNumber       string
+	Amount            int
+	AuthorizationCode string
+}
+
+// CaptureResponse from Redsys operations
+type CaptureResponse struct {
+	Success           bool
+	ResponseCode      string
+	AuthorizationCode string
+	ErrorCode         string
+	ErrorMessage      string
 }
 
 func New(log *slog.Logger, repo Repository) *Core {
@@ -40,6 +63,10 @@ func (c *Core) SetCentralSystem(cs CentralSystem) {
 
 func (c *Core) SetReports(reports Reports) {
 	c.reports = reports
+}
+
+func (c *Core) SetRedsys(redsys RedsysClient) {
+	c.redsys = redsys
 }
 
 func (c *Core) GetConfig(ctx context.Context, name string) (interface{}, error) {
@@ -493,4 +520,220 @@ func (c *Core) StationStatusReport(ctx context.Context, user *entity.User, charg
 		return nil, err
 	}
 	return c.reports.StationStatus(ctx, chargePointId)
+}
+
+// CreatePreauthorizationOrder creates a new preauthorization order
+func (c *Core) CreatePreauthorizationOrder(ctx context.Context, user *entity.User, req *entity.PreauthorizationOrderRequest) (*entity.PreauthorizationOrderResponse, error) {
+	if user == nil {
+		return nil, fmt.Errorf("user is nil")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("request is nil")
+	}
+
+	// Generate order number based on last order
+	lastOrder, _ := c.repo.GetLastPreauthorizationOrder(ctx)
+	var orderNumber string
+	if lastOrder != nil {
+		// Parse last order number and increment
+		var lastNum int
+		fmt.Sscanf(lastOrder.OrderNumber, "%d", &lastNum)
+		orderNumber = fmt.Sprintf("%012d", lastNum+1)
+	} else {
+		orderNumber = "000000001200" // Start from 1200
+	}
+
+	now := time.Now()
+	preauth := &entity.Preauthorization{
+		OrderNumber:         orderNumber,
+		PreauthorizedAmount: req.Amount,
+		Status:              entity.PreauthorizationStatusPending,
+		TransactionId:       req.TransactionId,
+		PaymentMethodId:     req.PaymentMethodId,
+		UserId:              user.UserId,
+		UserName:            user.Username,
+		Currency:            req.Currency,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+	}
+
+	err := c.repo.SavePreauthorization(ctx, preauth)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save preauthorization: %w", err)
+	}
+
+	return &entity.PreauthorizationOrderResponse{
+		OrderNumber: orderNumber,
+		Amount:      req.Amount,
+		Currency:    req.Currency,
+	}, nil
+}
+
+// SavePreauthorization saves a preauthorization result from Redsys callback
+func (c *Core) SavePreauthorization(ctx context.Context, user *entity.User, req *entity.PreauthorizationSaveRequest) error {
+	if user == nil {
+		return fmt.Errorf("user is nil")
+	}
+	if req == nil {
+		return fmt.Errorf("request is nil")
+	}
+
+	preauth, err := c.repo.GetPreauthorization(ctx, req.OrderNumber)
+	if err != nil {
+		return fmt.Errorf("failed to get preauthorization: %w", err)
+	}
+	if preauth == nil {
+		return fmt.Errorf("preauthorization not found")
+	}
+
+	// Verify user owns this preauthorization
+	if preauth.UserId != user.UserId {
+		return fmt.Errorf("access denied: preauthorization belongs to another user")
+	}
+
+	// Update preauthorization based on result
+	switch req.Status {
+	case "AUTHORIZED":
+		preauth.Status = entity.PreauthorizationStatusAuthorized
+	case "FAILED":
+		preauth.Status = entity.PreauthorizationStatusFailed
+	case "CANCELLED":
+		preauth.Status = entity.PreauthorizationStatusCancelled
+	default:
+		preauth.Status = entity.PreauthorizationStatusFailed
+	}
+
+	preauth.AuthorizationCode = req.AuthorizationCode
+	preauth.ErrorCode = req.ErrorCode
+	preauth.ErrorMessage = req.ErrorMessage
+	preauth.MerchantData = req.MerchantData
+	preauth.UpdatedAt = time.Now()
+
+	return c.repo.UpdatePreauthorization(ctx, preauth)
+}
+
+// GetPreauthorization retrieves a preauthorization by transaction ID
+func (c *Core) GetPreauthorization(ctx context.Context, user *entity.User, transactionId int) (*entity.Preauthorization, error) {
+	if user == nil {
+		return nil, fmt.Errorf("user is nil")
+	}
+
+	preauth, err := c.repo.GetPreauthorizationByTransaction(ctx, transactionId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get preauthorization: %w", err)
+	}
+	if preauth == nil {
+		return nil, nil
+	}
+
+	// Verify user owns this preauthorization or is admin
+	if preauth.UserId != user.UserId && !user.IsPowerUser() {
+		return nil, fmt.Errorf("access denied: preauthorization belongs to another user")
+	}
+
+	return preauth, nil
+}
+
+// CapturePreauthorization captures a preauthorized amount via Redsys
+func (c *Core) CapturePreauthorization(ctx context.Context, user *entity.User, req *entity.CaptureOrderRequest) (*entity.CaptureOrderResponse, error) {
+	if user == nil {
+		return nil, fmt.Errorf("user is nil")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("request is nil")
+	}
+	if c.redsys == nil {
+		return nil, fmt.Errorf("redsys client not configured")
+	}
+
+	preauth, err := c.repo.GetPreauthorization(ctx, req.OrderNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get preauthorization: %w", err)
+	}
+	if preauth == nil {
+		return nil, fmt.Errorf("preauthorization not found")
+	}
+
+	// Verify preauthorization is in correct state
+	if preauth.Status != entity.PreauthorizationStatusAuthorized {
+		return nil, fmt.Errorf("preauthorization is not in authorized state")
+	}
+
+	// Verify capture amount doesn't exceed preauthorized amount
+	if req.Amount > preauth.PreauthorizedAmount {
+		return nil, fmt.Errorf("capture amount exceeds preauthorized amount")
+	}
+
+	// Call Redsys to capture
+	captureReq := CaptureRequest{
+		OrderNumber:       req.OrderNumber,
+		Amount:            req.Amount,
+		AuthorizationCode: preauth.AuthorizationCode,
+	}
+
+	resp, err := c.redsys.Capture(ctx, captureReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to capture: %w", err)
+	}
+
+	// Update preauthorization based on result
+	if resp.Success {
+		preauth.Status = entity.PreauthorizationStatusCaptured
+		preauth.CapturedAmount = req.Amount
+	} else {
+		preauth.ErrorCode = resp.ErrorCode
+		preauth.ErrorMessage = resp.ErrorMessage
+	}
+	preauth.UpdatedAt = time.Now()
+
+	if err := c.repo.UpdatePreauthorization(ctx, preauth); err != nil {
+		c.log.With(sl.Err(err)).Error("failed to update preauthorization after capture")
+	}
+
+	return &entity.CaptureOrderResponse{
+		OrderNumber:    req.OrderNumber,
+		CapturedAmount: req.Amount,
+		Status:         preauth.Status,
+		ErrorCode:      resp.ErrorCode,
+		ErrorMessage:   resp.ErrorMessage,
+	}, nil
+}
+
+// UpdatePreauthorization updates preauthorization status
+func (c *Core) UpdatePreauthorization(ctx context.Context, user *entity.User, req *entity.PreauthorizationUpdateRequest) error {
+	if user == nil {
+		return fmt.Errorf("user is nil")
+	}
+	if req == nil {
+		return fmt.Errorf("request is nil")
+	}
+
+	preauth, err := c.repo.GetPreauthorization(ctx, req.OrderNumber)
+	if err != nil {
+		return fmt.Errorf("failed to get preauthorization: %w", err)
+	}
+	if preauth == nil {
+		return fmt.Errorf("preauthorization not found")
+	}
+
+	// Verify user owns this preauthorization or is admin
+	if preauth.UserId != user.UserId && !user.IsPowerUser() {
+		return fmt.Errorf("access denied: preauthorization belongs to another user")
+	}
+
+	switch req.Status {
+	case "AUTHORIZED":
+		preauth.Status = entity.PreauthorizationStatusAuthorized
+	case "CAPTURED":
+		preauth.Status = entity.PreauthorizationStatusCaptured
+	case "CANCELLED":
+		preauth.Status = entity.PreauthorizationStatusCancelled
+	case "FAILED":
+		preauth.Status = entity.PreauthorizationStatusFailed
+	default:
+		return fmt.Errorf("invalid status: %s", req.Status)
+	}
+
+	preauth.UpdatedAt = time.Now()
+	return c.repo.UpdatePreauthorization(ctx, preauth)
 }
