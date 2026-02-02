@@ -57,7 +57,7 @@ func PreauthorizeOrder(logger *slog.Logger, handler Preauthorizations) http.Hand
 			render.JSON(w, r, response.Error(3001, fmt.Sprintf("Failed to create order: %v", err)))
 			return
 		}
-		log.With(slog.String("order_number", resp.OrderNumber)).Info("preauthorization order created")
+		log.With(slog.Int("order", resp.Order)).Info("preauthorization order created")
 
 		render.JSON(w, r, resp)
 	}
@@ -164,7 +164,7 @@ func CaptureOrder(logger *slog.Logger, handler Preauthorizations) http.HandlerFu
 			return
 		}
 		log = log.With(
-			slog.String("order_number", req.OrderNumber),
+			slog.String("original_order", req.OriginalOrder),
 			slog.Int("amount", req.Amount),
 		)
 
@@ -177,7 +177,7 @@ func CaptureOrder(logger *slog.Logger, handler Preauthorizations) http.HandlerFu
 		}
 		log.With(
 			slog.String("status", string(resp.Status)),
-			slog.Int("captured_amount", resp.CapturedAmount),
+			slog.Int("amount", resp.Amount),
 		).Info("capture completed")
 
 		render.JSON(w, r, resp)

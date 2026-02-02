@@ -16,12 +16,13 @@ const (
 )
 
 type Core struct {
-	repo    Repository
-	auth    Authenticator
-	cs      CentralSystem
-	reports Reports
-	redsys  RedsysClient
-	log     *slog.Logger
+	repo     Repository
+	auth     Authenticator
+	cs       CentralSystem
+	reports  Reports
+	redsys   RedsysClient
+	currency string
+	log      *slog.Logger
 }
 
 // RedsysClient interface for Redsys operations
@@ -67,6 +68,10 @@ func (c *Core) SetReports(reports Reports) {
 
 func (c *Core) SetRedsys(redsys RedsysClient) {
 	c.redsys = redsys
+}
+
+func (c *Core) SetCurrency(currency string) {
+	c.currency = currency
 }
 
 func (c *Core) GetConfig(ctx context.Context, name string) (interface{}, error) {
@@ -533,14 +538,26 @@ func (c *Core) CreatePreauthorizationOrder(ctx context.Context, user *entity.Use
 
 	// Generate order number based on last order
 	lastOrder, _ := c.repo.GetLastPreauthorizationOrder(ctx)
-	var orderNumber string
+	var orderNum int
 	if lastOrder != nil {
 		// Parse last order number and increment
-		var lastNum int
-		fmt.Sscanf(lastOrder.OrderNumber, "%d", &lastNum)
-		orderNumber = fmt.Sprintf("%012d", lastNum+1)
+		fmt.Sscanf(lastOrder.OrderNumber, "%d", &orderNum)
+		orderNum++
 	} else {
-		orderNumber = "000000001200" // Start from 1200
+		orderNum = 1200 // Start from 1200
+	}
+	orderNumber := fmt.Sprintf("%012d", orderNum)
+
+	// Default transaction type to "1" (preauthorization) if not specified
+	transactionType := req.TransactionType
+	if transactionType == "" {
+		transactionType = "1"
+	}
+
+	// Use currency from config, default to EUR (978) if not set
+	currency := c.currency
+	if currency == "" {
+		currency = "978"
 	}
 
 	now := time.Now()
@@ -552,7 +569,7 @@ func (c *Core) CreatePreauthorizationOrder(ctx context.Context, user *entity.Use
 		PaymentMethodId:     req.PaymentMethodId,
 		UserId:              user.UserId,
 		UserName:            user.Username,
-		Currency:            req.Currency,
+		Currency:            currency,
 		CreatedAt:           now,
 		UpdatedAt:           now,
 	}
@@ -563,9 +580,12 @@ func (c *Core) CreatePreauthorizationOrder(ctx context.Context, user *entity.Use
 	}
 
 	return &entity.PreauthorizationOrderResponse{
-		OrderNumber: orderNumber,
-		Amount:      req.Amount,
-		Currency:    req.Currency,
+		Order:           orderNum,
+		Amount:          req.Amount,
+		Description:     req.Description,
+		TransactionType: transactionType,
+		PaymentMethodId: req.PaymentMethodId,
+		TransactionId:   req.TransactionId,
 	}, nil
 }
 
@@ -646,7 +666,7 @@ func (c *Core) CapturePreauthorization(ctx context.Context, user *entity.User, r
 		return nil, fmt.Errorf("redsys client not configured")
 	}
 
-	preauth, err := c.repo.GetPreauthorization(ctx, req.OrderNumber)
+	preauth, err := c.repo.GetPreauthorization(ctx, req.OriginalOrder)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get preauthorization: %w", err)
 	}
@@ -664,16 +684,32 @@ func (c *Core) CapturePreauthorization(ctx context.Context, user *entity.User, r
 		return nil, fmt.Errorf("capture amount exceeds preauthorized amount")
 	}
 
+	// Use authorization code from request if provided, otherwise from stored preauth
+	authCode := req.AuthorizationCode
+	if authCode == "" {
+		authCode = preauth.AuthorizationCode
+	}
+
 	// Call Redsys to capture
 	captureReq := CaptureRequest{
-		OrderNumber:       req.OrderNumber,
+		OrderNumber:       req.OriginalOrder,
 		Amount:            req.Amount,
-		AuthorizationCode: preauth.AuthorizationCode,
+		AuthorizationCode: authCode,
 	}
 
 	resp, err := c.redsys.Capture(ctx, captureReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to capture: %w", err)
+	}
+
+	// Parse order number for response
+	var orderNum int
+	fmt.Sscanf(req.OriginalOrder, "%d", &orderNum)
+
+	// Default transaction type to "2" (capture) if not specified
+	transactionType := req.TransactionType
+	if transactionType == "" {
+		transactionType = "2"
 	}
 
 	// Update preauthorization based on result
@@ -691,11 +727,12 @@ func (c *Core) CapturePreauthorization(ctx context.Context, user *entity.User, r
 	}
 
 	return &entity.CaptureOrderResponse{
-		OrderNumber:    req.OrderNumber,
-		CapturedAmount: req.Amount,
-		Status:         preauth.Status,
-		ErrorCode:      resp.ErrorCode,
-		ErrorMessage:   resp.ErrorMessage,
+		Order:           orderNum,
+		Amount:          req.Amount,
+		TransactionType: transactionType,
+		Status:          preauth.Status,
+		ErrorCode:       resp.ErrorCode,
+		ErrorMessage:    resp.ErrorMessage,
 	}, nil
 }
 

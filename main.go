@@ -107,6 +107,7 @@ func main() {
 			Currency:     conf.Redsys.Currency,
 		}, log)
 		coreHandler.SetRedsys(redsys.NewAdapter(redsysClient))
+		coreHandler.SetCurrency(conf.Redsys.Currency)
 	}
 
 	server := http.NewServer(conf, log, coreHandler)

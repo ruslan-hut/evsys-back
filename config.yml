@@ -7,7 +7,7 @@ firebase_key:
 listen:
   type: port
   bind_ip: 0.0.0.0
-  port: 5000
+  port: 5500
   tls_enabled: false
   cert_file: c:/cert/cert.pem
   key_file: c:/cert/key.pem

@@ -38,11 +38,11 @@ type Preauthorization struct {
 
 // PreauthorizationOrderRequest is the request body for creating a preauthorization order
 type PreauthorizationOrderRequest struct {
-	TransactionId   int    `json:"transaction_id" validate:"required,min=1"`
 	Amount          int    `json:"amount" validate:"required,min=1"`
-	Currency        string `json:"currency" validate:"required,len=3"`
-	PaymentMethodId string `json:"payment_method_id" validate:"required"`
+	TransactionType string `json:"transaction_type" validate:"omitempty"`
 	Description     string `json:"description" validate:"omitempty"`
+	PaymentMethodId string `json:"payment_method_id" validate:"required"`
+	TransactionId   int    `json:"transaction_id" validate:"omitempty,min=0"`
 }
 
 func (r *PreauthorizationOrderRequest) Bind(_ *http.Request) error {
@@ -51,11 +51,12 @@ func (r *PreauthorizationOrderRequest) Bind(_ *http.Request) error {
 
 // PreauthorizationOrderResponse is the response for preauthorization order creation
 type PreauthorizationOrderResponse struct {
-	OrderNumber    string `json:"order_number"`
-	Amount         int    `json:"amount"`
-	Currency       string `json:"currency"`
-	MerchantParams string `json:"merchant_params,omitempty"`
-	Signature      string `json:"signature,omitempty"`
+	Order           int    `json:"order"`
+	Amount          int    `json:"amount"`
+	Description     string `json:"description,omitempty"`
+	TransactionType string `json:"transaction_type"`
+	PaymentMethodId string `json:"payment_method_id"`
+	TransactionId   int    `json:"transaction_id"`
 }
 
 // PreauthorizationSaveRequest is the request for saving preauthorization result from Redsys
@@ -74,8 +75,12 @@ func (r *PreauthorizationSaveRequest) Bind(_ *http.Request) error {
 
 // CaptureOrderRequest is the request for capturing a preauthorized amount
 type CaptureOrderRequest struct {
-	OrderNumber string `json:"order_number" validate:"required"`
-	Amount      int    `json:"amount" validate:"required,min=1"`
+	Amount            int    `json:"amount" validate:"required,min=1"`
+	TransactionType   string `json:"transaction_type" validate:"omitempty"`
+	Description       string `json:"description" validate:"omitempty"`
+	AuthorizationCode string `json:"authorization_code" validate:"omitempty"`
+	OriginalOrder     string `json:"original_order" validate:"required"`
+	TransactionId     int    `json:"transaction_id" validate:"omitempty,min=0"`
 }
 
 func (r *CaptureOrderRequest) Bind(_ *http.Request) error {
@@ -84,11 +89,12 @@ func (r *CaptureOrderRequest) Bind(_ *http.Request) error {
 
 // CaptureOrderResponse is the response for capture operation
 type CaptureOrderResponse struct {
-	OrderNumber    string                 `json:"order_number"`
-	CapturedAmount int                    `json:"captured_amount"`
-	Status         PreauthorizationStatus `json:"status"`
-	ErrorCode      string                 `json:"error_code,omitempty"`
-	ErrorMessage   string                 `json:"error_message,omitempty"`
+	Order           int                    `json:"order"`
+	Amount          int                    `json:"amount"`
+	TransactionType string                 `json:"transaction_type"`
+	Status          PreauthorizationStatus `json:"status,omitempty"`
+	ErrorCode       string                 `json:"error_code,omitempty"`
+	ErrorMessage    string                 `json:"error_message,omitempty"`
 }
 
 // PreauthorizationUpdateRequest is the request for updating preauthorization status
