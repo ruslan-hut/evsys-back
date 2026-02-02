@@ -29,6 +29,7 @@ type Core struct {
 type RedsysClient interface {
 	Capture(ctx context.Context, req CaptureRequest) (*CaptureResponse, error)
 	Cancel(ctx context.Context, req CaptureRequest) (*CaptureResponse, error)
+	Preauthorize(ctx context.Context, req PreauthorizeRequest) (*CaptureResponse, error)
 }
 
 // CaptureRequest for Redsys capture operations
@@ -45,6 +46,14 @@ type CaptureResponse struct {
 	AuthorizationCode string
 	ErrorCode         string
 	ErrorMessage      string
+}
+
+// PreauthorizeRequest for Redsys MIT preauthorization
+type PreauthorizeRequest struct {
+	OrderNumber string
+	Amount      int
+	CardToken   string
+	CofTid      string // Network transaction ID from initial authorization
 }
 
 func New(log *slog.Logger, repo Repository) *Core {
@@ -534,13 +543,16 @@ func (c *Core) StationStatusReport(ctx context.Context, user *entity.User, charg
 	return c.reports.StationStatus(ctx, chargePointId)
 }
 
-// CreatePreauthorizationOrder creates a new preauthorization order
+// CreatePreauthorizationOrder creates a new preauthorization order and performs MIT preauthorization via Redsys
 func (c *Core) CreatePreauthorizationOrder(ctx context.Context, user *entity.User, req *entity.PreauthorizationOrderRequest) (*entity.PreauthorizationOrderResponse, error) {
 	if user == nil {
 		return nil, fmt.Errorf("user is nil")
 	}
 	if req == nil {
 		return nil, fmt.Errorf("request is nil")
+	}
+	if c.redsys == nil {
+		return nil, fmt.Errorf("redsys client not configured")
 	}
 
 	// Generate order number based on last order
@@ -581,19 +593,88 @@ func (c *Core) CreatePreauthorizationOrder(ctx context.Context, user *entity.Use
 		UpdatedAt:           now,
 	}
 
+	// Save initial preauthorization record
 	err := c.repo.SavePreauthorization(ctx, preauth)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save preauthorization: %w", err)
 	}
 
-	return &entity.PreauthorizationOrderResponse{
+	// Get payment method to retrieve CofTid for MIT transaction
+	var cofTid string
+	paymentMethods, err := c.repo.GetPaymentMethods(ctx, user.UserId)
+	if err != nil {
+		c.log.With(sl.Err(err)).Warn("failed to get payment methods for CofTid lookup")
+	} else if paymentMethods != nil {
+		for _, pm := range paymentMethods {
+			if pm.Identifier == req.PaymentMethodId {
+				cofTid = pm.CofTid
+				break
+			}
+		}
+	}
+
+	// Call Redsys REST API for MIT preauthorization
+	preauthorizeReq := PreauthorizeRequest{
+		OrderNumber: orderNumber,
+		Amount:      req.Amount,
+		CardToken:   req.PaymentMethodId,
+		CofTid:      cofTid,
+	}
+
+	resp, err := c.redsys.Preauthorize(ctx, preauthorizeReq)
+	if err != nil {
+		// Update preauthorization with error
+		preauth.Status = entity.PreauthorizationStatusFailed
+		preauth.ErrorMessage = err.Error()
+		preauth.UpdatedAt = time.Now()
+		if updateErr := c.repo.UpdatePreauthorization(ctx, preauth); updateErr != nil {
+			c.log.With(sl.Err(updateErr)).Error("failed to update preauthorization after error")
+		}
+		return &entity.PreauthorizationOrderResponse{
+			Order:           orderNum,
+			Amount:          req.Amount,
+			Description:     req.Description,
+			TransactionType: transactionType,
+			PaymentMethodId: req.PaymentMethodId,
+			TransactionId:   req.TransactionId,
+			Error:           err.Error(),
+		}, nil
+	}
+
+	// Update preauthorization based on Redsys response
+	if resp.Success {
+		preauth.Status = entity.PreauthorizationStatusAuthorized
+		preauth.AuthorizationCode = resp.AuthorizationCode
+	} else {
+		preauth.Status = entity.PreauthorizationStatusFailed
+		preauth.ErrorCode = resp.ErrorCode
+		preauth.ErrorMessage = resp.ErrorMessage
+	}
+	preauth.UpdatedAt = time.Now()
+
+	if updateErr := c.repo.UpdatePreauthorization(ctx, preauth); updateErr != nil {
+		c.log.With(sl.Err(updateErr)).Error("failed to update preauthorization after Redsys response")
+	}
+
+	response := &entity.PreauthorizationOrderResponse{
 		Order:           orderNum,
 		Amount:          req.Amount,
 		Description:     req.Description,
 		TransactionType: transactionType,
 		PaymentMethodId: req.PaymentMethodId,
 		TransactionId:   req.TransactionId,
-	}, nil
+	}
+
+	if resp.Success {
+		response.AuthorizationCode = resp.AuthorizationCode
+	} else {
+		response.Error = resp.ErrorMessage
+		if response.Error == "" && resp.ErrorCode != "" {
+			response.Error = fmt.Sprintf("Redsys error code: %s", resp.ErrorCode)
+		}
+	}
+
+	return response, nil
 }
 
 // SavePreauthorization saves a preauthorization result from Redsys callback

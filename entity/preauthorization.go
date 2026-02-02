@@ -51,12 +51,14 @@ func (r *PreauthorizationOrderRequest) Bind(_ *http.Request) error {
 
 // PreauthorizationOrderResponse is the response for preauthorization order creation
 type PreauthorizationOrderResponse struct {
-	Order           int    `json:"order"`
-	Amount          int    `json:"amount"`
-	Description     string `json:"description,omitempty"`
-	TransactionType string `json:"transaction_type"`
-	PaymentMethodId string `json:"payment_method_id"`
-	TransactionId   int    `json:"transaction_id"`
+	Order             int    `json:"order"`
+	Amount            int    `json:"amount"`
+	Description       string `json:"description,omitempty"`
+	TransactionType   string `json:"transaction_type"`
+	AuthorizationCode string `json:"authorization_code,omitempty"`
+	PaymentMethodId   string `json:"payment_method_id"`
+	TransactionId     int    `json:"transaction_id"`
+	Error             string `json:"error,omitempty"`
 }
 
 // PreauthorizationSaveRequest is the request for saving preauthorization result from Redsys

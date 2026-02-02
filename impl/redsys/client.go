@@ -16,8 +16,9 @@ import (
 
 const (
 	// Transaction types
-	TransactionTypeCapture = "2"
-	TransactionTypeCancel  = "9"
+	TransactionTypePreauthorize = "1"
+	TransactionTypeCapture      = "2"
+	TransactionTypeCancel       = "9"
 
 	// Response codes
 	ResponseCodeOK = "0000"
@@ -52,13 +53,20 @@ func NewClient(config Config, log *slog.Logger) *Client {
 
 // MerchantParameters represents the Ds_MerchantParameters for requests
 type MerchantParameters struct {
-	MerchantCode      string `json:"Ds_Merchant_MerchantCode"`
-	Terminal          string `json:"Ds_Merchant_Terminal"`
-	TransactionType   string `json:"Ds_Merchant_TransactionType"`
-	Amount            string `json:"Ds_Merchant_Amount"`
-	Currency          string `json:"Ds_Merchant_Currency"`
-	Order             string `json:"Ds_Merchant_Order"`
-	AuthorisationCode string `json:"Ds_Merchant_AuthorisationCode,omitempty"`
+	MerchantCode      string `json:"DS_MERCHANT_MERCHANTCODE"`
+	Terminal          string `json:"DS_MERCHANT_TERMINAL"`
+	TransactionType   string `json:"DS_MERCHANT_TRANSACTIONTYPE"`
+	Amount            string `json:"DS_MERCHANT_AMOUNT"`
+	Currency          string `json:"DS_MERCHANT_CURRENCY"`
+	Order             string `json:"DS_MERCHANT_ORDER"`
+	AuthorisationCode string `json:"DS_MERCHANT_AUTHORISATIONCODE,omitempty"`
+	Identifier        string `json:"DS_MERCHANT_IDENTIFIER,omitempty"`
+	DirectPayment     string `json:"DS_MERCHANT_DIRECTPAYMENT,omitempty"`
+	// MIT (Merchant Initiated Transaction) / PSD2 fields
+	Exception string `json:"DS_MERCHANT_EXCEP_SCA,omitempty"`
+	CofIni    string `json:"DS_MERCHANT_COF_INI,omitempty"`
+	CofType   string `json:"DS_MERCHANT_COF_TYPE,omitempty"`
+	CofTid    string `json:"DS_MERCHANT_COF_TXNID,omitempty"`
 }
 
 // Request represents the Redsys REST API request body
@@ -100,6 +108,14 @@ type CaptureResponse struct {
 	ErrorMessage      string
 }
 
+// PreauthorizeRequest represents a preauthorization request
+type PreauthorizeRequest struct {
+	OrderNumber string
+	Amount      int
+	CardToken   string // DS_MERCHANT_IDENTIFIER (card reference from Redsys)
+	CofTid      string // DS_MERCHANT_COF_TXNID (network transaction ID from initial auth)
+}
+
 // Capture performs a capture operation on a preauthorized amount
 func (c *Client) Capture(ctx context.Context, req CaptureRequest) (*CaptureResponse, error) {
 	return c.performTransaction(ctx, req, TransactionTypeCapture)
@@ -108,6 +124,123 @@ func (c *Client) Capture(ctx context.Context, req CaptureRequest) (*CaptureRespo
 // Cancel performs a cancellation of a preauthorization
 func (c *Client) Cancel(ctx context.Context, req CaptureRequest) (*CaptureResponse, error) {
 	return c.performTransaction(ctx, req, TransactionTypeCancel)
+}
+
+// Preauthorize performs a MIT preauthorization with a saved card token
+func (c *Client) Preauthorize(ctx context.Context, req PreauthorizeRequest) (*CaptureResponse, error) {
+	log := c.log.With(
+		slog.String("order", req.OrderNumber),
+		slog.Int("amount", req.Amount),
+		slog.String("tx_type", TransactionTypePreauthorize),
+	)
+
+	// Build merchant parameters for MIT preauthorization
+	// Uses PSD2 MIT exemption for merchant-initiated transactions with stored credentials
+	params := MerchantParameters{
+		MerchantCode:    c.config.MerchantCode,
+		Terminal:        c.config.Terminal,
+		TransactionType: TransactionTypePreauthorize,
+		Amount:          fmt.Sprintf("%d", req.Amount),
+		Currency:        c.config.Currency,
+		Order:           req.OrderNumber,
+		Identifier:      req.CardToken,
+		DirectPayment:   "true",
+		// MIT/PSD2 parameters for merchant-initiated transactions
+		Exception: "MIT", // PSD2 Merchant Initiated Transaction exemption
+		CofIni:    "N",   // N = subsequent use of stored credentials (not initial)
+		CofType:   "R",   // R = Recurring (variable amounts, EV charging)
+		CofTid:    req.CofTid,
+	}
+
+	// Encode parameters to JSON and then base64
+	paramsJSON, err := json.Marshal(params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal parameters: %w", err)
+	}
+	merchantParams := base64.StdEncoding.EncodeToString(paramsJSON)
+
+	// Generate signature
+	signature, err := GenerateSignature(merchantParams, c.config.SecretKey, req.OrderNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate signature: %w", err)
+	}
+
+	// Build request
+	apiReq := Request{
+		MerchantParameters: merchantParams,
+		SignatureVersion:   "HMAC_SHA256_V1",
+		Signature:          signature,
+	}
+
+	reqBody, err := json.Marshal(apiReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	log.Debug("sending preauthorization request to Redsys")
+
+	// Make HTTP request
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.config.RestApiUrl, bytes.NewReader(reqBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.With(
+			slog.Int("status_code", resp.StatusCode),
+			slog.String("body", string(respBody)),
+		).Error("Redsys API returned non-OK status")
+		return &CaptureResponse{
+			Success:      false,
+			ErrorCode:    fmt.Sprintf("%d", resp.StatusCode),
+			ErrorMessage: string(respBody),
+		}, nil
+	}
+
+	// Parse response
+	var apiResp Response
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	// Decode merchant parameters from response
+	decodedParams, err := base64.StdEncoding.DecodeString(apiResp.MerchantParameters)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode response parameters: %w", err)
+	}
+
+	var decoded DecodedResponse
+	if err := json.Unmarshal(decodedParams, &decoded); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal decoded parameters: %w", err)
+	}
+
+	// Check response code (0000-0099 are success codes)
+	success := decoded.ResponseCode == ResponseCodeOK || (len(decoded.ResponseCode) == 4 && decoded.ResponseCode[0] == '0')
+
+	log.With(
+		slog.String("response_code", decoded.ResponseCode),
+		slog.Bool("success", success),
+	).Info("Redsys preauthorization completed")
+
+	return &CaptureResponse{
+		Success:           success,
+		ResponseCode:      decoded.ResponseCode,
+		AuthorizationCode: decoded.AuthorisationCode,
+		ErrorCode:         decoded.ErrorCode,
+	}, nil
 }
 
 // performTransaction executes a transaction with the given type

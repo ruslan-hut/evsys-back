@@ -58,3 +58,26 @@ func (a *Adapter) Cancel(ctx context.Context, req core.CaptureRequest) (*core.Ca
 		ErrorMessage:      resp.ErrorMessage,
 	}, nil
 }
+
+// Preauthorize implements core.RedsysClient
+func (a *Adapter) Preauthorize(ctx context.Context, req core.PreauthorizeRequest) (*core.CaptureResponse, error) {
+	redsysReq := PreauthorizeRequest{
+		OrderNumber: req.OrderNumber,
+		Amount:      req.Amount,
+		CardToken:   req.CardToken,
+		CofTid:      req.CofTid,
+	}
+
+	resp, err := a.client.Preauthorize(ctx, redsysReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return &core.CaptureResponse{
+		Success:           resp.Success,
+		ResponseCode:      resp.ResponseCode,
+		AuthorizationCode: resp.AuthorizationCode,
+		ErrorCode:         resp.ErrorCode,
+		ErrorMessage:      resp.ErrorMessage,
+	}, nil
+}
