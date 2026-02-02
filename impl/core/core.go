@@ -74,6 +74,13 @@ func (c *Core) SetCurrency(currency string) {
 	c.currency = currency
 }
 
+// normalizeOrderNumber pads order number to 12 digits with leading zeros
+func normalizeOrderNumber(orderNumber string) string {
+	var orderNum int
+	fmt.Sscanf(orderNumber, "%d", &orderNum)
+	return fmt.Sprintf("%012d", orderNum)
+}
+
 func (c *Core) GetConfig(ctx context.Context, name string) (interface{}, error) {
 	return c.repo.GetConfig(ctx, name)
 }
@@ -544,7 +551,7 @@ func (c *Core) CreatePreauthorizationOrder(ctx context.Context, user *entity.Use
 		fmt.Sscanf(lastOrder.OrderNumber, "%d", &orderNum)
 		orderNum++
 	} else {
-		orderNum = 1200 // Start from 1200
+		orderNum = 3000 // Start from 3000
 	}
 	orderNumber := fmt.Sprintf("%012d", orderNum)
 
@@ -598,7 +605,9 @@ func (c *Core) SavePreauthorization(ctx context.Context, user *entity.User, req 
 		return fmt.Errorf("request is nil")
 	}
 
-	preauth, err := c.repo.GetPreauthorization(ctx, req.OrderNumber)
+	// Normalize order number to 12-digit format
+	orderNumber := normalizeOrderNumber(req.OrderNumber)
+	preauth, err := c.repo.GetPreauthorization(ctx, orderNumber)
 	if err != nil {
 		return fmt.Errorf("failed to get preauthorization: %w", err)
 	}
@@ -666,7 +675,9 @@ func (c *Core) CapturePreauthorization(ctx context.Context, user *entity.User, r
 		return nil, fmt.Errorf("redsys client not configured")
 	}
 
-	preauth, err := c.repo.GetPreauthorization(ctx, req.OriginalOrder)
+	// Normalize order number to 12-digit format
+	orderNumber := normalizeOrderNumber(req.OriginalOrder)
+	preauth, err := c.repo.GetPreauthorization(ctx, orderNumber)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get preauthorization: %w", err)
 	}
@@ -690,9 +701,9 @@ func (c *Core) CapturePreauthorization(ctx context.Context, user *entity.User, r
 		authCode = preauth.AuthorizationCode
 	}
 
-	// Call Redsys to capture
+	// Call Redsys to capture - use normalized order number
 	captureReq := CaptureRequest{
-		OrderNumber:       req.OriginalOrder,
+		OrderNumber:       orderNumber,
 		Amount:            req.Amount,
 		AuthorizationCode: authCode,
 	}
@@ -745,7 +756,9 @@ func (c *Core) UpdatePreauthorization(ctx context.Context, user *entity.User, re
 		return fmt.Errorf("request is nil")
 	}
 
-	preauth, err := c.repo.GetPreauthorization(ctx, req.OrderNumber)
+	// Normalize order number to 12-digit format
+	orderNumber := normalizeOrderNumber(req.OrderNumber)
+	preauth, err := c.repo.GetPreauthorization(ctx, orderNumber)
 	if err != nil {
 		return fmt.Errorf("failed to get preauthorization: %w", err)
 	}
