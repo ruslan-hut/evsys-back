@@ -1,6 +1,7 @@
 package redsys
 
 import (
+	"bytes"
 	"crypto/cipher"
 	"crypto/des"
 	"crypto/hmac"
@@ -9,8 +10,12 @@ import (
 	"fmt"
 )
 
-// GenerateSignature generates the HMAC SHA256 signature for Redsys REST API
-// The key is diversified using 3DES-CBC with the order number
+// GenerateSignature generates the HMAC SHA256 signature for Redsys REST API.
+// The signature process:
+// 1. Decode the merchant secret from Base64
+// 2. Encrypt the order number using 3DES-CBC with zero-padding (Redsys requirement)
+// 3. Use the encrypted result as HMAC key to sign the parameters
+// 4. Return the Base64-encoded HMAC signature
 func GenerateSignature(merchantParams, secretKey, orderNumber string) (string, error) {
 	// Decode the base64 secret key
 	decodedKey, err := base64.StdEncoding.DecodeString(secretKey)
@@ -18,13 +23,13 @@ func GenerateSignature(merchantParams, secretKey, orderNumber string) (string, e
 		return "", fmt.Errorf("failed to decode secret key: %w", err)
 	}
 
-	// Diversify the key using 3DES-CBC with order number
-	diversifiedKey, err := diversifyKey(decodedKey, orderNumber)
+	// Encrypt order number with 3DES to create diversified key
+	diversifiedKey, err := encrypt3DES(orderNumber, decodedKey)
 	if err != nil {
-		return "", fmt.Errorf("failed to diversify key: %w", err)
+		return "", fmt.Errorf("failed to encrypt order: %w", err)
 	}
 
-	// Generate HMAC SHA256 signature
+	// Generate HMAC SHA256 signature using encrypted order as key
 	h := hmac.New(sha256.New, diversifiedKey)
 	h.Write([]byte(merchantParams))
 	signature := h.Sum(nil)
@@ -33,50 +38,44 @@ func GenerateSignature(merchantParams, secretKey, orderNumber string) (string, e
 	return base64.StdEncoding.EncodeToString(signature), nil
 }
 
-// diversifyKey uses 3DES-CBC to encrypt the order number with the secret key
-// This creates a unique key for each transaction
-func diversifyKey(key []byte, orderNumber string) ([]byte, error) {
-	// Pad order number to 8 bytes (3DES block size)
-	paddedOrder := padTo8Bytes([]byte(orderNumber))
+// encrypt3DES encrypts plaintext using 3DES in CBC mode with zero-padding.
+// Redsys-specific requirements (mandated by their API specification):
+// 1. Fixed all-zero IV (not cryptographically secure but required)
+// 2. Zero-padding (NOT PKCS#7 - this is critical for signature verification)
+func encrypt3DES(plainText string, key []byte) ([]byte, error) {
+	if plainText == "" {
+		return nil, fmt.Errorf("plainText cannot be empty")
+	}
 
-	// Create 3DES cipher
 	block, err := des.NewTripleDESCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create 3DES cipher: %w", err)
 	}
 
-	// Use zero IV for CBC mode (Redsys specification)
-	iv := make([]byte, des.BlockSize)
+	// Fixed IV as required by Redsys specification
+	iv := []byte{0, 0, 0, 0, 0, 0, 0, 0}
 
-	// Encrypt using CBC mode
+	// Apply zero-padding as required by Redsys signature algorithm
+	// NOTE: Redsys expects zero-padding, NOT PKCS#7 padding
+	toEncrypt := zeroPad([]byte(plainText), block.BlockSize())
+
+	ciphertext := make([]byte, len(toEncrypt))
+
+	// Encrypt using CBC mode with fixed IV
 	mode := cipher.NewCBCEncrypter(block, iv)
-	encrypted := make([]byte, len(paddedOrder))
-	mode.CryptBlocks(encrypted, paddedOrder)
+	mode.CryptBlocks(ciphertext, toEncrypt)
 
-	return encrypted, nil
+	return ciphertext, nil
 }
 
-// padTo8Bytes pads the input to 8 bytes using zero padding
-func padTo8Bytes(data []byte) []byte {
-	blockSize := 8
+// zeroPad applies zero-byte padding to make data a multiple of blockSize.
+// This is specifically required by Redsys for signature calculation.
+func zeroPad(data []byte, blockSize int) []byte {
 	padding := blockSize - (len(data) % blockSize)
-	if padding == blockSize && len(data) > 0 {
-		return data[:blockSize]
+	if padding == blockSize {
+		// Already aligned, no padding needed
+		return data
 	}
-	padded := make([]byte, len(data)+padding)
-	copy(padded, data)
-	if len(padded) > blockSize {
-		return padded[:blockSize]
-	}
-	return padded
-}
-
-// EncodeBase64 encodes data to base64 URL-safe string
-func EncodeBase64(data []byte) string {
-	return base64.StdEncoding.EncodeToString(data)
-}
-
-// DecodeBase64 decodes base64 string to bytes
-func DecodeBase64(encoded string) ([]byte, error) {
-	return base64.StdEncoding.DecodeString(encoded)
+	padText := bytes.Repeat([]byte{0x00}, padding)
+	return append(data, padText...)
 }
