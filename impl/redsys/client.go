@@ -82,6 +82,11 @@ type Response struct {
 	Signature          string `json:"Ds_Signature"`
 }
 
+// ErrorCodeResponse represents an error response from Redsys
+type ErrorCodeResponse struct {
+	Code string `json:"errorCode"`
+}
+
 // DecodedResponse represents the decoded merchant parameters from response
 type DecodedResponse struct {
 	ResponseCode      string `json:"Ds_Response"`
@@ -198,6 +203,11 @@ func (c *Client) Preauthorize(ctx context.Context, req PreauthorizeRequest) (*Ca
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
+	log.With(
+		slog.Int("status_code", resp.StatusCode),
+		slog.String("body", string(respBody)),
+	).Debug("Redsys preauthorization response received")
+
 	if resp.StatusCode != http.StatusOK {
 		log.With(
 			slog.Int("status_code", resp.StatusCode),
@@ -210,10 +220,40 @@ func (c *Client) Preauthorize(ctx context.Context, req PreauthorizeRequest) (*Ca
 		}, nil
 	}
 
-	// Parse response
+	// Parse response - first try normal response format
 	var apiResp Response
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		// Try to parse as error response
+		var errResp ErrorCodeResponse
+		if errErr := json.Unmarshal(respBody, &errResp); errErr == nil && errResp.Code != "" {
+			log.With(slog.String("error_code", errResp.Code)).Warn("Redsys returned error code")
+			return &CaptureResponse{
+				Success:      false,
+				ErrorCode:    errResp.Code,
+				ErrorMessage: fmt.Sprintf("Redsys error: %s", errResp.Code),
+			}, nil
+		}
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	// Check if we got an error response (no merchant parameters)
+	if apiResp.MerchantParameters == "" {
+		// Try to parse as error response
+		var errResp ErrorCodeResponse
+		if err := json.Unmarshal(respBody, &errResp); err == nil && errResp.Code != "" {
+			log.With(slog.String("error_code", errResp.Code)).Warn("Redsys returned error code")
+			return &CaptureResponse{
+				Success:      false,
+				ErrorCode:    errResp.Code,
+				ErrorMessage: fmt.Sprintf("Redsys error: %s", errResp.Code),
+			}, nil
+		}
+		log.With(slog.String("body", string(respBody))).Warn("Redsys returned empty merchant parameters")
+		return &CaptureResponse{
+			Success:      false,
+			ErrorCode:    "EMPTY_RESPONSE",
+			ErrorMessage: "Redsys returned empty merchant parameters",
+		}, nil
 	}
 
 	// Decode merchant parameters from response
