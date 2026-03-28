@@ -1124,11 +1124,11 @@ Create a payment order for a transaction.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| transaction_id | integer | No | Associated transaction ID |
-| amount | integer | No | Payment amount in cents |
-| currency | string | No | Currency code (e.g., "USD") |
+| transaction_id | integer | No | Associated transaction ID (0 for card tokenization) |
+| amount | integer | No | Payment amount in cents (0 allowed for tokenization) |
+| currency | string | Yes | 3-letter currency code (e.g., "978" for EUR) |
 | description | string | No | Payment description |
-| identifier | string | No | Payment method identifier |
+| identifier | string | No | Payment method identifier (empty for tokenization) |
 
 **Success Response:**
 
