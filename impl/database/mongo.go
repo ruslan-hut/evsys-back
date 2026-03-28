@@ -1093,6 +1093,9 @@ func (m *MongoDB) GetPaymentMethods(ctx context.Context, userId string) ([]*enti
 	if err = cursor.All(ctx, &paymentMethods); err != nil {
 		return nil, err
 	}
+	if paymentMethods == nil {
+		paymentMethods = make([]*entity.PaymentMethod, 0)
+	}
 	return paymentMethods, nil
 }
 
