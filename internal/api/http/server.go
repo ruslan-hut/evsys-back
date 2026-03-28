@@ -118,13 +118,6 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 			r.Post("/payment/delete", payments.Delete(log, core))
 			r.Post("/payment/order", payments.Order(log, core))
 
-			// Preauthorization endpoints
-			r.Post("/payment/preauthorize/order", payments.PreauthorizeOrder(log, core))
-			r.Post("/payment/preauthorize/save", payments.PreauthorizeSave(log, core))
-			r.Get("/payment/preauthorize/{transactionId}", payments.PreauthorizeGet(log, core))
-			r.Post("/payment/capture/order", payments.CaptureOrder(log, core))
-			r.Post("/payment/preauthorize/update", payments.PreauthorizeUpdate(log, core))
-
 			//router.Get("/payment/ok", s.paymentSuccess)
 			//router.Get("/payment/ko", s.paymentFail)
 			//router.Post("/payment/notify", s.paymentNotify)
