@@ -156,12 +156,6 @@ func Create(logger *slog.Logger, handler Users) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		if !author.IsPowerUser() {
-			log.Warn("access denied: not admin or operator")
-			response.Forbidden(w, r)
-			return
-		}
-
 		var user entity.User
 		if err := render.Bind(r, &user); err != nil {
 			log.Error("decode user data", sl.Err(err))
@@ -198,11 +192,7 @@ func Update(logger *slog.Logger, handler Users) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		if !author.IsPowerUser() {
-			log.Warn("access denied: not admin or operator")
-			response.Forbidden(w, r)
-			return
-		}
+
 
 		var updates entity.UserUpdate
 		if err := render.Bind(r, &updates); err != nil {
@@ -242,11 +232,7 @@ func Delete(logger *slog.Logger, handler Users) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		if !author.IsPowerUser() {
-			log.Warn("access denied: not admin or operator")
-			response.Forbidden(w, r)
-			return
-		}
+
 
 		err := handler.DeleteUser(ctx, author, username)
 		if err != nil {

@@ -34,11 +34,7 @@ func List(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		if !author.IsPowerUser() {
-			log.Warn("access denied: not admin or operator")
-			response.Forbidden(w, r)
-			return
-		}
+
 
 		data, err := handler.ListUserTags(ctx, author)
 		if err != nil {
@@ -66,11 +62,7 @@ func Info(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		if !author.IsPowerUser() {
-			log.Warn("access denied: not admin or operator")
-			response.Forbidden(w, r)
-			return
-		}
+
 
 		data, err := handler.GetUserTag(ctx, author, idTag)
 		if err != nil {
@@ -100,11 +92,7 @@ func Create(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		if !author.IsPowerUser() {
-			log.Warn("access denied: not admin or operator")
-			response.Forbidden(w, r)
-			return
-		}
+
 
 		var tag entity.UserTagCreate
 		if err := render.Bind(r, &tag); err != nil {
@@ -145,11 +133,7 @@ func Update(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		if !author.IsPowerUser() {
-			log.Warn("access denied: not admin or operator")
-			response.Forbidden(w, r)
-			return
-		}
+
 
 		var updates entity.UserTagUpdate
 		if err := render.Bind(r, &updates); err != nil {
@@ -188,11 +172,7 @@ func Delete(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
-		if !author.IsPowerUser() {
-			log.Warn("access denied: not admin or operator")
-			response.Forbidden(w, r)
-			return
-		}
+
 
 		err := handler.DeleteUserTag(ctx, author, idTag)
 		if err != nil {

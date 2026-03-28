@@ -12,6 +12,7 @@ import (
 	"evsys-back/internal/api/handlers/users"
 	"evsys-back/internal/api/handlers/usertags"
 	"evsys-back/internal/api/middleware/authenticate"
+	"evsys-back/internal/api/middleware/authorize"
 	"evsys-back/internal/api/middleware/timeout"
 	"evsys-back/internal/api/websocket"
 	"evsys-back/internal/lib/sl"
@@ -92,16 +93,21 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 
 			r.Get("/users/info/{name}", users.Info(log, core))
 			r.Get("/users/list", users.List(log, core))
-			r.Post("/users/create", users.Create(log, core))
-			r.Put("/users/update/{username}", users.Update(log, core))
-			r.Delete("/users/delete/{username}", users.Delete(log, core))
-			//router.Get("/users/invites", s.generateInvites)
 
-			r.Get("/user-tags/list", usertags.List(log, core))
-			r.Get("/user-tags/info/{idTag}", usertags.Info(log, core))
-			r.Post("/user-tags/create", usertags.Create(log, core))
-			r.Put("/user-tags/update/{idTag}", usertags.Update(log, core))
-			r.Delete("/user-tags/delete/{idTag}", usertags.Delete(log, core))
+			// power user only routes
+			r.Group(func(r chi.Router) {
+				r.Use(authorize.RequirePowerUser(log))
+
+				r.Post("/users/create", users.Create(log, core))
+				r.Put("/users/update/{username}", users.Update(log, core))
+				r.Delete("/users/delete/{username}", users.Delete(log, core))
+
+				r.Get("/user-tags/list", usertags.List(log, core))
+				r.Get("/user-tags/info/{idTag}", usertags.Info(log, core))
+				r.Post("/user-tags/create", usertags.Create(log, core))
+				r.Put("/user-tags/update/{idTag}", usertags.Update(log, core))
+				r.Delete("/user-tags/delete/{idTag}", usertags.Delete(log, core))
+			})
 
 			r.Post("/csc", centralsystem.Command(log, core))
 
