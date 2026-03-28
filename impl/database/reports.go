@@ -3,11 +3,12 @@ package database
 import (
 	"context"
 	"evsys-back/entity"
+	"sort"
+	"time"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"sort"
-	"time"
 )
 
 // TotalsByMonth returns the total consumed watts, average watts, and count of transactions by month
@@ -334,7 +335,9 @@ func (m *MongoDB) StationUptime(ctx context.Context, from, to time.Time, chargeP
 	if err != nil {
 		return nil, m.findError(err)
 	}
-	defer cursor.Close(ctx)
+	defer func(cursor *mongo.Cursor, ctx context.Context) {
+		_ = cursor.Close(ctx)
+	}(cursor, ctx)
 
 	// Parse events
 	var events []struct {
@@ -466,7 +469,9 @@ func (m *MongoDB) StationStatus(ctx context.Context, chargePointId string) ([]*e
 	if err != nil {
 		return nil, m.findError(err)
 	}
-	defer cursor.Close(ctx)
+	defer func(cursor *mongo.Cursor, ctx context.Context) {
+		_ = cursor.Close(ctx)
+	}(cursor, ctx)
 
 	var docs []struct {
 		ChargePointId string    `bson:"_id"`
@@ -508,7 +513,9 @@ func (m *MongoDB) getEnabledChargePointIds(ctx context.Context, chargePointId st
 	if err != nil {
 		return nil, m.findError(err)
 	}
-	defer cursor.Close(ctx)
+	defer func(cursor *mongo.Cursor, ctx context.Context) {
+		_ = cursor.Close(ctx)
+	}(cursor, ctx)
 
 	var docs []struct {
 		ChargePointId string `bson:"charge_point_id"`

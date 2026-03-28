@@ -86,7 +86,7 @@ func (c *Core) SetCurrency(currency string) {
 // normalizeOrderNumber pads order number to 12 digits with leading zeros
 func normalizeOrderNumber(orderNumber string) string {
 	var orderNum int
-	fmt.Sscanf(orderNumber, "%d", &orderNum)
+	_, _ = fmt.Sscanf(orderNumber, "%d", &orderNum)
 	return fmt.Sprintf("%012d", orderNum)
 }
 
@@ -550,7 +550,7 @@ func (c *Core) CreatePreauthorizationOrder(ctx context.Context, user *entity.Use
 	var orderNum int
 	if lastOrder != nil {
 		// Parse last order number and increment
-		fmt.Sscanf(lastOrder.OrderNumber, "%d", &orderNum)
+		_, _ = fmt.Sscanf(lastOrder.OrderNumber, "%d", &orderNum)
 		orderNum++
 	} else {
 		orderNum = 3000 // Start from 3000
@@ -786,7 +786,7 @@ func (c *Core) CapturePreauthorization(ctx context.Context, user *entity.User, r
 
 	// Parse order number for response
 	var orderNum int
-	fmt.Sscanf(req.OriginalOrder, "%d", &orderNum)
+	_, _ = fmt.Sscanf(req.OriginalOrder, "%d", &orderNum)
 
 	// Default transaction type to "2" (capture) if not specified
 	transactionType := req.TransactionType
