@@ -11,7 +11,7 @@ type PaymentOrder struct {
 	Order         int       `json:"order" bson:"order" validate:"min=0"`
 	UserId        string    `json:"user_id" bson:"user_id" validate:"omitempty"`
 	UserName      string    `json:"user_name" bson:"user_name" validate:"omitempty"`
-	Amount        int       `json:"amount" bson:"amount" validate:"required,min=0"`
+	Amount        int       `json:"amount" bson:"amount" validate:"min=0"`
 	Currency      string    `json:"currency" bson:"currency" validate:"required,len=3"`
 	Description   string    `json:"description" bson:"description" validate:"omitempty"`
 	Identifier    string    `json:"identifier" bson:"identifier" validate:"omitempty"`
