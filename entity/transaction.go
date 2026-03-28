@@ -9,11 +9,12 @@ type TransactionFilter struct {
 	Username      string     // Filter by username (via UserTag.username)
 	IdTag         string     // Filter by RFID tag ID
 	ChargePointId string     // Filter by charge point identifier
+	WithError     bool       // Filter transactions with non-empty payment_error
 }
 
 // HasFilters returns true if any filter is set
 func (f *TransactionFilter) HasFilters() bool {
-	return f.From != nil || f.To != nil || f.Username != "" || f.IdTag != "" || f.ChargePointId != ""
+	return f.From != nil || f.To != nil || f.Username != "" || f.IdTag != "" || f.ChargePointId != "" || f.WithError
 }
 
 type Transaction struct {
@@ -34,6 +35,7 @@ type Transaction struct {
 	PaymentAmount   int                    `json:"payment_amount" bson:"payment_amount" validate:"min=0"`
 	PaymentBilled   int                    `json:"payment_billed" bson:"payment_billed" validate:"min=0"`
 	PaymentOrder    int                    `json:"payment_order" bson:"payment_order" validate:"min=0"`
+	PaymentError    string                 `json:"payment_error,omitempty" bson:"payment_error,omitempty"`
 	Plan            *PaymentPlan           `json:"payment_plan,omitempty" bson:"payment_plan,omitempty" validate:"omitempty"`
 	Tariff          *Tariff                `json:"tariff,omitempty" bson:"tariff,omitempty" validate:"omitempty"`
 	MeterValues     []TransactionMeter     `json:"meter_values" bson:"meter_values" validate:"omitempty,dive"`

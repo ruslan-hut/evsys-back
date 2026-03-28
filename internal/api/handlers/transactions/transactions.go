@@ -121,6 +121,7 @@ func parseTransactionFilter(r *http.Request) *entity.TransactionFilter {
 	filter.Username = r.URL.Query().Get("username")
 	filter.IdTag = r.URL.Query().Get("id_tag")
 	filter.ChargePointId = r.URL.Query().Get("charge_point_id")
+	filter.WithError = r.URL.Query().Get("with_error") == "true"
 
 	return filter
 }

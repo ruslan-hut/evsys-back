@@ -804,6 +804,11 @@ func (m *MongoDB) GetFilteredTransactions(ctx context.Context, filter *entity.Tr
 		mongoFilter = append(mongoFilter, bson.E{"time_stop", bson.D{{"$lte", *filter.To}}})
 	}
 
+	// Filter by payment_error (non-empty)
+	if filter.WithError {
+		mongoFilter = append(mongoFilter, bson.E{"payment_error", bson.D{{"$exists", true}, {"$ne", ""}}})
+	}
+
 	// Only finished transactions
 	mongoFilter = append(mongoFilter, bson.E{"is_finished", true})
 
