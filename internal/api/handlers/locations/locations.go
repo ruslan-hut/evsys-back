@@ -6,7 +6,6 @@ import (
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
-	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -36,8 +35,7 @@ func ListLocations(logger *slog.Logger, handler Locations) http.HandlerFunc {
 		data, err := handler.GetLocations(ctx, user.AccessLevel)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get locations")
-			render.Status(r, 204)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get locations: %v", err)))
+			response.RenderErr(w, r, 204, 2001, "Failed to get locations", err)
 			return
 		}
 		log.Info("list locations")
@@ -63,8 +61,7 @@ func ListChargePoints(logger *slog.Logger, handler Locations) http.HandlerFunc {
 		data, err := handler.GetChargePoints(ctx, user.AccessLevel, search)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get charge points")
-			render.Status(r, 204)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get charge points: %v", err)))
+			response.RenderErr(w, r, 204, 2001, "Failed to get charge points", err)
 			return
 		}
 		log.Info("list charge points")
@@ -90,8 +87,7 @@ func ChargePointRead(logger *slog.Logger, handler Locations) http.HandlerFunc {
 		data, err := handler.GetChargePoint(ctx, user.AccessLevel, id)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get charge point")
-			render.Status(r, 204)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get charge point: %v", err)))
+			response.RenderErr(w, r, 204, 2001, "Failed to get charge point", err)
 			return
 		}
 		log.Info("charge point info")
@@ -117,16 +113,14 @@ func ChargePointSave(logger *slog.Logger, handler Locations) http.HandlerFunc {
 		var chargePoint entity.ChargePoint
 		if err := render.Bind(r, &chargePoint); err != nil {
 			log.With(sl.Err(err)).Error("decode charge point")
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode charge point: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to decode charge point", err)
 			return
 		}
 
 		err := handler.SaveChargePoint(ctx, user.AccessLevel, &chargePoint)
 		if err != nil {
 			log.With(sl.Err(err)).Error("save charge point")
-			render.Status(r, 204)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to save charge point: %v", err)))
+			response.RenderErr(w, r, 204, 2001, "Failed to save charge point", err)
 			return
 		}
 		log.Info("charge point updated")

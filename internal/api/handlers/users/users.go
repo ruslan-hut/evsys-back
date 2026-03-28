@@ -6,7 +6,6 @@ import (
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
-	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -36,8 +35,7 @@ func Authenticate(logger *slog.Logger, handler Users) http.HandlerFunc {
 		var user entity.User
 		if err := render.Bind(r, &user); err != nil {
 			log.Error("decode user data", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode user data: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to decode user data", err)
 			return
 		}
 		log = log.With(slog.String("username", user.Username))
@@ -54,8 +52,7 @@ func Authenticate(logger *slog.Logger, handler Users) http.HandlerFunc {
 
 		if err != nil {
 			log.Error("not authorized", sl.Err(err))
-			render.Status(r, 401)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Not authorized: %v", err)))
+			response.RenderErr(w, r, 401, 2001, "Not authorized", err)
 			return
 		}
 		log.Info("user authorized")
@@ -74,8 +71,7 @@ func Register(logger *slog.Logger, handler Users) http.HandlerFunc {
 		var user entity.User
 		if err := render.Bind(r, &user); err != nil {
 			log.Error("decode user data", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode user data: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to decode user data", err)
 			return
 		}
 		log = log.With(slog.String("username", user.Username))
@@ -84,8 +80,7 @@ func Register(logger *slog.Logger, handler Users) http.HandlerFunc {
 		data, err := handler.AddUser(ctx, &user)
 		if err != nil {
 			log.Error("save user", sl.Err(err))
-			render.Status(r, 500)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to save user: %v", err)))
+			response.RenderErr(w, r, 500, 2001, "Failed to save user", err)
 			return
 		}
 		log.Info("user registered")
@@ -113,8 +108,7 @@ func Info(logger *slog.Logger, handler Users) http.HandlerFunc {
 		data, err := handler.GetUser(ctx, user, name)
 		if err != nil {
 			log.Error("get user", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get user: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to get user", err)
 			return
 		}
 		log.Info("user info")
@@ -140,8 +134,7 @@ func List(logger *slog.Logger, handler Users) http.HandlerFunc {
 		data, err := handler.GetUsers(ctx, user)
 		if err != nil {
 			log.Error("get users", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get users: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to get users", err)
 			return
 		}
 		log.Info("users list")
@@ -165,16 +158,14 @@ func Create(logger *slog.Logger, handler Users) http.HandlerFunc {
 
 		if !author.IsPowerUser() {
 			log.Warn("access denied: not admin or operator")
-			render.Status(r, 403)
-			render.JSON(w, r, response.Error(2001, "Insufficient permissions"))
+			response.Forbidden(w, r)
 			return
 		}
 
 		var user entity.User
 		if err := render.Bind(r, &user); err != nil {
 			log.Error("decode user data", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode user data: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to decode user data", err)
 			return
 		}
 		log = log.With(slog.String("new_username", user.Username))
@@ -182,8 +173,7 @@ func Create(logger *slog.Logger, handler Users) http.HandlerFunc {
 		data, err := handler.CreateUser(ctx, author, &user)
 		if err != nil {
 			log.Error("create user", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to create user: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to create user", err)
 			return
 		}
 		log.Info("user created")
@@ -210,28 +200,25 @@ func Update(logger *slog.Logger, handler Users) http.HandlerFunc {
 
 		if !author.IsPowerUser() {
 			log.Warn("access denied: not admin or operator")
-			render.Status(r, 403)
-			render.JSON(w, r, response.Error(2001, "Insufficient permissions"))
+			response.Forbidden(w, r)
 			return
 		}
 
 		var updates entity.UserUpdate
 		if err := render.Bind(r, &updates); err != nil {
 			log.Error("decode user data", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode user data: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to decode user data", err)
 			return
 		}
 
 		data, err := handler.UpdateUser(ctx, author, username, &updates)
 		if err != nil {
 			log.Error("update user", sl.Err(err))
+			status := 400
 			if err.Error() == "user not found" {
-				render.Status(r, 404)
-			} else {
-				render.Status(r, 400)
+				status = 404
 			}
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to update user: %v", err)))
+			response.RenderErr(w, r, status, 2001, "Failed to update user", err)
 			return
 		}
 		log.Info("user updated")
@@ -257,20 +244,18 @@ func Delete(logger *slog.Logger, handler Users) http.HandlerFunc {
 
 		if !author.IsPowerUser() {
 			log.Warn("access denied: not admin or operator")
-			render.Status(r, 403)
-			render.JSON(w, r, response.Error(2001, "Insufficient permissions"))
+			response.Forbidden(w, r)
 			return
 		}
 
 		err := handler.DeleteUser(ctx, author, username)
 		if err != nil {
 			log.Error("delete user", sl.Err(err))
+			status := 400
 			if err.Error() == "user not found" {
-				render.Status(r, 404)
-			} else {
-				render.Status(r, 400)
+				status = 404
 			}
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to delete user: %v", err)))
+			response.RenderErr(w, r, status, 2001, "Failed to delete user", err)
 			return
 		}
 		log.Info("user deleted")

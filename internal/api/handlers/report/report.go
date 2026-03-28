@@ -8,11 +8,12 @@ import (
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
 	"fmt"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/render"
 )
 
 type Reports interface {
@@ -67,8 +68,7 @@ func MonthlyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 		data, err := handler.MonthlyStats(ctx, user, from, to, group)
 		if err != nil {
 			log.Error("get report failed", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get report data: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to get report data", err)
 			return
 		}
 		log.Info("monthly report")
@@ -121,8 +121,7 @@ func UsersStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 		data, err := handler.UsersStats(ctx, user, from, to, group)
 		if err != nil {
 			log.Error("get report failed", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get report data: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to get report data", err)
 			return
 		}
 		log.Info("users report")
@@ -175,8 +174,7 @@ func ChargerStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 		data, err := handler.ChargerStats(ctx, user, from, to, group)
 		if err != nil {
 			log.Error("get report failed", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get report data: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to get report data", err)
 			return
 		}
 		log.Info("charger report")
@@ -186,7 +184,7 @@ func ChargerStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 }
 
 func wrongParameter(w http.ResponseWriter, r *http.Request, err error) {
-	render.JSON(w, r, response.Error(400, fmt.Sprintf("Invalid parameter: %v", err)))
+	response.RenderErr(w, r, 400, 400, "Invalid parameter", err)
 }
 
 func StationUptimeStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
@@ -234,8 +232,7 @@ func StationUptimeStatistics(logger *slog.Logger, handler Reports) http.HandlerF
 		data, err := handler.StationUptimeReport(ctx, user, from, to, chargePointId)
 		if err != nil {
 			log.Error("get report failed", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get report data: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to get report data", err)
 			return
 		}
 
@@ -273,8 +270,7 @@ func StationStatusStatistics(logger *slog.Logger, handler Reports) http.HandlerF
 		data, err := handler.StationStatusReport(ctx, user, chargePointId)
 		if err != nil {
 			log.Error("get report failed", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get report data: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to get report data", err)
 			return
 		}
 

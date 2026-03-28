@@ -6,7 +6,6 @@ import (
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -40,8 +39,7 @@ func ListActive(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 		data, err := handler.GetActiveTransactions(ctx, user.UserId)
 		if err != nil {
 			log.With(sl.Err(err)).Error("active transactions")
-			render.Status(r, 204)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to read transactions: %v", err)))
+			response.RenderErr(w, r, 204, 2001, "Failed to read transactions", err)
 			return
 		}
 		log.Info("active transactions")
@@ -70,8 +68,7 @@ func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 			data, err := handler.GetFilteredTransactions(ctx, user, filter)
 			if err != nil {
 				log.With(sl.Err(err)).Error("filtered transactions list")
-				render.Status(r, 204)
-				render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to read transactions: %v", err)))
+				response.RenderErr(w, r, 204, 2001, "Failed to read transactions", err)
 				return
 			}
 			log.With(
@@ -89,8 +86,7 @@ func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 		data, err := handler.GetTransactions(ctx, user.UserId, period)
 		if err != nil {
 			log.With(sl.Err(err)).Error("transactions list")
-			render.Status(r, 204)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to read transactions: %v", err)))
+			response.RenderErr(w, r, 204, 2001, "Failed to read transactions", err)
 			return
 		}
 		log.Info("transactions list")
@@ -147,16 +143,14 @@ func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 		transactionId, err := strconv.Atoi(id)
 		if err != nil {
 			log.With(sl.Err(err)).Error("transaction id")
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to parse transaction id: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to parse transaction id", err)
 			return
 		}
 
 		data, err := handler.GetTransaction(ctx, user.UserId, user.AccessLevel, transactionId)
 		if err != nil {
 			log.With(sl.Err(err)).Error("transaction info")
-			render.Status(r, 204)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to read transaction info: %v", err)))
+			response.RenderErr(w, r, 204, 2001, "Failed to read transaction info", err)
 			return
 		}
 		log.Info("transaction info")
@@ -181,8 +175,7 @@ func RecentUserChargePoints(logger *slog.Logger, handler Transactions) http.Hand
 		data, err := handler.GetRecentChargePoints(ctx, user.UserId)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get recent charge points")
-			render.Status(r, 204)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get recent charge points: %v", err)))
+			response.RenderErr(w, r, 204, 2001, "Failed to get recent charge points", err)
 			return
 		}
 		log.Info("list recent charge points")

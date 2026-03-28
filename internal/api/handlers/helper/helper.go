@@ -4,7 +4,6 @@ import (
 	"context"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
-	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
@@ -32,8 +31,7 @@ func Config(logger *slog.Logger, handler Helper) http.HandlerFunc {
 		data, err := handler.GetConfig(ctx, name)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get config failed")
-			render.Status(r, 204)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get config: %v", err)))
+			response.RenderErr(w, r, 204, 2001, "Failed to get config", err)
 			return
 		}
 		log.Info("get config success")
@@ -57,8 +55,7 @@ func Log(logger *slog.Logger, handler Helper) http.HandlerFunc {
 		data, err := handler.GetLog(ctx, name)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get log failed")
-			render.Status(r, 204)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get log: %v", err)))
+			response.RenderErr(w, r, 204, 2001, "Failed to get log", err)
 			return
 		}
 		log.Info("get log")

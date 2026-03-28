@@ -5,7 +5,6 @@ import (
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
-	"fmt"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"log/slog"
@@ -32,8 +31,7 @@ func Command(logger *slog.Logger, handler CentralSystem) http.HandlerFunc {
 		var command entity.CentralSystemCommand
 		if err := render.Bind(r, &command); err != nil {
 			log.Error("bind failed", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to decode", err)
 			return
 		}
 		log = log.With(
@@ -46,8 +44,7 @@ func Command(logger *slog.Logger, handler CentralSystem) http.HandlerFunc {
 		data, err := handler.SendCommand(&command, user)
 		if err != nil {
 			log.Error("send cs command failed", sl.Err(err))
-			render.Status(r, 204)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to send command: %v", err)))
+			response.RenderErr(w, r, 204, 2001, "Failed to send command", err)
 			return
 		}
 		log.Info("cs command success")

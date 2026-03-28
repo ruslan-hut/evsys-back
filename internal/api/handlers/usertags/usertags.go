@@ -6,7 +6,6 @@ import (
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
-	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -37,16 +36,14 @@ func List(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 
 		if !author.IsPowerUser() {
 			log.Warn("access denied: not admin or operator")
-			render.Status(r, 403)
-			render.JSON(w, r, response.Error(2001, "Insufficient permissions"))
+			response.Forbidden(w, r)
 			return
 		}
 
 		data, err := handler.ListUserTags(ctx, author)
 		if err != nil {
 			log.Error("list user tags", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to list user tags: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to list user tags", err)
 			return
 		}
 		log.Info("user tags list")
@@ -71,20 +68,18 @@ func Info(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 
 		if !author.IsPowerUser() {
 			log.Warn("access denied: not admin or operator")
-			render.Status(r, 403)
-			render.JSON(w, r, response.Error(2001, "Insufficient permissions"))
+			response.Forbidden(w, r)
 			return
 		}
 
 		data, err := handler.GetUserTag(ctx, author, idTag)
 		if err != nil {
 			log.Error("get user tag", sl.Err(err))
+			status := 400
 			if err.Error() == "tag not found" {
-				render.Status(r, 404)
-			} else {
-				render.Status(r, 400)
+				status = 404
 			}
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to get user tag: %v", err)))
+			response.RenderErr(w, r, status, 2001, "Failed to get user tag", err)
 			return
 		}
 		log.Info("user tag info")
@@ -107,16 +102,14 @@ func Create(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 
 		if !author.IsPowerUser() {
 			log.Warn("access denied: not admin or operator")
-			render.Status(r, 403)
-			render.JSON(w, r, response.Error(2001, "Insufficient permissions"))
+			response.Forbidden(w, r)
 			return
 		}
 
 		var tag entity.UserTagCreate
 		if err := render.Bind(r, &tag); err != nil {
 			log.Error("decode user tag data", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode user tag data: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to decode user tag data", err)
 			return
 		}
 		log = log.With(slog.String("id_tag", tag.IdTag))
@@ -124,12 +117,11 @@ func Create(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 		data, err := handler.CreateUserTag(ctx, author, &tag)
 		if err != nil {
 			log.Error("create user tag", sl.Err(err))
+			status := 400
 			if err.Error() == "user not found" {
-				render.Status(r, 404)
-			} else {
-				render.Status(r, 400)
+				status = 404
 			}
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to create user tag: %v", err)))
+			response.RenderErr(w, r, status, 2001, "Failed to create user tag", err)
 			return
 		}
 		log.Info("user tag created")
@@ -155,28 +147,25 @@ func Update(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 
 		if !author.IsPowerUser() {
 			log.Warn("access denied: not admin or operator")
-			render.Status(r, 403)
-			render.JSON(w, r, response.Error(2001, "Insufficient permissions"))
+			response.Forbidden(w, r)
 			return
 		}
 
 		var updates entity.UserTagUpdate
 		if err := render.Bind(r, &updates); err != nil {
 			log.Error("decode user tag data", sl.Err(err))
-			render.Status(r, 400)
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to decode user tag data: %v", err)))
+			response.RenderErr(w, r, 400, 2001, "Failed to decode user tag data", err)
 			return
 		}
 
 		data, err := handler.UpdateUserTag(ctx, author, idTag, &updates)
 		if err != nil {
 			log.Error("update user tag", sl.Err(err))
+			status := 400
 			if err.Error() == "tag not found" || err.Error() == "user not found" {
-				render.Status(r, 404)
-			} else {
-				render.Status(r, 400)
+				status = 404
 			}
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to update user tag: %v", err)))
+			response.RenderErr(w, r, status, 2001, "Failed to update user tag", err)
 			return
 		}
 		log.Info("user tag updated")
@@ -201,20 +190,18 @@ func Delete(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 
 		if !author.IsPowerUser() {
 			log.Warn("access denied: not admin or operator")
-			render.Status(r, 403)
-			render.JSON(w, r, response.Error(2001, "Insufficient permissions"))
+			response.Forbidden(w, r)
 			return
 		}
 
 		err := handler.DeleteUserTag(ctx, author, idTag)
 		if err != nil {
 			log.Error("delete user tag", sl.Err(err))
+			status := 400
 			if err.Error() == "tag not found" {
-				render.Status(r, 404)
-			} else {
-				render.Status(r, 400)
+				status = 404
 			}
-			render.JSON(w, r, response.Error(2001, fmt.Sprintf("Failed to delete user tag: %v", err)))
+			response.RenderErr(w, r, status, 2001, "Failed to delete user tag", err)
 			return
 		}
 		log.Info("user tag deleted")
