@@ -31,7 +31,7 @@ func Config(logger *slog.Logger, handler Helper) http.HandlerFunc {
 		data, err := handler.GetConfig(ctx, name)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get config failed")
-			response.RenderErr(w, r, 204, 2001, "Failed to get config", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to get config", err)
 			return
 		}
 		log.Info("get config success")
@@ -55,7 +55,7 @@ func Log(logger *slog.Logger, handler Helper) http.HandlerFunc {
 		data, err := handler.GetLog(ctx, name)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get log failed")
-			response.RenderErr(w, r, 204, 2001, "Failed to get log", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to get log", err)
 			return
 		}
 		log.Info("get log")

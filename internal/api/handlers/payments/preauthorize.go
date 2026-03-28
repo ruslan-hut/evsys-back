@@ -51,7 +51,7 @@ func PreauthorizeOrder(logger *slog.Logger, handler Preauthorizations) http.Hand
 		resp, err := handler.CreatePreauthorizationOrder(ctx, user, &req)
 		if err != nil {
 			log.With(sl.Err(err)).Error("create preauthorization order")
-			response.RenderErr(w, r, 204, 3001, "Failed to create order", err)
+			response.RenderErr(w, r, 400, 3001, "Failed to create order", err)
 			return
 		}
 		log.With(slog.Int("order", resp.Order)).Info("preauthorization order created")
@@ -87,7 +87,7 @@ func PreauthorizeSave(logger *slog.Logger, handler Preauthorizations) http.Handl
 		err := handler.SavePreauthorization(ctx, user, &req)
 		if err != nil {
 			log.With(sl.Err(err)).Error("save preauthorization")
-			response.RenderErr(w, r, 204, 3002, "Failed to save", err)
+			response.RenderErr(w, r, 400, 3002, "Failed to save", err)
 			return
 		}
 		log.Info("preauthorization saved")
@@ -121,12 +121,12 @@ func PreauthorizeGet(logger *slog.Logger, handler Preauthorizations) http.Handle
 		preauth, err := handler.GetPreauthorization(ctx, user, transactionId)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get preauthorization")
-			response.RenderErr(w, r, 204, 3003, "Failed to get", err)
+			response.RenderErr(w, r, 400, 3003, "Failed to get", err)
 			return
 		}
 		if preauth == nil {
 			log.Info("preauthorization not found")
-			response.Render(w, r, 204, 3003, "Preauthorization not found")
+			response.Render(w, r, 404, 3003, "Preauthorization not found")
 			return
 		}
 		log.Info("preauthorization retrieved")
@@ -162,7 +162,7 @@ func CaptureOrder(logger *slog.Logger, handler Preauthorizations) http.HandlerFu
 		resp, err := handler.CapturePreauthorization(ctx, user, &req)
 		if err != nil {
 			log.With(sl.Err(err)).Error("capture preauthorization")
-			response.RenderErr(w, r, 204, 3004, "Failed to capture", err)
+			response.RenderErr(w, r, 400, 3004, "Failed to capture", err)
 			return
 		}
 		log.With(
@@ -201,7 +201,7 @@ func PreauthorizeUpdate(logger *slog.Logger, handler Preauthorizations) http.Han
 		err := handler.UpdatePreauthorization(ctx, user, &req)
 		if err != nil {
 			log.With(sl.Err(err)).Error("update preauthorization")
-			response.RenderErr(w, r, 204, 3005, "Failed to update", err)
+			response.RenderErr(w, r, 400, 3005, "Failed to update", err)
 			return
 		}
 		log.Info("preauthorization updated")

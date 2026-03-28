@@ -39,7 +39,7 @@ func ListActive(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 		data, err := handler.GetActiveTransactions(ctx, user.UserId)
 		if err != nil {
 			log.With(sl.Err(err)).Error("active transactions")
-			response.RenderErr(w, r, 204, 2001, "Failed to read transactions", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to read transactions", err)
 			return
 		}
 		log.Info("active transactions")
@@ -68,7 +68,7 @@ func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 			data, err := handler.GetFilteredTransactions(ctx, user, filter)
 			if err != nil {
 				log.With(sl.Err(err)).Error("filtered transactions list")
-				response.RenderErr(w, r, 204, 2001, "Failed to read transactions", err)
+				response.RenderErr(w, r, 400, 2001, "Failed to read transactions", err)
 				return
 			}
 			log.With(
@@ -86,7 +86,7 @@ func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 		data, err := handler.GetTransactions(ctx, user.UserId, period)
 		if err != nil {
 			log.With(sl.Err(err)).Error("transactions list")
-			response.RenderErr(w, r, 204, 2001, "Failed to read transactions", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to read transactions", err)
 			return
 		}
 		log.Info("transactions list")
@@ -150,7 +150,7 @@ func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 		data, err := handler.GetTransaction(ctx, user.UserId, user.AccessLevel, transactionId)
 		if err != nil {
 			log.With(sl.Err(err)).Error("transaction info")
-			response.RenderErr(w, r, 204, 2001, "Failed to read transaction info", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to read transaction info", err)
 			return
 		}
 		log.Info("transaction info")
@@ -175,7 +175,7 @@ func RecentUserChargePoints(logger *slog.Logger, handler Transactions) http.Hand
 		data, err := handler.GetRecentChargePoints(ctx, user.UserId)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get recent charge points")
-			response.RenderErr(w, r, 204, 2001, "Failed to get recent charge points", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to get recent charge points", err)
 			return
 		}
 		log.Info("list recent charge points")

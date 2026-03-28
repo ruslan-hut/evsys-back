@@ -44,7 +44,7 @@ func Command(logger *slog.Logger, handler CentralSystem) http.HandlerFunc {
 		data, err := handler.SendCommand(&command, user)
 		if err != nil {
 			log.Error("send cs command failed", sl.Err(err))
-			response.RenderErr(w, r, 204, 2001, "Failed to send command", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to send command", err)
 			return
 		}
 		log.Info("cs command success")

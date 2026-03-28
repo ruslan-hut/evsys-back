@@ -35,7 +35,7 @@ func ListLocations(logger *slog.Logger, handler Locations) http.HandlerFunc {
 		data, err := handler.GetLocations(ctx, user.AccessLevel)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get locations")
-			response.RenderErr(w, r, 204, 2001, "Failed to get locations", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to get locations", err)
 			return
 		}
 		log.Info("list locations")
@@ -61,7 +61,7 @@ func ListChargePoints(logger *slog.Logger, handler Locations) http.HandlerFunc {
 		data, err := handler.GetChargePoints(ctx, user.AccessLevel, search)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get charge points")
-			response.RenderErr(w, r, 204, 2001, "Failed to get charge points", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to get charge points", err)
 			return
 		}
 		log.Info("list charge points")
@@ -87,7 +87,7 @@ func ChargePointRead(logger *slog.Logger, handler Locations) http.HandlerFunc {
 		data, err := handler.GetChargePoint(ctx, user.AccessLevel, id)
 		if err != nil {
 			log.With(sl.Err(err)).Error("get charge point")
-			response.RenderErr(w, r, 204, 2001, "Failed to get charge point", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to get charge point", err)
 			return
 		}
 		log.Info("charge point info")
@@ -120,7 +120,7 @@ func ChargePointSave(logger *slog.Logger, handler Locations) http.HandlerFunc {
 		err := handler.SaveChargePoint(ctx, user.AccessLevel, &chargePoint)
 		if err != nil {
 			log.With(sl.Err(err)).Error("save charge point")
-			response.RenderErr(w, r, 204, 2001, "Failed to save charge point", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to save charge point", err)
 			return
 		}
 		log.Info("charge point updated")

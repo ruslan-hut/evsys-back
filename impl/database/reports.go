@@ -12,7 +12,7 @@ import (
 
 // TotalsByMonth returns the total consumed watts, average watts, and count of transactions by month
 func (m *MongoDB) TotalsByMonth(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
-	collection := m.client.Database(m.database).Collection(collectionTransactions)
+	collection := m.col(collectionTransactions)
 
 	pipeline := mongo.Pipeline{
 		// Filter transactions
@@ -107,7 +107,7 @@ func (m *MongoDB) TotalsByMonth(ctx context.Context, from, to time.Time, userGro
 
 // TotalsByUsers returns the total consumed watts, average watts, and count of transactions by user
 func (m *MongoDB) TotalsByUsers(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
-	collection := m.client.Database(m.database).Collection(collectionTransactions)
+	collection := m.col(collectionTransactions)
 
 	pipeline := mongo.Pipeline{
 		// Stage 0: Filter transactions
@@ -199,7 +199,7 @@ func (m *MongoDB) TotalsByUsers(ctx context.Context, from, to time.Time, userGro
 }
 
 func (m *MongoDB) TotalsByCharger(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
-	collection := m.client.Database(m.database).Collection(collectionTransactions)
+	collection := m.col(collectionTransactions)
 
 	pipeline := mongo.Pipeline{
 		// Stage 0: Filter transactions
@@ -302,7 +302,7 @@ func (m *MongoDB) StationUptime(ctx context.Context, from, to time.Time, chargeP
 		return []*entity.StationUptime{}, nil
 	}
 
-	collection := m.client.Database(m.database).Collection(collectionSysLog)
+	collection := m.col(collectionSysLog)
 
 	// Build base filter for events containing "registered" and matching enabled charge points
 	baseFilter := bson.D{
@@ -435,7 +435,7 @@ func (m *MongoDB) StationStatus(ctx context.Context, chargePointId string) ([]*e
 		return []*entity.StationStatus{}, nil
 	}
 
-	collection := m.client.Database(m.database).Collection(collectionSysLog)
+	collection := m.col(collectionSysLog)
 
 	// Build match stage with enabled charge points filter
 	matchStage := bson.D{
@@ -495,7 +495,7 @@ func (m *MongoDB) StationStatus(ctx context.Context, chargePointId string) ([]*e
 // getEnabledChargePointIds returns IDs of charge points that are enabled
 // If chargePointId is specified, returns only that ID if it's enabled
 func (m *MongoDB) getEnabledChargePointIds(ctx context.Context, chargePointId string) ([]string, error) {
-	collection := m.client.Database(m.database).Collection(collectionChargePoints)
+	collection := m.col(collectionChargePoints)
 
 	filter := bson.D{{"is_enabled", true}}
 	if chargePointId != "" {

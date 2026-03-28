@@ -36,7 +36,7 @@ func List(logger *slog.Logger, handler Payments) http.HandlerFunc {
 		data, err := handler.GetPaymentMethods(ctx, user.UserId)
 		if err != nil {
 			log.With(sl.Err(err)).Error("payment methods list")
-			response.RenderErr(w, r, 204, 2001, "Failed to read payment methods", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to read payment methods", err)
 			return
 		}
 		log.Info("payment methods list")
@@ -71,7 +71,7 @@ func Save(logger *slog.Logger, handler Payments) http.HandlerFunc {
 		err := handler.SavePaymentMethod(ctx, user, &pm)
 		if err != nil {
 			log.With(sl.Err(err)).Error("payment method not saved")
-			response.RenderErr(w, r, 204, 2001, "Failed to save payment method", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to save payment method", err)
 			return
 		}
 		log.Info("payment method saved")
@@ -106,7 +106,7 @@ func Update(logger *slog.Logger, handler Payments) http.HandlerFunc {
 		err := handler.UpdatePaymentMethod(ctx, user, &pm)
 		if err != nil {
 			log.With(sl.Err(err)).Error("payment method not updated")
-			response.RenderErr(w, r, 204, 2001, "Failed to update payment method", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to update payment method", err)
 			return
 		}
 		log.Info("payment method updated")
@@ -141,7 +141,7 @@ func Delete(logger *slog.Logger, handler Payments) http.HandlerFunc {
 		err := handler.DeletePaymentMethod(ctx, user, &pm)
 		if err != nil {
 			log.With(sl.Err(err)).Error("payment method not deleted")
-			response.RenderErr(w, r, 204, 2001, "Failed to delete payment method", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to delete payment method", err)
 			return
 		}
 		log.Info("payment method deleted")
@@ -177,7 +177,7 @@ func Order(logger *slog.Logger, handler Payments) http.HandlerFunc {
 		updated, err := handler.SetOrder(ctx, user, &order)
 		if err != nil {
 			log.With(sl.Err(err)).Error("order not set")
-			response.RenderErr(w, r, 204, 2001, "Failed to set order", err)
+			response.RenderErr(w, r, 400, 2001, "Failed to set order", err)
 			return
 		}
 		log.With(
