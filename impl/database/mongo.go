@@ -43,7 +43,7 @@ type MongoDB struct {
 }
 
 func (m *MongoDB) col(name string) *mongo.Collection {
-	return m.col(name)
+	return m.client.Database(m.database).Collection(name)
 }
 
 func findOne[T any](m *MongoDB, ctx context.Context, colName string, filter interface{}) (*T, error) {
