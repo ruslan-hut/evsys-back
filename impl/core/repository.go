@@ -30,6 +30,16 @@ type Repository interface {
 	SavePaymentOrder(ctx context.Context, order *entity.PaymentOrder) error
 	GetPaymentOrderByTransaction(ctx context.Context, transactionId int) (*entity.PaymentOrder, error)
 
+	// Direct payment methods
+	GetTransaction(ctx context.Context, id int) (*entity.Transaction, error)
+	UpdateTransactionPayment(ctx context.Context, transaction *entity.Transaction) error
+	GetUserTag(ctx context.Context, idTag string) (*entity.UserTag, error)
+	GetDefaultPaymentMethod(ctx context.Context, userId string) (*entity.PaymentMethod, error)
+	GetPaymentMethodByIdentifier(ctx context.Context, identifier string) (*entity.PaymentMethod, error)
+	UpdatePaymentMethodFailCount(ctx context.Context, identifier string, count int) error
+	GetPaymentOrder(ctx context.Context, id int) (*entity.PaymentOrder, error)
+	SavePaymentResult(ctx context.Context, paymentParameters *entity.PaymentParameters) error
+
 	// Preauthorization methods
 	SavePreauthorization(ctx context.Context, preauth *entity.Preauthorization) error
 	GetPreauthorization(ctx context.Context, orderNumber string) (*entity.Preauthorization, error)

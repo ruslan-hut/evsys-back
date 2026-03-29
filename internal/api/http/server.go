@@ -11,6 +11,7 @@ import (
 	"evsys-back/internal/api/handlers/transactions"
 	"evsys-back/internal/api/handlers/users"
 	"evsys-back/internal/api/handlers/usertags"
+	"evsys-back/internal/api/middleware/apikey"
 	"evsys-back/internal/api/middleware/authenticate"
 	"evsys-back/internal/api/middleware/authorize"
 	"evsys-back/internal/api/middleware/timeout"
@@ -49,6 +50,7 @@ type Core interface {
 	transactions.Transactions
 	payments.Payments
 	payments.Preauthorizations
+	payments.DirectPayments
 	report.Reports
 
 	websocket.Core
@@ -124,10 +126,6 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 			r.Post("/payment/delete", payments.Delete(log, core))
 			r.Post("/payment/order", payments.Order(log, core))
 
-			//router.Get("/payment/ok", s.paymentSuccess)
-			//router.Get("/payment/ko", s.paymentFail)
-			//router.Post("/payment/notify", s.paymentNotify)
-
 			r.Get("/report/month", report.MonthlyStatistics(log, core))
 			r.Get("/report/user", report.UsersStatistics(log, core))
 			r.Get("/report/charger", report.ChargerStatistics(log, core))
@@ -137,11 +135,23 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 			r.Get("/log/{name}", helper.Log(log, core))
 		})
 
+		// service-to-service payment endpoints (API key auth)
+		if conf.Redsys.ApiKey != "" {
+			r.Group(func(r chi.Router) {
+				r.Use(apikey.New(log, conf.Redsys.ApiKey))
+
+				r.Get("/payment/pay/{transactionId}", payments.Pay(log, core))
+				r.Get("/payment/return/{transactionId}", payments.Return(log, core))
+				r.Post("/payment/return/order/{orderId}", payments.ReturnByOrder(log, core))
+			})
+		}
+
 		// requests without authorization token
 		r.Group(func(r chi.Router) {
 			r.Get("/config/{name}", helper.Config(log, core))
 			r.Post("/users/authenticate", users.Authenticate(log, core))
 			r.Post("/users/register", users.Register(log, core))
+			r.Post("/payment/notify", payments.Notify(log, core))
 		})
 	})
 

@@ -612,15 +612,16 @@ func (m *MongoDB) GetTransaction(ctx context.Context, id int) (*entity.Transacti
 	return findOne[entity.Transaction](m, ctx, collectionTransactions, bson.D{{"transaction_id", id}})
 }
 
-// UpdateTransaction update transaction billed data
-func (m *MongoDB) UpdateTransaction(transaction *entity.Transaction) error {
-	ctx := context.Background()
+// UpdateTransactionPayment updates payment-related fields on a transaction.
+func (m *MongoDB) UpdateTransactionPayment(ctx context.Context, transaction *entity.Transaction) error {
 	collection := m.col(collectionTransactions)
 	filter := bson.D{{"transaction_id", transaction.TransactionId}}
 	update := bson.D{
 		{"$set", bson.D{
 			{"payment_order", transaction.PaymentOrder},
 			{"payment_billed", transaction.PaymentBilled},
+			{"payment_error", transaction.PaymentError},
+			{"payment_orders", transaction.PaymentOrders},
 		}},
 	}
 	if _, err := collection.UpdateOne(ctx, filter, update); err != nil {
@@ -964,8 +965,7 @@ func (m *MongoDB) DeleteInviteCode(ctx context.Context, code string) error {
 	return err
 }
 
-func (m *MongoDB) SavePaymentResult(paymentParameters *entity.PaymentParameters) error {
-	ctx := context.Background()
+func (m *MongoDB) SavePaymentResult(ctx context.Context, paymentParameters *entity.PaymentParameters) error {
 	collection := m.col(collectionPayment)
 	_, err := collection.InsertOne(ctx, paymentParameters)
 	return err
@@ -1090,8 +1090,43 @@ func (m *MongoDB) GetPaymentOrderByTransaction(ctx context.Context, transactionI
 	return &order, nil
 }
 
-func (m *MongoDB) GetPaymentOrder(id int) (*entity.PaymentOrder, error) {
-	return findOne[entity.PaymentOrder](m, context.Background(), collectionPaymentOrders, bson.D{{"order", id}})
+func (m *MongoDB) GetPaymentOrder(ctx context.Context, id int) (*entity.PaymentOrder, error) {
+	return findOne[entity.PaymentOrder](m, ctx, collectionPaymentOrders, bson.D{{"order", id}})
+}
+
+// GetDefaultPaymentMethod returns the default payment method for a user,
+// falling back to the method with the lowest fail count.
+func (m *MongoDB) GetDefaultPaymentMethod(ctx context.Context, userId string) (*entity.PaymentMethod, error) {
+	collection := m.col(collectionPaymentMethods)
+
+	// Try to find default method with lowest fail count
+	filter := bson.D{{"user_id", userId}, {"is_default", true}}
+	opts := options.FindOne().SetSort(bson.D{{"fail_count", 1}})
+	var pm entity.PaymentMethod
+	if err := collection.FindOne(ctx, filter, opts).Decode(&pm); err == nil {
+		return &pm, nil
+	}
+
+	// Fallback: any method for this user, sorted by fail count ascending
+	filter = bson.D{{"user_id", userId}}
+	if err := collection.FindOne(ctx, filter, opts).Decode(&pm); err != nil {
+		return nil, m.findError(err)
+	}
+	return &pm, nil
+}
+
+// GetPaymentMethodByIdentifier returns a payment method by its card token identifier.
+func (m *MongoDB) GetPaymentMethodByIdentifier(ctx context.Context, identifier string) (*entity.PaymentMethod, error) {
+	return findOne[entity.PaymentMethod](m, ctx, collectionPaymentMethods, bson.D{{"identifier", identifier}})
+}
+
+// UpdatePaymentMethodFailCount updates the fail_count for a payment method.
+func (m *MongoDB) UpdatePaymentMethodFailCount(ctx context.Context, identifier string, count int) error {
+	collection := m.col(collectionPaymentMethods)
+	filter := bson.D{{"identifier", identifier}}
+	update := bson.M{"$set": bson.D{{"fail_count", count}}}
+	_, err := collection.UpdateOne(ctx, filter, update)
+	return err
 }
 
 // SavePaymentOrder insert or update order

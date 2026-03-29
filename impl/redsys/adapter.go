@@ -15,69 +15,89 @@ func NewAdapter(client *Client) *Adapter {
 	return &Adapter{client: client}
 }
 
+func toCoreResponse(resp *CaptureResponse) *core.CaptureResponse {
+	return &core.CaptureResponse{
+		Success:            resp.Success,
+		ResponseCode:       resp.ResponseCode,
+		AuthorizationCode:  resp.AuthorizationCode,
+		ErrorCode:          resp.ErrorCode,
+		ErrorMessage:       resp.ErrorMessage,
+		MerchantIdentifier: resp.MerchantIdentifier,
+		CofTxnid:           resp.CofTxnid,
+		CardBrand:          resp.CardBrand,
+		CardCountry:        resp.CardCountry,
+		ExpiryDate:         resp.ExpiryDate,
+		Order:              resp.Order,
+		Amount:             resp.Amount,
+		Currency:           resp.Currency,
+		TransactionType:    resp.TransactionType,
+		Date:               resp.Date,
+		Hour:               resp.Hour,
+	}
+}
+
 // Capture implements core.RedsysClient
 func (a *Adapter) Capture(ctx context.Context, req core.CaptureRequest) (*core.CaptureResponse, error) {
-	redsysReq := CaptureRequest{
+	resp, err := a.client.Capture(ctx, CaptureRequest{
 		OrderNumber:       req.OrderNumber,
 		Amount:            req.Amount,
 		AuthorizationCode: req.AuthorizationCode,
-	}
-
-	resp, err := a.client.Capture(ctx, redsysReq)
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	return &core.CaptureResponse{
-		Success:           resp.Success,
-		ResponseCode:      resp.ResponseCode,
-		AuthorizationCode: resp.AuthorizationCode,
-		ErrorCode:         resp.ErrorCode,
-		ErrorMessage:      resp.ErrorMessage,
-	}, nil
+	return toCoreResponse(resp), nil
 }
 
 // Cancel implements core.RedsysClient
 func (a *Adapter) Cancel(ctx context.Context, req core.CaptureRequest) (*core.CaptureResponse, error) {
-	redsysReq := CaptureRequest{
+	resp, err := a.client.Cancel(ctx, CaptureRequest{
 		OrderNumber:       req.OrderNumber,
 		Amount:            req.Amount,
 		AuthorizationCode: req.AuthorizationCode,
-	}
-
-	resp, err := a.client.Cancel(ctx, redsysReq)
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	return &core.CaptureResponse{
-		Success:           resp.Success,
-		ResponseCode:      resp.ResponseCode,
-		AuthorizationCode: resp.AuthorizationCode,
-		ErrorCode:         resp.ErrorCode,
-		ErrorMessage:      resp.ErrorMessage,
-	}, nil
+	return toCoreResponse(resp), nil
 }
 
 // Preauthorize implements core.RedsysClient
 func (a *Adapter) Preauthorize(ctx context.Context, req core.PreauthorizeRequest) (*core.CaptureResponse, error) {
-	redsysReq := PreauthorizeRequest{
+	resp, err := a.client.Preauthorize(ctx, PreauthorizeRequest{
 		OrderNumber: req.OrderNumber,
 		Amount:      req.Amount,
 		CardToken:   req.CardToken,
 		CofTid:      req.CofTid,
-	}
-
-	resp, err := a.client.Preauthorize(ctx, redsysReq)
+	})
 	if err != nil {
 		return nil, err
 	}
+	return toCoreResponse(resp), nil
+}
 
-	return &core.CaptureResponse{
-		Success:           resp.Success,
-		ResponseCode:      resp.ResponseCode,
-		AuthorizationCode: resp.AuthorizationCode,
-		ErrorCode:         resp.ErrorCode,
-		ErrorMessage:      resp.ErrorMessage,
-	}, nil
+// Pay implements core.RedsysClient
+func (a *Adapter) Pay(ctx context.Context, req core.PayRequest) (*core.CaptureResponse, error) {
+	resp, err := a.client.Pay(ctx, PayRequest{
+		OrderNumber: req.OrderNumber,
+		Amount:      req.Amount,
+		CardToken:   req.CardToken,
+		CofTid:      req.CofTid,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return toCoreResponse(resp), nil
+}
+
+// Refund implements core.RedsysClient
+func (a *Adapter) Refund(ctx context.Context, req core.RefundRequest) (*core.CaptureResponse, error) {
+	resp, err := a.client.Refund(ctx, RefundRequest{
+		OrderNumber: req.OrderNumber,
+		Amount:      req.Amount,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return toCoreResponse(resp), nil
 }

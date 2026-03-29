@@ -24,8 +24,10 @@ mongo:
   database: ${MONGO_DB}
 redsys:
   enabled: ${REDSYS_ENABLED}
+  disable_payment: ${REDSYS_DISABLE_PAYMENT}
   merchant_code: ${REDSYS_MERCHANT_CODE}
   terminal: ${REDSYS_TERMINAL}
   secret_key: ${REDSYS_SECRET_KEY}
   rest_api_url: ${REDSYS_REST_API_URL}
   currency: ${REDSYS_CURRENCY}
+  api_key: ${PAYMENT_API_KEY}

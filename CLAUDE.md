@@ -38,6 +38,7 @@ impl/                       Core implementations
 ├── database/               MongoDB persistence (mongo.go)
 ├── database-mock/          In-memory mock for local dev (returns stubs)
 ├── authenticator/          Token-based auth + optional Firebase
+├── redsys/                 Redsys payment gateway client (MIT payments, preauth, refunds)
 ├── reports/                Statistics generation
 ├── status-reader/          Transaction state management
 └── central-system/         External API proxy
@@ -64,13 +65,36 @@ entity/                     Domain models and DTOs (26 files)
 
 **Secret Masking**: `internal/lib/sl/sl.go` provides `sl.Secret()` that shows only first 5 characters in logs.
 
+**Redsys Payment Integration**: `impl/redsys/` provides the Redsys REST API client behind an adapter pattern (`core.RedsysClient` interface). Supports:
+- **Preauthorization/Capture** — two-phase payment: hold amount, then capture later
+- **Direct MIT Payment** — Merchant Initiated Transaction using stored card tokens (PSD2 exempt)
+- **Refunds** — full (by transaction) or partial (by order)
+- **Webhook notifications** — async Redsys callbacks via `POST /api/v1/payment/notify` (unauthenticated)
+- **Per-order locking** — `sync.Map`-based mutex in Core for concurrent payment safety
+- **Payment method fallback** — auto-switches to alternative method when FailCount > 0
+- **DisablePayment mode** — bypasses Redsys calls for testing (`redsys.disable_payment: true`)
+
 ## Configuration
 
 Two config files:
 - `config.yml` - Local development (hardcoded values, mongo disabled)
 - `back.yml` - Deployment template with `${ENV_VAR}` placeholders
 
-Key config sections: `listen` (server), `mongo` (database), `central_system` (external API), `firebase_key` (optional auth).
+Key config sections: `listen` (server), `mongo` (database), `central_system` (external API), `firebase_key` (optional auth), `redsys` (payment gateway).
+
+### Redsys Payment Config
+
+```yaml
+redsys:
+  enabled: false              # Enable Redsys integration
+  disable_payment: false      # Bypass Redsys API calls (test mode — marks transactions as paid)
+  merchant_code: ""           # Redsys merchant code
+  terminal: "001"             # Terminal ID
+  secret_key: ""              # Base64-encoded secret for signature generation
+  rest_api_url: "https://sis-t.redsys.es:25443/sis/rest/trataPeticionREST"  # Test endpoint
+  currency: "978"             # ISO 4217 currency code (978 = EUR)
+  api_key: ""                 # API key for service-to-service auth (central system → payment endpoints)
+```
 
 ## Local Development
 
@@ -92,6 +116,29 @@ Key config sections: `listen` (server), `mongo` (database), `central_system` (ex
 **New database operation:**
 1. Add method to repository interface in `impl/core/`
 2. Implement in both `impl/database/mongo.go` and `impl/database-mock/mock-db.go`
+
+**New Redsys transaction type:**
+1. Add constant in `impl/redsys/client.go`
+2. Add method to `Client` (use `sendRequest`/`performMITTransaction`/`performSimpleTransaction`)
+3. Add corresponding method to `core.RedsysClient` interface + request type in `impl/core/core.go`
+4. Add adapter method in `impl/redsys/adapter.go`
+
+## Payment API Endpoints
+
+User-authenticated (require user token):
+- `GET /api/v1/payment/methods` — List user's payment methods
+- `POST /api/v1/payment/save` — Save a payment method
+- `POST /api/v1/payment/update` — Update a payment method
+- `POST /api/v1/payment/delete` — Delete a payment method
+- `POST /api/v1/payment/order` — Create a payment order
+
+API-key-authenticated (service-to-service, `Authorization: Bearer {api_key}`):
+- `GET /api/v1/payment/pay/{transactionId}` — Initiate direct MIT payment
+- `GET /api/v1/payment/return/{transactionId}` — Full refund for transaction
+- `POST /api/v1/payment/return/order/{orderId}` — Partial refund (JSON body: `{"amount": N}`)
+
+Unauthenticated (Redsys webhook):
+- `POST /api/v1/payment/notify` — Redsys async payment notification
 
 ## Deployment
 

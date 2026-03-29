@@ -24,8 +24,10 @@ mongo:
   database: evsys
 redsys:
   enabled: false
+  disable_payment: false
   merchant_code: ""
   terminal: "001"
   secret_key: ""
   rest_api_url: "https://sis-t.redsys.es:25443/sis/rest/trataPeticionREST"
   currency: "978"
+  api_key: ""

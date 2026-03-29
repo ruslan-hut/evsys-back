@@ -509,7 +509,7 @@ func (db *MockDB) GetTransactionsToBill(userId string) ([]*entity.Transaction, e
 	return nil, nil
 }
 
-func (db *MockDB) UpdateTransaction(transaction *entity.Transaction) error {
+func (db *MockDB) UpdateTransactionPayment(_ context.Context, transaction *entity.Transaction) error {
 	db.mux.Lock()
 	defer db.mux.Unlock()
 	db.transactions[transaction.TransactionId] = transaction
@@ -633,7 +633,62 @@ func (db *MockDB) GetPaymentOrderByTransaction(_ context.Context, transactionId 
 	return order, nil
 }
 
-func (db *MockDB) SavePaymentResult(paymentParameters *entity.PaymentParameters) error {
+func (db *MockDB) SavePaymentResult(_ context.Context, paymentParameters *entity.PaymentParameters) error {
+	return nil
+}
+
+func (db *MockDB) GetUserTag(_ context.Context, idTag string) (*entity.UserTag, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	for _, tags := range db.userTags {
+		for i := range tags {
+			if tags[i].IdTag == idTag {
+				return &tags[i], nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("tag not found")
+}
+
+func (db *MockDB) GetDefaultPaymentMethod(_ context.Context, userId string) (*entity.PaymentMethod, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	methods := db.paymentMethods[userId]
+	if len(methods) == 0 {
+		return nil, fmt.Errorf("no payment methods")
+	}
+	for _, m := range methods {
+		if m.IsDefault {
+			return m, nil
+		}
+	}
+	return methods[0], nil
+}
+
+func (db *MockDB) GetPaymentMethodByIdentifier(_ context.Context, identifier string) (*entity.PaymentMethod, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	for _, methods := range db.paymentMethods {
+		for _, m := range methods {
+			if m.Identifier == identifier {
+				return m, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("payment method not found")
+}
+
+func (db *MockDB) UpdatePaymentMethodFailCount(_ context.Context, identifier string, count int) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	for _, methods := range db.paymentMethods {
+		for _, m := range methods {
+			if m.Identifier == identifier {
+				m.FailCount = count
+				return nil
+			}
+		}
+	}
 	return nil
 }
 

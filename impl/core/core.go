@@ -2,10 +2,15 @@ package core
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/sl"
 	"fmt"
 	"log/slog"
+	"net/url"
+	"strconv"
+	"sync"
 	"time"
 )
 
@@ -16,13 +21,15 @@ const (
 )
 
 type Core struct {
-	repo     Repository
-	auth     Authenticator
-	cs       CentralSystem
-	reports  Reports
-	redsys   RedsysClient
-	currency string
-	log      *slog.Logger
+	repo           Repository
+	auth           Authenticator
+	cs             CentralSystem
+	reports        Reports
+	redsys         RedsysClient
+	currency       string
+	disablePayment bool
+	paymentLocks   sync.Map
+	log            *slog.Logger
 }
 
 // RedsysClient interface for Redsys operations
@@ -30,6 +37,8 @@ type RedsysClient interface {
 	Capture(ctx context.Context, req CaptureRequest) (*CaptureResponse, error)
 	Cancel(ctx context.Context, req CaptureRequest) (*CaptureResponse, error)
 	Preauthorize(ctx context.Context, req PreauthorizeRequest) (*CaptureResponse, error)
+	Pay(ctx context.Context, req PayRequest) (*CaptureResponse, error)
+	Refund(ctx context.Context, req RefundRequest) (*CaptureResponse, error)
 }
 
 // CaptureRequest for Redsys capture operations
@@ -46,6 +55,18 @@ type CaptureResponse struct {
 	AuthorizationCode string
 	ErrorCode         string
 	ErrorMessage      string
+	// Extended fields populated by Pay/Refund for payment processing
+	MerchantIdentifier string
+	CofTxnid           string
+	CardBrand          string
+	CardCountry        string
+	ExpiryDate         string
+	Order              string
+	Amount             string
+	Currency           string
+	TransactionType    string
+	Date               string
+	Hour               string
 }
 
 // PreauthorizeRequest for Redsys MIT preauthorization
@@ -54,6 +75,20 @@ type PreauthorizeRequest struct {
 	Amount      int
 	CardToken   string
 	CofTid      string // Network transaction ID from initial authorization
+}
+
+// PayRequest for Redsys MIT direct payment (transaction type "0")
+type PayRequest struct {
+	OrderNumber string
+	Amount      int
+	CardToken   string // DS_MERCHANT_IDENTIFIER
+	CofTid      string // DS_MERCHANT_COF_TXNID
+}
+
+// RefundRequest for Redsys refund (transaction type "3")
+type RefundRequest struct {
+	OrderNumber string
+	Amount      int
 }
 
 func New(log *slog.Logger, repo Repository) *Core {
@@ -81,6 +116,10 @@ func (c *Core) SetRedsys(redsys RedsysClient) {
 
 func (c *Core) SetCurrency(currency string) {
 	c.currency = currency
+}
+
+func (c *Core) SetDisablePayment(disable bool) {
+	c.disablePayment = disable
 }
 
 // normalizeOrderNumber pads order number to 12 digits with leading zeros
@@ -857,4 +896,529 @@ func (c *Core) UpdatePreauthorization(ctx context.Context, user *entity.User, re
 
 	preauth.UpdatedAt = time.Now()
 	return c.repo.UpdatePreauthorization(ctx, preauth)
+}
+
+// --- Direct Payment Methods (ported from electrum) ---
+
+// lockOrder acquires a per-order mutex to prevent concurrent modifications.
+func (c *Core) lockOrder(id int) *sync.Mutex {
+	value, _ := c.paymentLocks.LoadOrStore(id, &sync.Mutex{})
+	mutex := value.(*sync.Mutex)
+	mutex.Lock()
+	return mutex
+}
+
+// unlockOrder releases the per-order mutex and cleans up to prevent memory leaks.
+func (c *Core) unlockOrder(id int, mutex *sync.Mutex) {
+	mutex.Unlock()
+	c.paymentLocks.Delete(id)
+}
+
+// PayTransaction initiates a direct MIT payment for a finished charging transaction.
+func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
+	mutex := c.lockOrder(transactionId)
+	defer c.unlockOrder(transactionId, mutex)
+
+	log := c.log.With(slog.Int("transaction_id", transactionId))
+	log.Info("pay transaction")
+
+	if c.redsys == nil {
+		return fmt.Errorf("redsys client not configured")
+	}
+
+	transaction, err := c.repo.GetTransaction(ctx, transactionId)
+	if err != nil {
+		log.With(sl.Err(err)).Error("failed to get transaction")
+		return err
+	}
+	if transaction == nil {
+		return fmt.Errorf("transaction %d not found", transactionId)
+	}
+	if !transaction.IsFinished {
+		return fmt.Errorf("transaction %d is not finished", transactionId)
+	}
+
+	amount := transaction.PaymentAmount - transaction.PaymentBilled
+	if amount <= 0 {
+		log.Warn("transaction amount is zero or already billed")
+		return nil
+	}
+
+	// Resolve user tag
+	tag := transaction.UserTag
+	if tag == nil {
+		tag, err = c.repo.GetUserTag(ctx, transaction.IdTag)
+		if err != nil {
+			log.With(sl.Err(err)).Error("failed to get user tag")
+			return err
+		}
+	}
+	if tag.UserId == "" {
+		transaction.PaymentBilled = transaction.PaymentAmount
+		if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
+			log.With(sl.Err(e)).Error("failed to update transaction")
+		}
+		return fmt.Errorf("empty user id for tag %s", tag.IdTag)
+	}
+
+	// Resolve payment method with fallback logic
+	paymentMethod := transaction.PaymentMethod
+	if paymentMethod == nil {
+		paymentMethod, err = c.repo.GetDefaultPaymentMethod(ctx, tag.UserId)
+		if err != nil {
+			transaction.PaymentBilled = transaction.PaymentAmount
+			if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
+				log.With(sl.Err(e)).Error("failed to update transaction")
+			}
+			return fmt.Errorf("no payment method for user %s", tag.UserId)
+		}
+	}
+	// Try to get alternative if current has problems
+	if paymentMethod.CofTid == "" || paymentMethod.FailCount > 0 || transaction.PaymentError != "" {
+		storedPM, _ := c.repo.GetDefaultPaymentMethod(ctx, tag.UserId)
+		if storedPM != nil && storedPM.Identifier != paymentMethod.Identifier {
+			paymentMethod = storedPM
+			log.With(sl.Secret("identifier", storedPM.Identifier)).Warn("switched to alternative payment method")
+		}
+	}
+
+	// Close any previous uncompleted order for this transaction
+	orderToClose, err := c.repo.GetPaymentOrderByTransaction(ctx, transactionId)
+	if err == nil && orderToClose != nil {
+		orderToClose.IsCompleted = true
+		orderToClose.Result = "closed without response"
+		orderToClose.TimeClosed = time.Now()
+		if e := c.repo.SavePaymentOrder(ctx, orderToClose); e != nil {
+			log.With(sl.Err(e)).Error("failed to close previous payment order")
+		}
+		c.updatePaymentMethodFailCounter(ctx, orderToClose.Identifier, 1)
+	}
+
+	// DisablePayment bypass for testing
+	if c.disablePayment {
+		transaction.PaymentBilled = transaction.PaymentAmount
+		if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
+			log.With(sl.Err(e)).Error("failed to update transaction")
+		}
+		log.Info("payment disabled: transaction paid without request")
+		return nil
+	}
+
+	// Create payment order
+	consumed := (transaction.MeterStop - transaction.MeterStart) / 1000
+	description := fmt.Sprintf("%s:%d %dkW", transaction.ChargePointId, transaction.ConnectorId, consumed)
+
+	paymentOrder := entity.PaymentOrder{
+		Amount:        amount,
+		Description:   description,
+		Identifier:    paymentMethod.Identifier,
+		TransactionId: transactionId,
+		UserId:        tag.UserId,
+		UserName:      tag.Username,
+		TimeOpened:    time.Now(),
+	}
+
+	lastOrder, _ := c.repo.GetLastOrder(ctx)
+	if lastOrder != nil {
+		paymentOrder.Order = lastOrder.Order + 1
+	} else {
+		paymentOrder.Order = 1200
+	}
+
+	if e := c.repo.SavePaymentOrder(ctx, &paymentOrder); e != nil {
+		log.With(sl.Err(e)).Error("failed to save payment order")
+		return e
+	}
+
+	orderNumber := fmt.Sprintf("%d", paymentOrder.Order)
+	log.With(
+		slog.String("order", orderNumber),
+		sl.Secret("identifier", paymentMethod.Identifier),
+		sl.Secret("cof_txnid", paymentMethod.CofTid),
+	).Info("sending payment request")
+
+	// Process payment asynchronously
+	go c.processPayAsync(ctx, PayRequest{
+		OrderNumber: orderNumber,
+		Amount:      amount,
+		CardToken:   paymentMethod.Identifier,
+		CofTid:      paymentMethod.CofTid,
+	}, paymentOrder.Order)
+
+	return nil
+}
+
+// ReturnPayment processes a full refund for a charging transaction.
+func (c *Core) ReturnPayment(ctx context.Context, transactionId int) error {
+	mutex := c.lockOrder(transactionId)
+	defer c.unlockOrder(transactionId, mutex)
+
+	log := c.log.With(slog.Int("transaction_id", transactionId))
+
+	if c.redsys == nil {
+		return fmt.Errorf("redsys client not configured")
+	}
+
+	transaction, err := c.repo.GetTransaction(ctx, transactionId)
+	if err != nil {
+		log.With(sl.Err(err)).Error("failed to get transaction for refund")
+		return err
+	}
+	if transaction == nil {
+		return fmt.Errorf("transaction %d not found", transactionId)
+	}
+	if !transaction.IsFinished {
+		return fmt.Errorf("transaction %d is not finished", transactionId)
+	}
+
+	amount := transaction.PaymentAmount
+	if amount <= 0 {
+		log.Warn("transaction amount is zero, nothing to refund")
+		return nil
+	}
+
+	orderNumber := fmt.Sprintf("%d", transaction.PaymentOrder)
+
+	go c.processRefundAsync(ctx, RefundRequest{
+		OrderNumber: orderNumber,
+		Amount:      amount,
+	}, transaction.PaymentOrder)
+
+	return nil
+}
+
+// ReturnByOrder processes a refund for a specific payment order.
+func (c *Core) ReturnByOrder(ctx context.Context, orderId string, amount int) error {
+	if amount == 0 {
+		return fmt.Errorf("amount to return is zero")
+	}
+
+	id, err := strconv.Atoi(orderId)
+	if err != nil {
+		return fmt.Errorf("invalid order id: %s", orderId)
+	}
+
+	mutex := c.lockOrder(id)
+	defer c.unlockOrder(id, mutex)
+
+	if c.redsys == nil {
+		return fmt.Errorf("redsys client not configured")
+	}
+
+	order, err := c.repo.GetPaymentOrder(ctx, id)
+	if err != nil {
+		return fmt.Errorf("get payment order: %w", err)
+	}
+	if order == nil {
+		return fmt.Errorf("payment order %d not found", id)
+	}
+	if order.Amount < amount {
+		return fmt.Errorf("order amount %d is less than return amount %d", order.Amount, amount)
+	}
+
+	go c.processRefundAsync(ctx, RefundRequest{
+		OrderNumber: orderId,
+		Amount:      amount,
+	}, id)
+
+	return nil
+}
+
+// Notify processes a payment notification webhook from Redsys.
+func (c *Core) Notify(ctx context.Context, data []byte) error {
+	params, err := url.ParseQuery(string(data))
+	if err != nil {
+		c.log.With(slog.String("data", string(data))).Error("failed to parse notification data")
+		return fmt.Errorf("parse query: %w", err)
+	}
+
+	merchantParams := params.Get("Ds_MerchantParameters")
+	if merchantParams == "" {
+		return fmt.Errorf("empty merchant parameters")
+	}
+
+	paymentResult, err := c.decodePaymentParameters(merchantParams)
+	if err != nil {
+		return err
+	}
+
+	go c.processNotifyResponseAsync(ctx, paymentResult)
+	return nil
+}
+
+// processPayAsync sends a payment request to Redsys and processes the response.
+func (c *Core) processPayAsync(parentCtx context.Context, req PayRequest, orderId int) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.log.Error("panic in processPayAsync", slog.Any("panic", r))
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	log := c.log.With(slog.String("order", req.OrderNumber), slog.Int("amount", req.Amount))
+
+	resp, err := c.redsys.Pay(ctx, req)
+	if err != nil {
+		log.With(sl.Err(err)).Error("payment request failed")
+		order, _ := c.repo.GetPaymentOrder(ctx, orderId)
+		if order != nil {
+			c.closeOrderOnError(ctx, order, err.Error())
+		}
+		return
+	}
+
+	if !resp.Success {
+		log.With(slog.String("error_code", resp.ErrorCode)).Warn("payment rejected by Redsys")
+		order, _ := c.repo.GetPaymentOrder(ctx, orderId)
+		if order != nil {
+			c.closeOrderOnError(ctx, order, resp.ResponseCode)
+		}
+		return
+	}
+
+	c.processPaymentResponse(ctx, resp, orderId)
+}
+
+// processRefundAsync sends a refund request to Redsys and processes the response.
+func (c *Core) processRefundAsync(parentCtx context.Context, req RefundRequest, orderId int) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.log.Error("panic in processRefundAsync", slog.Any("panic", r))
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	log := c.log.With(slog.String("order", req.OrderNumber), slog.Int("amount", req.Amount))
+
+	resp, err := c.redsys.Refund(ctx, req)
+	if err != nil {
+		log.With(sl.Err(err)).Error("refund request failed")
+		return
+	}
+
+	if !resp.Success {
+		log.With(slog.String("error_code", resp.ErrorCode)).Warn("refund rejected by Redsys")
+		order, _ := c.repo.GetPaymentOrder(ctx, orderId)
+		if order != nil {
+			c.closeOrderOnError(ctx, order, resp.ResponseCode)
+		}
+		return
+	}
+
+	c.processPaymentResponse(ctx, resp, orderId)
+}
+
+// processNotifyResponseAsync handles async Redsys webhook notification.
+func (c *Core) processNotifyResponseAsync(parentCtx context.Context, paymentResult *entity.PaymentParameters) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.log.Error("panic in processNotifyResponseAsync", slog.Any("panic", r))
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if e := c.repo.SavePaymentResult(ctx, paymentResult); e != nil {
+		c.log.With(sl.Err(e)).Error("failed to save payment result")
+	}
+
+	orderNum, err := strconv.Atoi(paymentResult.Order)
+	if err != nil {
+		c.log.With(sl.Err(err)).Error("failed to parse order number from notification")
+		return
+	}
+
+	// Convert PaymentParameters to a CaptureResponse-like structure for processPaymentResponse
+	resp := &CaptureResponse{
+		Success:            paymentResult.Response == "0000" || paymentResult.Response == "0900",
+		ResponseCode:       paymentResult.Response,
+		AuthorizationCode:  paymentResult.AuthorisationCode,
+		MerchantIdentifier: paymentResult.MerchantIdentifier,
+		CofTxnid:           paymentResult.MerchantCofTxnid,
+		CardBrand:          paymentResult.CardBrand,
+		CardCountry:        paymentResult.CardCountry,
+		ExpiryDate:         paymentResult.ExpiryDate,
+		Order:              paymentResult.Order,
+		Amount:             paymentResult.Amount,
+		Currency:           paymentResult.Currency,
+		TransactionType:    paymentResult.TransactionType,
+		Date:               paymentResult.Date,
+		Hour:               paymentResult.Hour,
+	}
+
+	if !resp.Success {
+		order, _ := c.repo.GetPaymentOrder(ctx, orderNum)
+		if order != nil {
+			c.closeOrderOnError(ctx, order, paymentResult.Response)
+		}
+		return
+	}
+
+	c.processPaymentResponse(ctx, resp, orderNum)
+}
+
+// processPaymentResponse handles a successful Redsys response: updates order, transaction billing, and payment methods.
+func (c *Core) processPaymentResponse(ctx context.Context, resp *CaptureResponse, orderNum int) {
+	log := c.log.With(slog.String("order", fmt.Sprintf("%d", orderNum)))
+
+	amount, _ := strconv.Atoi(resp.Amount)
+
+	order, err := c.repo.GetPaymentOrder(ctx, orderNum)
+	if err != nil {
+		log.With(sl.Err(err)).Error("failed to get payment order")
+		return
+	}
+	if order == nil {
+		log.Error("payment order not found")
+		return
+	}
+
+	// Close the order
+	if !order.IsCompleted {
+		order.Amount = amount
+		order.IsCompleted = true
+		order.Result = resp.ResponseCode
+		order.TimeClosed = time.Now()
+		order.Currency = resp.Currency
+		order.Date = fmt.Sprintf("%s %s", resp.Date, resp.Hour)
+
+		if e := c.repo.SavePaymentOrder(ctx, order); e != nil {
+			log.With(sl.Err(e)).Error("failed to save payment order")
+		}
+	}
+
+	// Reset fail counter on success
+	c.updatePaymentMethodFailCounter(ctx, order.Identifier, 0)
+
+	// Handle refund response (transaction type "3")
+	if resp.TransactionType == "3" {
+		order.RefundAmount = amount
+		order.RefundTime = time.Now()
+		if e := c.repo.SavePaymentOrder(ctx, order); e != nil {
+			log.With(sl.Err(e)).Error("failed to save refund order")
+		}
+		return
+	}
+
+	// Update transaction billing
+	if order.TransactionId > 0 {
+		transaction, e := c.repo.GetTransaction(ctx, order.TransactionId)
+		if e != nil {
+			log.With(sl.Err(e)).Error("failed to get transaction")
+			return
+		}
+		if transaction == nil {
+			log.Error("transaction not found for order")
+			return
+		}
+
+		transaction.PaymentOrder = order.Order
+		transaction.PaymentBilled = transaction.PaymentBilled + order.Amount
+		transaction.PaymentError = ""
+		transaction.AddOrder(*order)
+
+		if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
+			log.With(sl.Err(e)).Error("failed to update transaction billing")
+		}
+	} else {
+		// No transaction linked — this is a card enrollment response; save payment method
+		pm := entity.PaymentMethod{
+			Description: "**** **** **** ****",
+			Identifier:  resp.MerchantIdentifier,
+			CofTid:      resp.CofTxnid,
+			CardBrand:   resp.CardBrand,
+			CardCountry: resp.CardCountry,
+			ExpiryDate:  resp.ExpiryDate,
+			UserId:      order.UserId,
+			UserName:    order.UserName,
+		}
+		if pm.Identifier != "" && pm.UserId != "" {
+			if e := c.repo.SavePaymentMethod(ctx, &pm); e != nil {
+				log.With(sl.Err(e)).Error("failed to save payment method from response")
+			} else {
+				log.With(sl.Secret("identifier", pm.Identifier)).Info("payment method saved")
+			}
+		}
+
+		// Refund the enrollment charge
+		if order.Amount > 0 {
+			id := fmt.Sprintf("%d", order.Order)
+			if e := c.ReturnByOrder(ctx, id, order.Amount); e != nil {
+				log.With(sl.Err(e)).Error("failed to refund enrollment charge")
+			}
+		}
+	}
+}
+
+// closeOrderOnError marks a payment order as failed and updates the related transaction.
+func (c *Core) closeOrderOnError(ctx context.Context, order *entity.PaymentOrder, result string) {
+	c.updatePaymentMethodFailCounter(ctx, order.Identifier, 1)
+
+	if !order.IsCompleted {
+		order.IsCompleted = true
+		order.Result = result
+		order.TimeClosed = time.Now()
+		if e := c.repo.SavePaymentOrder(ctx, order); e != nil {
+			c.log.With(sl.Err(e)).Error("failed to save payment order on error")
+		}
+	}
+
+	if order.TransactionId > 0 {
+		c.log.With(slog.Int("transaction_id", order.TransactionId)).Info("closing transaction on payment error")
+		transaction, e := c.repo.GetTransaction(ctx, order.TransactionId)
+		if e != nil {
+			c.log.With(sl.Err(e)).Error("failed to get transaction")
+			return
+		}
+		if transaction == nil {
+			return
+		}
+		transaction.PaymentBilled = transaction.PaymentAmount
+		transaction.PaymentOrder = order.Order
+		transaction.PaymentError = result
+		transaction.AddOrder(*order)
+		if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
+			c.log.With(sl.Err(e)).Error("failed to update transaction on error")
+		}
+	}
+}
+
+// updatePaymentMethodFailCounter updates the fail count for a payment method.
+// count=0 resets, count>0 increments.
+func (c *Core) updatePaymentMethodFailCounter(ctx context.Context, identifier string, count int) {
+	if identifier == "" {
+		return
+	}
+
+	pm, err := c.repo.GetPaymentMethodByIdentifier(ctx, identifier)
+	if err != nil || pm == nil {
+		return
+	}
+
+	newCount := count
+	if count > 0 {
+		newCount = pm.FailCount + 1
+	}
+
+	if e := c.repo.UpdatePaymentMethodFailCount(ctx, identifier, newCount); e != nil {
+		c.log.With(sl.Err(e)).Error("failed to update payment method fail counter")
+	}
+}
+
+// decodePaymentParameters decodes base64-encoded Redsys merchant parameters.
+func (c *Core) decodePaymentParameters(encodedParams string) (*entity.PaymentParameters, error) {
+	decoded, err := base64.StdEncoding.DecodeString(encodedParams)
+	if err != nil {
+		return nil, fmt.Errorf("decode parameters: %w", err)
+	}
+	var result entity.PaymentParameters
+	if err := json.Unmarshal(decoded, &result); err != nil {
+		return nil, fmt.Errorf("parse parameters: %w", err)
+	}
+	return &result, nil
 }

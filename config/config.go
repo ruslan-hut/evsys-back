@@ -34,12 +34,14 @@ type Config struct {
 		Database string `yaml:"database" env-default:""`
 	} `yaml:"mongo"`
 	Redsys struct {
-		Enabled      bool   `yaml:"enabled" env-default:"false"`
-		MerchantCode string `yaml:"merchant_code" env-default:""`
-		Terminal     string `yaml:"terminal" env-default:"001"`
-		SecretKey    string `yaml:"secret_key" env-default:""`
-		RestApiUrl   string `yaml:"rest_api_url" env-default:"https://sis-t.redsys.es:25443/sis/rest/trataPeticionREST"`
-		Currency     string `yaml:"currency" env-default:"978"`
+		Enabled        bool   `yaml:"enabled" env-default:"false"`
+		DisablePayment bool   `yaml:"disable_payment" env-default:"false"`
+		MerchantCode   string `yaml:"merchant_code" env-default:""`
+		Terminal       string `yaml:"terminal" env-default:"001"`
+		SecretKey      string `yaml:"secret_key" env-default:""`
+		RestApiUrl     string `yaml:"rest_api_url" env-default:"https://sis-t.redsys.es:25443/sis/rest/trataPeticionREST"`
+		Currency       string `yaml:"currency" env-default:"978"`
+		ApiKey         string `yaml:"api_key" env-default:""`
 	} `yaml:"redsys"`
 }
 

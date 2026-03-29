@@ -46,3 +46,13 @@ type Transaction struct {
 	EvseId          *int                   `json:"evse_id,omitempty" bson:"evse_id,omitempty" validate:"omitempty,min=0"`
 	Metadata        map[string]interface{} `json:"metadata,omitempty" bson:"metadata,omitempty"`
 }
+
+// AddOrder appends a payment order to the transaction, deduplicating by order number.
+func (t *Transaction) AddOrder(order PaymentOrder) {
+	for _, po := range t.PaymentOrders {
+		if po.Order == order.Order {
+			return
+		}
+	}
+	t.PaymentOrders = append(t.PaymentOrders, order)
+}

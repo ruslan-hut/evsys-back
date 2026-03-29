@@ -108,6 +108,10 @@ func main() {
 		}, log)
 		coreHandler.SetRedsys(redsys.NewAdapter(redsysClient))
 		coreHandler.SetCurrency(conf.Redsys.Currency)
+		if conf.Redsys.DisablePayment {
+			log.Warn("payment processing disabled (test mode)")
+			coreHandler.SetDisablePayment(true)
+		}
 	}
 
 	server := http.NewServer(conf, log, coreHandler)
