@@ -337,7 +337,7 @@ func (c *Client) decodeResponse(log *slog.Logger, body []byte) (*CaptureResponse
 		return nil, fmt.Errorf("failed to unmarshal decoded parameters: %w", err)
 	}
 
-	success := decoded.ResponseCode == ResponseCodeOK || (len(decoded.ResponseCode) == 4 && decoded.ResponseCode[0] == '0')
+	success := decoded.ResponseCode == ResponseCodeOK || decoded.ResponseCode == ResponseCodeRefundOK
 
 	log.With(
 		slog.String("response_code", decoded.ResponseCode),
