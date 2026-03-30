@@ -24,6 +24,7 @@ type MockDB struct {
 	ordersByTx        map[int]*entity.PaymentOrder        // key: transactionId
 	preauthorizations map[string]*entity.Preauthorization // key: orderNumber
 	preauthByTx       map[int]*entity.Preauthorization    // key: transactionId
+	paymentRetries    map[int]*entity.PaymentRetry        // key: transactionId
 	lastOrderId       int
 	mux               sync.RWMutex
 }
@@ -45,6 +46,7 @@ func NewMockDB() *MockDB {
 		ordersByTx:        make(map[int]*entity.PaymentOrder),
 		preauthorizations: make(map[string]*entity.Preauthorization),
 		preauthByTx:       make(map[int]*entity.Preauthorization),
+		paymentRetries:    make(map[int]*entity.PaymentRetry),
 		lastOrderId:       0,
 	}
 }
@@ -67,6 +69,7 @@ func (db *MockDB) Reset() {
 	db.ordersByTx = make(map[int]*entity.PaymentOrder)
 	db.preauthorizations = make(map[string]*entity.Preauthorization)
 	db.preauthByTx = make(map[int]*entity.Preauthorization)
+	db.paymentRetries = make(map[int]*entity.PaymentRetry)
 	db.lastOrderId = 0
 }
 
@@ -811,4 +814,54 @@ func (db *MockDB) GetLastPreauthorizationOrder(_ context.Context) (*entity.Preau
 		}
 	}
 	return latest, nil
+}
+
+// --- Payment Retries ---
+
+func (db *MockDB) GetUnbilledTransactions(_ context.Context) ([]*entity.Transaction, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	var result []*entity.Transaction
+	for _, tx := range db.transactions {
+		if tx.IsFinished && tx.PaymentAmount > 0 && tx.PaymentBilled < tx.PaymentAmount {
+			result = append(result, tx)
+		}
+	}
+	return result, nil
+}
+
+func (db *MockDB) SavePaymentRetry(_ context.Context, retry *entity.PaymentRetry) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	db.paymentRetries[retry.TransactionId] = retry
+	return nil
+}
+
+func (db *MockDB) GetPaymentRetry(_ context.Context, transactionId int) (*entity.PaymentRetry, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	retry, ok := db.paymentRetries[transactionId]
+	if !ok {
+		return nil, nil
+	}
+	return retry, nil
+}
+
+func (db *MockDB) GetPendingRetries(_ context.Context, now time.Time) ([]*entity.PaymentRetry, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	var result []*entity.PaymentRetry
+	for _, retry := range db.paymentRetries {
+		if !retry.NextRetryTime.After(now) {
+			result = append(result, retry)
+		}
+	}
+	return result, nil
+}
+
+func (db *MockDB) DeletePaymentRetry(_ context.Context, transactionId int) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	delete(db.paymentRetries, transactionId)
+	return nil
 }

@@ -18,18 +18,27 @@ const (
 	MaxAccessLevel              int = 10
 	NormalizedMeterValuesLength     = 60
 	subSystemReports                = "reports"
+	maxRetryAttempts                = 4
 )
 
+var retryDelays = []time.Duration{
+	1 * time.Hour,
+	24 * time.Hour,
+	7 * 24 * time.Hour,
+	30 * 24 * time.Hour,
+}
+
 type Core struct {
-	repo           Repository
-	auth           Authenticator
-	cs             CentralSystem
-	reports        Reports
-	redsys         RedsysClient
-	currency       string
-	disablePayment bool
-	paymentLocks   sync.Map
-	log            *slog.Logger
+	repo                 Repository
+	auth                 Authenticator
+	cs                   CentralSystem
+	reports              Reports
+	redsys               RedsysClient
+	currency             string
+	disablePayment       bool
+	paymentLocks         sync.Map
+	stopPaymentProcessor chan struct{}
+	log                  *slog.Logger
 }
 
 // RedsysClient interface for Redsys operations
@@ -1325,6 +1334,10 @@ func (c *Core) processPaymentResponse(ctx context.Context, resp *CaptureResponse
 		if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
 			log.With(sl.Err(e)).Error("failed to update transaction billing")
 		}
+
+		if e := c.repo.DeletePaymentRetry(ctx, order.TransactionId); e != nil {
+			log.With(sl.Err(e)).Error("failed to delete payment retry record")
+		}
 	} else {
 		// No transaction linked — this is a card enrollment response; save payment method
 		pm := entity.PaymentMethod{
@@ -1385,6 +1398,8 @@ func (c *Core) closeOrderOnError(ctx context.Context, order *entity.PaymentOrder
 		if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
 			c.log.With(sl.Err(e)).Error("failed to update transaction on error")
 		}
+
+		c.schedulePaymentRetry(ctx, order.TransactionId, result)
 	}
 }
 
@@ -1421,4 +1436,151 @@ func (c *Core) decodePaymentParameters(encodedParams string) (*entity.PaymentPar
 		return nil, fmt.Errorf("parse parameters: %w", err)
 	}
 	return &result, nil
+}
+
+// StartPaymentProcessor launches a background goroutine that periodically checks for
+// unbilled transactions and processes payment retries.
+func (c *Core) StartPaymentProcessor() {
+	c.stopPaymentProcessor = make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				c.processUnbilledTransactions(ctx)
+				c.processPaymentRetries(ctx)
+				cancel()
+			case <-c.stopPaymentProcessor:
+				return
+			}
+		}
+	}()
+	c.log.Info("payment processor started")
+}
+
+// StopPaymentProcessor signals the payment processor goroutine to stop.
+func (c *Core) StopPaymentProcessor() {
+	if c.stopPaymentProcessor != nil {
+		close(c.stopPaymentProcessor)
+		c.log.Info("payment processor stopped")
+	}
+}
+
+// processUnbilledTransactions finds all unbilled transactions and initiates payment for each.
+func (c *Core) processUnbilledTransactions(ctx context.Context) {
+	if c.redsys == nil {
+		return
+	}
+
+	transactions, err := c.repo.GetUnbilledTransactions(ctx)
+	if err != nil {
+		c.log.With(sl.Err(err)).Error("failed to get unbilled transactions")
+		return
+	}
+
+	for _, tx := range transactions {
+		// Skip transactions that already have a retry record (handled by processPaymentRetries)
+		retry, _ := c.repo.GetPaymentRetry(ctx, tx.TransactionId)
+		if retry != nil {
+			continue
+		}
+
+		c.log.With(slog.Int("transaction_id", tx.TransactionId)).Info("processing unbilled transaction")
+		if e := c.PayTransaction(ctx, tx.TransactionId); e != nil {
+			c.log.With(
+				slog.Int("transaction_id", tx.TransactionId),
+				sl.Err(e),
+			).Warn("failed to process unbilled transaction")
+		}
+	}
+}
+
+// processPaymentRetries finds pending retry records and re-attempts payment.
+func (c *Core) processPaymentRetries(ctx context.Context) {
+	if c.redsys == nil {
+		return
+	}
+
+	retries, err := c.repo.GetPendingRetries(ctx, time.Now())
+	if err != nil {
+		c.log.With(sl.Err(err)).Error("failed to get pending retries")
+		return
+	}
+
+	for _, retry := range retries {
+		log := c.log.With(
+			slog.Int("transaction_id", retry.TransactionId),
+			slog.Int("attempt", retry.Attempt),
+		)
+
+		transaction, err := c.repo.GetTransaction(ctx, retry.TransactionId)
+		if err != nil {
+			log.With(sl.Err(err)).Error("failed to get transaction for retry")
+			continue
+		}
+		if transaction == nil {
+			log.Warn("transaction not found for retry, removing retry record")
+			_ = c.repo.DeletePaymentRetry(ctx, retry.TransactionId)
+			continue
+		}
+
+		// Reset PaymentBilled and PaymentError so PayTransaction can proceed
+		transaction.PaymentBilled = 0
+		transaction.PaymentError = ""
+		if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
+			log.With(sl.Err(e)).Error("failed to reset transaction for retry")
+			continue
+		}
+
+		log.Info("retrying payment")
+		if e := c.PayTransaction(ctx, retry.TransactionId); e != nil {
+			log.With(sl.Err(e)).Warn("payment retry failed")
+		}
+	}
+}
+
+// schedulePaymentRetry creates or updates a retry record for a failed payment.
+func (c *Core) schedulePaymentRetry(ctx context.Context, transactionId int, lastError string) {
+	log := c.log.With(slog.Int("transaction_id", transactionId))
+
+	existing, _ := c.repo.GetPaymentRetry(ctx, transactionId)
+
+	var attempt int
+	if existing != nil {
+		attempt = existing.Attempt + 1
+	} else {
+		attempt = 1
+	}
+
+	if attempt > maxRetryAttempts {
+		log.With(slog.Int("attempts", attempt-1)).Warn("payment retries exhausted")
+		_ = c.repo.DeletePaymentRetry(ctx, transactionId)
+		return
+	}
+
+	now := time.Now()
+	retry := &entity.PaymentRetry{
+		TransactionId: transactionId,
+		Attempt:       attempt,
+		NextRetryTime: now.Add(retryDelays[attempt-1]),
+		LastError:     lastError,
+		UpdatedAt:     now,
+	}
+	if existing == nil {
+		retry.CreatedAt = now
+	} else {
+		retry.CreatedAt = existing.CreatedAt
+	}
+
+	if e := c.repo.SavePaymentRetry(ctx, retry); e != nil {
+		log.With(sl.Err(e)).Error("failed to save payment retry")
+		return
+	}
+
+	log.With(
+		slog.Int("attempt", attempt),
+		slog.Time("next_retry", retry.NextRetryTime),
+	).Info("payment retry scheduled")
 }

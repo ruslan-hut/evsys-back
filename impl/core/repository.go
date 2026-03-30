@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"evsys-back/entity"
+	"time"
 )
 
 type Repository interface {
@@ -39,6 +40,15 @@ type Repository interface {
 	UpdatePaymentMethodFailCount(ctx context.Context, identifier string, count int) error
 	GetPaymentOrder(ctx context.Context, id int) (*entity.PaymentOrder, error)
 	SavePaymentResult(ctx context.Context, paymentParameters *entity.PaymentParameters) error
+
+	// Payment processing methods
+	GetUnbilledTransactions(ctx context.Context) ([]*entity.Transaction, error)
+
+	// Payment retry methods
+	SavePaymentRetry(ctx context.Context, retry *entity.PaymentRetry) error
+	GetPaymentRetry(ctx context.Context, transactionId int) (*entity.PaymentRetry, error)
+	GetPendingRetries(ctx context.Context, now time.Time) ([]*entity.PaymentRetry, error)
+	DeletePaymentRetry(ctx context.Context, transactionId int) error
 
 	// Preauthorization methods
 	SavePreauthorization(ctx context.Context, preauth *entity.Preauthorization) error

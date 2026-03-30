@@ -34,6 +34,7 @@ const (
 	collectionPaymentPlans      = "payment_plans"
 	collectionLocations         = "locations"
 	collectionPreauthorizations = "preauthorizations"
+	collectionPaymentRetries    = "payment_retries"
 )
 
 type MongoDB struct {
@@ -137,7 +138,7 @@ func (m *MongoDB) read(ctx context.Context, table, dataType string) (interface{}
 
 	collection := m.col(table)
 	filter := bson.D{}
-	opts := options.Find().SetSort(bson.D{{timeFieldName, -1}})
+	opts := options.Find().SetSort(bson.D{{Key: timeFieldName, Value: -1}})
 	if m.logRecordsNumber > 0 {
 		opts.SetLimit(m.logRecordsNumber)
 	}
@@ -185,7 +186,7 @@ func (m *MongoDB) ReadLogAfter(ctx context.Context, timeStart time.Time) ([]*ent
 
 func (m *MongoDB) GetConfig(ctx context.Context, name string) (interface{}, error) {
 	collection := m.col(collectionConfig)
-	filter := bson.D{{"name", name}}
+	filter := bson.D{{Key: "name", Value: name}}
 	var configData interface{}
 	err := collection.FindOne(ctx, filter).Decode(&configData)
 	if err != nil {
@@ -195,39 +196,39 @@ func (m *MongoDB) GetConfig(ctx context.Context, name string) (interface{}, erro
 }
 
 func (m *MongoDB) GetUser(ctx context.Context, username string) (*entity.User, error) {
-	return findOne[entity.User](m, ctx, collectionUsers, bson.D{{"username", username}})
+	return findOne[entity.User](m, ctx, collectionUsers, bson.D{{Key: "username", Value: username}})
 }
 
 // GetUserInfo get user info: data of a user, merged with tags, payment methods, payment plans
 func (m *MongoDB) GetUserInfo(ctx context.Context, _ int, username string) (*entity.UserInfo, error) {
 	pipeline := mongo.Pipeline{
 		{
-			{"$match", bson.M{"username": username}},
+			{Key: "$match", Value: bson.M{"username": username}},
 			//	"$and": []bson.M{
 			//		{"username": username},
 			//		{"access_level": bson.M{"$lte": level}},
 			//	},
 			//}},
 		},
-		{{"$lookup", bson.M{
+		{{Key: "$lookup", Value: bson.M{
 			"from":         collectionPaymentPlans,
 			"localField":   "payment_plan",
 			"foreignField": "plan_id",
 			"as":           "payment_plans",
 		}}},
-		{{"$lookup", bson.M{
+		{{Key: "$lookup", Value: bson.M{
 			"from":         collectionPaymentMethods,
 			"localField":   "username",
 			"foreignField": "user_name",
 			"as":           "payment_methods",
 		}}},
-		{{"$lookup", bson.M{
+		{{Key: "$lookup", Value: bson.M{
 			"from":         collectionUserTags,
 			"localField":   "username",
 			"foreignField": "username",
 			"as":           "user_tags",
 		}}},
-		{{"$project", bson.M{
+		{{Key: "$project", Value: bson.M{
 			//"payment_methods.identifier": 0,
 			"payment_methods.user_id": 0,
 			"user_tags.user_id":       0,
@@ -266,7 +267,7 @@ func (m *MongoDB) GetUsers(ctx context.Context) ([]*entity.User, error) {
 }
 
 func (m *MongoDB) GetUserById(ctx context.Context, userId string) (*entity.User, error) {
-	return findOne[entity.User](m, ctx, collectionUsers, bson.D{{"user_id", userId}})
+	return findOne[entity.User](m, ctx, collectionUsers, bson.D{{Key: "user_id", Value: userId}})
 }
 
 func (m *MongoDB) GetUserTags(ctx context.Context, userId string) ([]entity.UserTag, error) {
@@ -284,7 +285,7 @@ func (m *MongoDB) GetUserTags(ctx context.Context, userId string) ([]entity.User
 }
 
 func (m *MongoDB) GetUserTag(ctx context.Context, idTag string) (*entity.UserTag, error) {
-	return findOne[entity.UserTag](m, ctx, collectionUserTags, bson.D{{"id_tag", idTag}})
+	return findOne[entity.UserTag](m, ctx, collectionUserTags, bson.D{{Key: "id_tag", Value: idTag}})
 }
 
 func (m *MongoDB) AddUserTag(ctx context.Context, userTag *entity.UserTag) error {
@@ -300,7 +301,7 @@ func (m *MongoDB) AddUserTag(ctx context.Context, userTag *entity.UserTag) error
 // CheckUserTag check unique of idTag
 func (m *MongoDB) CheckUserTag(ctx context.Context, idTag string) error {
 	collection := m.col(collectionUserTags)
-	filter := bson.D{{"id_tag", idTag}}
+	filter := bson.D{{Key: "id_tag", Value: idTag}}
 	var userTag entity.UserTag
 	err := collection.FindOne(ctx, filter).Decode(&userTag)
 	if err == nil {
@@ -311,9 +312,9 @@ func (m *MongoDB) CheckUserTag(ctx context.Context, idTag string) error {
 
 func (m *MongoDB) UpdateTagLastSeen(ctx context.Context, userTag *entity.UserTag) error {
 	collection := m.col(collectionUserTags)
-	filter := bson.D{{"id_tag", userTag.IdTag}}
+	filter := bson.D{{Key: "id_tag", Value: userTag.IdTag}}
 	update := bson.M{"$set": bson.D{
-		{"last_seen", time.Now()},
+		{Key: "last_seen", Value: time.Now()},
 	}}
 	_, err := collection.UpdateOne(ctx, filter, update)
 	return err
@@ -337,28 +338,28 @@ func (m *MongoDB) GetUserTagByIdTag(ctx context.Context, idTag string) (*entity.
 }
 
 func (m *MongoDB) UpdateUserTag(ctx context.Context, userTag *entity.UserTag) error {
-	filter := bson.D{{"id_tag", userTag.IdTag}}
+	filter := bson.D{{Key: "id_tag", Value: userTag.IdTag}}
 	update := bson.M{"$set": bson.D{
-		{"username", userTag.Username},
-		{"user_id", userTag.UserId},
-		{"source", userTag.Source},
-		{"is_enabled", userTag.IsEnabled},
-		{"local", userTag.Local},
-		{"note", userTag.Note},
+		{Key: "username", Value: userTag.Username},
+		{Key: "user_id", Value: userTag.UserId},
+		{Key: "source", Value: userTag.Source},
+		{Key: "is_enabled", Value: userTag.IsEnabled},
+		{Key: "local", Value: userTag.Local},
+		{Key: "note", Value: userTag.Note},
 	}}
 	return m.updateOne(ctx, collectionUserTags, filter, update, "tag not found")
 }
 
 func (m *MongoDB) DeleteUserTag(ctx context.Context, idTag string) error {
-	return m.deleteOne(ctx, collectionUserTags, bson.D{{"id_tag", idTag}}, "tag not found")
+	return m.deleteOne(ctx, collectionUserTags, bson.D{{Key: "id_tag", Value: idTag}}, "tag not found")
 }
 
 func (m *MongoDB) UpdateLastSeen(ctx context.Context, user *entity.User) error {
 	collection := m.col(collectionUsers)
-	filter := bson.D{{"username", user.Username}}
+	filter := bson.D{{Key: "username", Value: user.Username}}
 	update := bson.M{"$set": bson.D{
-		{"last_seen", time.Now()},
-		{"token", user.Token},
+		{Key: "last_seen", Value: time.Now()},
+		{Key: "token", Value: user.Token},
 	}}
 	_, err := collection.UpdateOne(ctx, filter, update)
 	return err
@@ -371,26 +372,26 @@ func (m *MongoDB) AddUser(ctx context.Context, user *entity.User) error {
 }
 
 func (m *MongoDB) UpdateUser(ctx context.Context, user *entity.User) error {
-	filter := bson.D{{"username", user.Username}}
+	filter := bson.D{{Key: "username", Value: user.Username}}
 	update := bson.M{"$set": bson.D{
-		{"name", user.Name},
-		{"email", user.Email},
-		{"role", user.Role},
-		{"access_level", user.AccessLevel},
-		{"payment_plan", user.PaymentPlan},
-		{"password", user.Password},
+		{Key: "name", Value: user.Name},
+		{Key: "email", Value: user.Email},
+		{Key: "role", Value: user.Role},
+		{Key: "access_level", Value: user.AccessLevel},
+		{Key: "payment_plan", Value: user.PaymentPlan},
+		{Key: "password", Value: user.Password},
 	}}
 	return m.updateOne(ctx, collectionUsers, filter, update, "user not found")
 }
 
 func (m *MongoDB) DeleteUser(ctx context.Context, username string) error {
-	return m.deleteOne(ctx, collectionUsers, bson.D{{"username", username}}, "user not found")
+	return m.deleteOne(ctx, collectionUsers, bson.D{{Key: "username", Value: username}}, "user not found")
 }
 
 // CheckUsername check unique username
 func (m *MongoDB) CheckUsername(ctx context.Context, username string) error {
 	collection := m.col(collectionUsers)
-	filter := bson.D{{"username", username}}
+	filter := bson.D{{Key: "username", Value: username}}
 	var userData entity.User
 	err := collection.FindOne(ctx, filter).Decode(&userData)
 	if err == nil {
@@ -401,7 +402,7 @@ func (m *MongoDB) CheckUsername(ctx context.Context, username string) error {
 
 func (m *MongoDB) CheckToken(ctx context.Context, token string) (*entity.User, error) {
 	collection := m.col(collectionUsers)
-	filter := bson.D{{"token", token}}
+	filter := bson.D{{Key: "token", Value: token}}
 	var userData entity.User
 	err := collection.FindOne(ctx, filter).Decode(&userData)
 	if err != nil {
@@ -415,7 +416,7 @@ func (m *MongoDB) GetChargePoints(ctx context.Context, level int, searchTerm str
 
 	pipeline := mongo.Pipeline{
 		{
-			{"$match", bson.M{
+			{Key: "$match", Value: bson.M{
 				"$and": []bson.M{
 					{"$or": []bson.M{
 						{"description": searchRegex},
@@ -426,13 +427,13 @@ func (m *MongoDB) GetChargePoints(ctx context.Context, level int, searchTerm str
 				},
 			}},
 		},
-		{{"$lookup", bson.M{
+		{{Key: "$lookup", Value: bson.M{
 			"from":         collectionConnectors,
 			"localField":   "charge_point_id",
 			"foreignField": "charge_point_id",
 			"as":           "Connectors",
 		}}},
-		bson.D{{"$sort", bson.D{{"charge_point_id", 1}}}},
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "charge_point_id", Value: 1}}}},
 	}
 
 	collection := m.col(collectionChargePoints)
@@ -453,12 +454,12 @@ func (m *MongoDB) GetChargePoint(ctx context.Context, level int, id string) (*en
 	filter := bson.M{"$and": []bson.M{{"charge_point_id": id}, {"access_level": bson.M{"$lte": level}}}}
 
 	pipeline := mongo.Pipeline{
-		bson.D{{"$match", filter}}, // Match the charge point
-		bson.D{{"$lookup", bson.D{ // Lookup to join with connectors collection
-			{"from", collectionConnectors},      // The collection to join
-			{"localField", "charge_point_id"},   // Field from charge_points collection
-			{"foreignField", "charge_point_id"}, // Field from connectors collection
-			{"as", "Connectors"},                // The array field to add in chargePoint
+		bson.D{{Key: "$match", Value: filter}}, // Match the charge point
+		bson.D{{Key: "$lookup", Value: bson.D{ // Lookup to join with connectors collection
+			{Key: "from", Value: collectionConnectors},      // The collection to join
+			{Key: "localField", Value: "charge_point_id"},   // Field from charge_points collection
+			{Key: "foreignField", Value: "charge_point_id"}, // Field from connectors collection
+			{Key: "as", Value: "Connectors"},                // The array field to add in chargePoint
 		}}},
 	}
 
@@ -484,13 +485,13 @@ func (m *MongoDB) UpdateChargePoint(ctx context.Context, level int, chargePoint 
 		{"access_level": bson.M{"$lte": level}},
 	}}
 	update := bson.M{"$set": bson.D{
-		{"title", chargePoint.Title},
-		{"description", chargePoint.Description},
-		{"address", chargePoint.Address},
-		{"access_type", chargePoint.AccessType},
-		{"access_level", chargePoint.AccessLevel},
-		{"location.latitude", chargePoint.Location.Latitude},
-		{"location.longitude", chargePoint.Location.Longitude},
+		{Key: "title", Value: chargePoint.Title},
+		{Key: "description", Value: chargePoint.Description},
+		{Key: "address", Value: chargePoint.Address},
+		{Key: "access_type", Value: chargePoint.AccessType},
+		{Key: "access_level", Value: chargePoint.AccessLevel},
+		{Key: "location.latitude", Value: chargePoint.Location.Latitude},
+		{Key: "location.longitude", Value: chargePoint.Location.Longitude},
 	}}
 	result, err := collection.UpdateOne(ctx, filter, update)
 	if err != nil {
@@ -505,9 +506,9 @@ func (m *MongoDB) UpdateChargePoint(ctx context.Context, level int, chargePoint 
 	for _, connector := range chargePoint.Connectors {
 		filter = bson.M{"charge_point_id": chargePoint.Id, "connector_id": connector.Id}
 		update = bson.M{"$set": bson.D{
-			{"type", connector.Type},
-			{"power", connector.Power},
-			{"connector_id_name", connector.IdName},
+			{Key: "type", Value: connector.Type},
+			{Key: "power", Value: connector.Power},
+			{Key: "connector_id_name", Value: connector.IdName},
 		}}
 		_, err = collection.UpdateOne(ctx, filter, update)
 	}
@@ -515,7 +516,7 @@ func (m *MongoDB) UpdateChargePoint(ctx context.Context, level int, chargePoint 
 }
 
 func (m *MongoDB) GetConnector(chargePointId string, connectorId int) (*entity.Connector, error) {
-	return findOne[entity.Connector](m, context.Background(), collectionConnectors, bson.D{{"charge_point_id", chargePointId}, {"connector_id", connectorId}})
+	return findOne[entity.Connector](m, context.Background(), collectionConnectors, bson.D{{Key: "charge_point_id", Value: chargePointId}, {Key: "connector_id", Value: connectorId}})
 }
 
 func (m *MongoDB) getTransactionState(ctx context.Context, userId string, level int, transaction *entity.Transaction) (*entity.ChargeState, error) {
@@ -609,19 +610,19 @@ func (m *MongoDB) GetTransactionState(ctx context.Context, userId string, level 
 }
 
 func (m *MongoDB) GetTransaction(ctx context.Context, id int) (*entity.Transaction, error) {
-	return findOne[entity.Transaction](m, ctx, collectionTransactions, bson.D{{"transaction_id", id}})
+	return findOne[entity.Transaction](m, ctx, collectionTransactions, bson.D{{Key: "transaction_id", Value: id}})
 }
 
 // UpdateTransactionPayment updates payment-related fields on a transaction.
 func (m *MongoDB) UpdateTransactionPayment(ctx context.Context, transaction *entity.Transaction) error {
 	collection := m.col(collectionTransactions)
-	filter := bson.D{{"transaction_id", transaction.TransactionId}}
+	filter := bson.D{{Key: "transaction_id", Value: transaction.TransactionId}}
 	update := bson.D{
-		{"$set", bson.D{
-			{"payment_order", transaction.PaymentOrder},
-			{"payment_billed", transaction.PaymentBilled},
-			{"payment_error", transaction.PaymentError},
-			{"payment_orders", transaction.PaymentOrders},
+		{Key: "$set", Value: bson.D{
+			{Key: "payment_order", Value: transaction.PaymentOrder},
+			{Key: "payment_billed", Value: transaction.PaymentBilled},
+			{Key: "payment_error", Value: transaction.PaymentError},
+			{Key: "payment_orders", Value: transaction.PaymentOrders},
 		}},
 	}
 	if _, err := collection.UpdateOne(ctx, filter, update); err != nil {
@@ -654,8 +655,8 @@ func (m *MongoDB) GetActiveTransactions(ctx context.Context, userId string) ([]*
 
 	collection := m.col(collectionTransactions)
 	filter := bson.D{
-		{"id_tag", bson.D{{"$in", idTags}}},
-		{"is_finished", false},
+		{Key: "id_tag", Value: bson.D{{Key: "$in", Value: idTags}}},
+		{Key: "is_finished", Value: false},
 	}
 	var transactions []entity.Transaction
 	cursor, err := collection.Find(ctx, filter)
@@ -696,9 +697,9 @@ func (m *MongoDB) GetTransactionsToBill(ctx context.Context, userId string) ([]*
 
 	collection := m.col(collectionTransactions)
 	filter := bson.D{
-		{"id_tag", bson.D{{"$in", idTags}}},
-		{"is_finished", true},
-		{"$expr", bson.D{{"$lt", bson.A{"$payment_billed", "$payment_amount"}}}},
+		{Key: "id_tag", Value: bson.D{{Key: "$in", Value: idTags}}},
+		{Key: "is_finished", Value: true},
+		{Key: "$expr", Value: bson.D{{Key: "$lt", Value: bson.A{"$payment_billed", "$payment_amount"}}}},
 	}
 	var transactions []*entity.Transaction
 	cursor, err := collection.Find(ctx, filter)
@@ -734,18 +735,18 @@ func (m *MongoDB) GetTransactions(ctx context.Context, userId string, period str
 	time1, time2, err := parsePeriod(period)
 	if err != nil {
 		filter := bson.D{
-			{"id_tag", bson.D{{"$in", idTags}}},
-			{"is_finished", true},
+			{Key: "id_tag", Value: bson.D{{Key: "$in", Value: idTags}}},
+			{Key: "is_finished", Value: true},
 		}
-		cursor, err = collection.Find(ctx, filter, options.Find().SetLimit(int64(100)).SetSkip(int64(0)).SetSort(bson.D{{"time_start", -1}}))
+		cursor, err = collection.Find(ctx, filter, options.Find().SetLimit(int64(100)).SetSkip(int64(0)).SetSort(bson.D{{Key: "time_start", Value: -1}}))
 	} else {
 		filter := bson.D{
-			{"id_tag", bson.D{{"$in", idTags}}},
-			{"is_finished", true},
-			{"time_stop", bson.D{{"$gte", time1}}},
-			{"time_stop", bson.D{{"$lte", time2}}},
+			{Key: "id_tag", Value: bson.D{{Key: "$in", Value: idTags}}},
+			{Key: "is_finished", Value: true},
+			{Key: "time_stop", Value: bson.D{{Key: "$gte", Value: time1}}},
+			{Key: "time_stop", Value: bson.D{{Key: "$lte", Value: time2}}},
 		}
-		cursor, err = collection.Find(ctx, filter, options.Find().SetSort(bson.D{{"time_start", -1}}))
+		cursor, err = collection.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "time_start", Value: -1}}))
 	}
 
 	if err != nil {
@@ -767,7 +768,7 @@ func (m *MongoDB) GetFilteredTransactions(ctx context.Context, filter *entity.Tr
 	// Filter by username: lookup user's id_tags first
 	if filter.Username != "" {
 		tagsCollection := m.col(collectionUserTags)
-		tagFilter := bson.D{{"username", filter.Username}}
+		tagFilter := bson.D{{Key: "username", Value: filter.Username}}
 		cursor, err := tagsCollection.Find(ctx, tagFilter)
 		if err != nil {
 			return nil, m.findError(err)
@@ -784,37 +785,37 @@ func (m *MongoDB) GetFilteredTransactions(ctx context.Context, filter *entity.Tr
 		for _, tag := range userTags {
 			idTags = append(idTags, strings.ToUpper(tag.IdTag))
 		}
-		mongoFilter = append(mongoFilter, bson.E{"id_tag", bson.D{{"$in", idTags}}})
+		mongoFilter = append(mongoFilter, bson.E{Key: "id_tag", Value: bson.D{{Key: "$in", Value: idTags}}})
 	}
 
 	// Filter by id_tag
 	if filter.IdTag != "" {
-		mongoFilter = append(mongoFilter, bson.E{"id_tag", strings.ToUpper(filter.IdTag)})
+		mongoFilter = append(mongoFilter, bson.E{Key: "id_tag", Value: strings.ToUpper(filter.IdTag)})
 	}
 
 	// Filter by charge_point_id
 	if filter.ChargePointId != "" {
-		mongoFilter = append(mongoFilter, bson.E{"charge_point_id", filter.ChargePointId})
+		mongoFilter = append(mongoFilter, bson.E{Key: "charge_point_id", Value: filter.ChargePointId})
 	}
 
 	// Filter by date range
 	if filter.From != nil {
-		mongoFilter = append(mongoFilter, bson.E{"time_stop", bson.D{{"$gte", *filter.From}}})
+		mongoFilter = append(mongoFilter, bson.E{Key: "time_stop", Value: bson.D{{Key: "$gte", Value: *filter.From}}})
 	}
 	if filter.To != nil {
-		mongoFilter = append(mongoFilter, bson.E{"time_stop", bson.D{{"$lte", *filter.To}}})
+		mongoFilter = append(mongoFilter, bson.E{Key: "time_stop", Value: bson.D{{Key: "$lte", Value: *filter.To}}})
 	}
 
 	// Filter by payment_error (non-empty)
 	if filter.WithError {
-		mongoFilter = append(mongoFilter, bson.E{"payment_error", bson.D{{"$exists", true}, {"$ne", ""}}})
+		mongoFilter = append(mongoFilter, bson.E{Key: "payment_error", Value: bson.D{{Key: "$exists", Value: true}, {Key: "$ne", Value: ""}}})
 	}
 
 	// Only finished transactions
-	mongoFilter = append(mongoFilter, bson.E{"is_finished", true})
+	mongoFilter = append(mongoFilter, bson.E{Key: "is_finished", Value: true})
 
 	// Sort by time_start descending (newest first)
-	opts := options.Find().SetSort(bson.D{{"time_start", -1}})
+	opts := options.Find().SetSort(bson.D{{Key: "time_start", Value: -1}})
 
 	cursor, err := collection.Find(ctx, mongoFilter, opts)
 	if err != nil {
@@ -832,8 +833,8 @@ func (m *MongoDB) GetFilteredTransactions(ctx context.Context, filter *entity.Tr
 func (m *MongoDB) GetTransactionByTag(ctx context.Context, idTag string, timeStart time.Time) (*entity.Transaction, error) {
 	collection := m.col(collectionTransactions)
 	filter := bson.D{
-		{"id_tag", strings.ToUpper(idTag)},
-		{"time_start", bson.D{{"$gte", timeStart}}},
+		{Key: "id_tag", Value: strings.ToUpper(idTag)},
+		{Key: "time_start", Value: bson.D{{Key: "$gte", Value: timeStart}}},
 	}
 	var transaction entity.Transaction
 	if err := collection.FindOne(ctx, filter).Decode(&transaction); err != nil {
@@ -845,11 +846,11 @@ func (m *MongoDB) GetTransactionByTag(ctx context.Context, idTag string, timeSta
 func (m *MongoDB) GetLastMeterValue(ctx context.Context, transactionId int) (*entity.TransactionMeter, error) {
 	collection := m.col(collectionMeterValues)
 	filter := bson.D{
-		{"transaction_id", transactionId},
-		{"measurand", "Energy.Active.Import.Register"},
+		{Key: "transaction_id", Value: transactionId},
+		{Key: "measurand", Value: "Energy.Active.Import.Register"},
 	}
 	var value entity.TransactionMeter
-	if err := collection.FindOne(ctx, filter, options.FindOne().SetSort(bson.D{{"time", -1}})).Decode(&value); err != nil {
+	if err := collection.FindOne(ctx, filter, options.FindOne().SetSort(bson.D{{Key: "time", Value: -1}})).Decode(&value); err != nil {
 		return nil, m.findError(err)
 	}
 	return &value, nil
@@ -857,12 +858,12 @@ func (m *MongoDB) GetLastMeterValue(ctx context.Context, transactionId int) (*en
 
 func (m *MongoDB) GetMeterValues(ctx context.Context, transactionId int, from time.Time) ([]entity.TransactionMeter, error) {
 	filter := bson.D{
-		{"transaction_id", transactionId},
-		{"measurand", "Energy.Active.Import.Register"},
-		{"time", bson.D{{"$gte", from}}},
+		{Key: "transaction_id", Value: transactionId},
+		{Key: "measurand", Value: "Energy.Active.Import.Register"},
+		{Key: "time", Value: bson.D{{Key: "$gte", Value: from}}},
 	}
 	collection := m.col(collectionMeterValues)
-	opts := options.Find().SetSort(bson.D{{"time", 1}})
+	opts := options.Find().SetSort(bson.D{{Key: "time", Value: 1}})
 	cursor, err := collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
@@ -892,10 +893,10 @@ func (m *MongoDB) GetRecentUserChargePoints(ctx context.Context, userId string) 
 	// Get transactions
 	collection := m.col(collectionTransactions)
 	filter := bson.D{
-		{"id_tag", bson.D{{"$in", idTags}}},
-		{"is_finished", true},
+		{Key: "id_tag", Value: bson.D{{Key: "$in", Value: idTags}}},
+		{Key: "is_finished", Value: true},
 	}
-	opts := options.Find().SetSort(bson.D{{"time_start", -1}}).SetLimit(3)
+	opts := options.Find().SetSort(bson.D{{Key: "time_start", Value: -1}}).SetLimit(3)
 	cursor, err := collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, m.findError(err)
@@ -917,8 +918,8 @@ func (m *MongoDB) GetRecentUserChargePoints(ctx context.Context, userId string) 
 	}
 
 	pipeline := mongo.Pipeline{
-		{{"$match", bson.D{{"charge_point_id", bson.D{{"$in", chargePointIds}}}}}},
-		{{"$lookup", bson.M{
+		{{Key: "$match", Value: bson.D{{Key: "charge_point_id", Value: bson.D{{Key: "$in", Value: chargePointIds}}}}}},
+		{{Key: "$lookup", Value: bson.M{
 			"from":         collectionConnectors,
 			"localField":   "charge_point_id",
 			"foreignField": "charge_point_id",
@@ -950,7 +951,7 @@ func (m *MongoDB) AddInviteCode(ctx context.Context, invite *entity.Invite) erro
 
 func (m *MongoDB) CheckInviteCode(ctx context.Context, code string) (bool, error) {
 	collection := m.col(collectionInvites)
-	filter := bson.D{{"code", code}}
+	filter := bson.D{{Key: "code", Value: code}}
 	var inviteCode entity.Invite
 	if err := collection.FindOne(ctx, filter).Decode(&inviteCode); err != nil {
 		return false, err
@@ -960,7 +961,7 @@ func (m *MongoDB) CheckInviteCode(ctx context.Context, code string) (bool, error
 
 func (m *MongoDB) DeleteInviteCode(ctx context.Context, code string) error {
 	collection := m.col(collectionInvites)
-	filter := bson.D{{"code", code}}
+	filter := bson.D{{Key: "code", Value: code}}
 	_, err := collection.DeleteOne(ctx, filter)
 	return err
 }
@@ -973,7 +974,7 @@ func (m *MongoDB) SavePaymentResult(ctx context.Context, paymentParameters *enti
 
 // GetPaymentParameters get payment parameters by order id
 func (m *MongoDB) GetPaymentParameters(orderId string) (*entity.PaymentParameters, error) {
-	return findOne[entity.PaymentParameters](m, context.Background(), collectionPayment, bson.D{{"order", orderId}})
+	return findOne[entity.PaymentParameters](m, context.Background(), collectionPayment, bson.D{{Key: "order", Value: orderId}})
 }
 
 func (m *MongoDB) SavePaymentMethod(ctx context.Context, paymentMethod *entity.PaymentMethod) error {
@@ -996,18 +997,18 @@ func (m *MongoDB) UpdatePaymentMethod(ctx context.Context, paymentMethod *entity
 
 	// if current method is default, then set all other methods to not default
 	if paymentMethod.IsDefault {
-		filter := bson.D{{"user_id", paymentMethod.UserId}}
-		update := bson.M{"$set": bson.D{{"is_default", false}}}
+		filter := bson.D{{Key: "user_id", Value: paymentMethod.UserId}}
+		update := bson.M{"$set": bson.D{{Key: "is_default", Value: false}}}
 		_, err := collection.UpdateMany(ctx, filter, update)
 		if err != nil {
 			return err
 		}
 	}
 
-	filter := bson.D{{"identifier", paymentMethod.Identifier}, {"user_id", paymentMethod.UserId}}
+	filter := bson.D{{Key: "identifier", Value: paymentMethod.Identifier}, {Key: "user_id", Value: paymentMethod.UserId}}
 	update := bson.M{"$set": bson.D{
-		{"description", paymentMethod.Description},
-		{"is_default", paymentMethod.IsDefault},
+		{Key: "description", Value: paymentMethod.Description},
+		{Key: "is_default", Value: paymentMethod.IsDefault},
 	}}
 	_, err := collection.UpdateOne(ctx, filter, update)
 	if err != nil {
@@ -1021,7 +1022,7 @@ func (m *MongoDB) DeletePaymentMethod(ctx context.Context, paymentMethod *entity
 	isDefault := paymentMethod.IsDefault
 
 	collection := m.col(collectionPaymentMethods)
-	filter := bson.D{{"identifier", paymentMethod.Identifier}, {"user_id", paymentMethod.UserId}}
+	filter := bson.D{{Key: "identifier", Value: paymentMethod.Identifier}, {Key: "user_id", Value: paymentMethod.UserId}}
 	result, err := collection.DeleteOne(ctx, filter)
 	if err != nil {
 		return err
@@ -1033,12 +1034,12 @@ func (m *MongoDB) DeletePaymentMethod(ctx context.Context, paymentMethod *entity
 	// if we deleted default method, then set first method to default
 	if isDefault {
 		var method entity.PaymentMethod
-		filter = bson.D{{"user_id", paymentMethod.UserId}}
+		filter = bson.D{{Key: "user_id", Value: paymentMethod.UserId}}
 		err = collection.FindOne(ctx, filter).Decode(&method)
 		if err == nil {
-			filter = bson.D{{"identifier", method.Identifier}, {"user_id", method.UserId}}
+			filter = bson.D{{Key: "identifier", Value: method.Identifier}, {Key: "user_id", Value: method.UserId}}
 			update := bson.M{"$set": bson.D{
-				{"is_default", true},
+				{Key: "is_default", Value: true},
 			}}
 			_, _ = collection.UpdateOne(ctx, filter, update)
 		}
@@ -1049,7 +1050,7 @@ func (m *MongoDB) DeletePaymentMethod(ctx context.Context, paymentMethod *entity
 // GetPaymentMethods get payment methods by user id
 func (m *MongoDB) GetPaymentMethods(ctx context.Context, userId string) ([]*entity.PaymentMethod, error) {
 	collection := m.col(collectionPaymentMethods)
-	filter := bson.D{{"user_id", userId}}
+	filter := bson.D{{Key: "user_id", Value: userId}}
 	var paymentMethods []*entity.PaymentMethod
 	cursor, err := collection.Find(ctx, filter)
 	if err != nil {
@@ -1066,14 +1067,14 @@ func (m *MongoDB) GetPaymentMethods(ctx context.Context, userId string) ([]*enti
 
 // GetPaymentMethod get payment method by identifier
 func (m *MongoDB) GetPaymentMethod(ctx context.Context, identifier, userId string) (*entity.PaymentMethod, error) {
-	return findOne[entity.PaymentMethod](m, ctx, collectionPaymentMethods, bson.D{{"identifier", identifier}, {"user_id", userId}})
+	return findOne[entity.PaymentMethod](m, ctx, collectionPaymentMethods, bson.D{{Key: "identifier", Value: identifier}, {Key: "user_id", Value: userId}})
 }
 
 func (m *MongoDB) GetLastOrder(ctx context.Context) (*entity.PaymentOrder, error) {
 	collection := m.col(collectionPaymentOrders)
 	filter := bson.D{}
 	var order entity.PaymentOrder
-	if err := collection.FindOne(ctx, filter, options.FindOne().SetSort(bson.D{{"time_opened", -1}})).Decode(&order); err != nil {
+	if err := collection.FindOne(ctx, filter, options.FindOne().SetSort(bson.D{{Key: "time_opened", Value: -1}})).Decode(&order); err != nil {
 		return nil, m.findError(err)
 	}
 	return &order, nil
@@ -1082,7 +1083,7 @@ func (m *MongoDB) GetLastOrder(ctx context.Context) (*entity.PaymentOrder, error
 // GetPaymentOrderByTransaction get payment order by transaction id
 func (m *MongoDB) GetPaymentOrderByTransaction(ctx context.Context, transactionId int) (*entity.PaymentOrder, error) {
 	collection := m.col(collectionPaymentOrders)
-	filter := bson.D{{"transaction_id", transactionId}, {"is_completed", false}}
+	filter := bson.D{{Key: "transaction_id", Value: transactionId}, {Key: "is_completed", Value: false}}
 	var order entity.PaymentOrder
 	if err := collection.FindOne(ctx, filter).Decode(&order); err != nil {
 		return nil, err
@@ -1091,7 +1092,7 @@ func (m *MongoDB) GetPaymentOrderByTransaction(ctx context.Context, transactionI
 }
 
 func (m *MongoDB) GetPaymentOrder(ctx context.Context, id int) (*entity.PaymentOrder, error) {
-	return findOne[entity.PaymentOrder](m, ctx, collectionPaymentOrders, bson.D{{"order", id}})
+	return findOne[entity.PaymentOrder](m, ctx, collectionPaymentOrders, bson.D{{Key: "order", Value: id}})
 }
 
 // GetDefaultPaymentMethod returns the default payment method for a user,
@@ -1100,15 +1101,15 @@ func (m *MongoDB) GetDefaultPaymentMethod(ctx context.Context, userId string) (*
 	collection := m.col(collectionPaymentMethods)
 
 	// Try to find default method with lowest fail count
-	filter := bson.D{{"user_id", userId}, {"is_default", true}}
-	opts := options.FindOne().SetSort(bson.D{{"fail_count", 1}})
+	filter := bson.D{{Key: "user_id", Value: userId}, {Key: "is_default", Value: true}}
+	opts := options.FindOne().SetSort(bson.D{{Key: "fail_count", Value: 1}})
 	var pm entity.PaymentMethod
 	if err := collection.FindOne(ctx, filter, opts).Decode(&pm); err == nil {
 		return &pm, nil
 	}
 
 	// Fallback: any method for this user, sorted by fail count ascending
-	filter = bson.D{{"user_id", userId}}
+	filter = bson.D{{Key: "user_id", Value: userId}}
 	if err := collection.FindOne(ctx, filter, opts).Decode(&pm); err != nil {
 		return nil, m.findError(err)
 	}
@@ -1117,21 +1118,21 @@ func (m *MongoDB) GetDefaultPaymentMethod(ctx context.Context, userId string) (*
 
 // GetPaymentMethodByIdentifier returns a payment method by its card token identifier.
 func (m *MongoDB) GetPaymentMethodByIdentifier(ctx context.Context, identifier string) (*entity.PaymentMethod, error) {
-	return findOne[entity.PaymentMethod](m, ctx, collectionPaymentMethods, bson.D{{"identifier", identifier}})
+	return findOne[entity.PaymentMethod](m, ctx, collectionPaymentMethods, bson.D{{Key: "identifier", Value: identifier}})
 }
 
 // UpdatePaymentMethodFailCount updates the fail_count for a payment method.
 func (m *MongoDB) UpdatePaymentMethodFailCount(ctx context.Context, identifier string, count int) error {
 	collection := m.col(collectionPaymentMethods)
-	filter := bson.D{{"identifier", identifier}}
-	update := bson.M{"$set": bson.D{{"fail_count", count}}}
+	filter := bson.D{{Key: "identifier", Value: identifier}}
+	update := bson.M{"$set": bson.D{{Key: "fail_count", Value: count}}}
 	_, err := collection.UpdateOne(ctx, filter, update)
 	return err
 }
 
 // SavePaymentOrder insert or update order
 func (m *MongoDB) SavePaymentOrder(ctx context.Context, order *entity.PaymentOrder) error {
-	filter := bson.D{{"order", order.Order}}
+	filter := bson.D{{Key: "order", Value: order.Order}}
 	set := bson.M{"$set": order}
 	collection := m.col(collectionPaymentOrders)
 	_, err := collection.UpdateOne(ctx, filter, set, options.Update().SetUpsert(true))
@@ -1173,54 +1174,48 @@ func parsePeriod(period string) (time1, time2 time.Time, err error) {
 func (m *MongoDB) GetLocations(ctx context.Context) ([]*entity.Location, error) {
 	pipeline := bson.A{
 		bson.D{
-			{"$match", bson.M{
+			{Key: "$match", Value: bson.M{
 				"roaming": true,
 			}},
 		},
 		bson.D{
-			{"$lookup",
-				bson.D{
-					{"from", collectionChargePoints},
-					{"localField", "id"},
-					{"foreignField", "location_id"},
-					{"as", "charge_points"},
-				},
+			{Key: "$lookup", Value: bson.D{
+				{Key: "from", Value: collectionChargePoints},
+				{Key: "localField", Value: "id"},
+				{Key: "foreignField", Value: "location_id"},
+				{Key: "as", Value: "charge_points"},
+			},
 			},
 		},
-		bson.D{{"$unwind", bson.D{{"path", "$charge_points"}}}},
+		bson.D{{Key: "$unwind", Value: bson.D{{Key: "path", Value: "$charge_points"}}}},
 		bson.D{
-			{"$lookup",
-				bson.D{
-					{"from", collectionConnectors},
-					{"localField", collectionChargePoints + ".charge_point_id"},
-					{"foreignField", "charge_point_id"},
-					{"as", "charge_points.connectors"},
-				},
+			{Key: "$lookup", Value: bson.D{
+				{Key: "from", Value: collectionConnectors},
+				{Key: "localField", Value: collectionChargePoints + ".charge_point_id"},
+				{Key: "foreignField", Value: "charge_point_id"},
+				{Key: "as", Value: "charge_points.connectors"},
 			},
-		},
-		bson.D{
-			{"$group",
-				bson.D{
-					{"_id", "$id"},
-					{"root", bson.D{{"$mergeObjects", "$$ROOT"}}},
-					{"charge_points", bson.D{{"$push", "$charge_points"}}},
-				},
 			},
 		},
 		bson.D{
-			{"$replaceRoot",
-				bson.D{
-					{"newRoot",
-						bson.D{
-							{"$mergeObjects",
-								bson.A{
-									"$root",
-									bson.D{{"charge_points", "$charge_points"}},
-								},
-							},
-						},
+			{Key: "$group", Value: bson.D{
+				{Key: "_id", Value: "$id"},
+				{Key: "root", Value: bson.D{{Key: "$mergeObjects", Value: "$$ROOT"}}},
+				{Key: "charge_points", Value: bson.D{{Key: "$push", Value: "$charge_points"}}},
+			},
+			},
+		},
+		bson.D{
+			{Key: "$replaceRoot", Value: bson.D{
+				{Key: "newRoot", Value: bson.D{
+					{Key: "$mergeObjects", Value: bson.A{
+						"$root",
+						bson.D{{Key: "charge_points", Value: "$charge_points"}},
+					},
 					},
 				},
+				},
+			},
 			},
 		},
 	}
@@ -1239,7 +1234,7 @@ func (m *MongoDB) GetLocations(ctx context.Context) ([]*entity.Location, error) 
 // SavePreauthorization saves a preauthorization record (insert or update)
 func (m *MongoDB) SavePreauthorization(ctx context.Context, preauth *entity.Preauthorization) error {
 	collection := m.col(collectionPreauthorizations)
-	filter := bson.D{{"order_number", preauth.OrderNumber}}
+	filter := bson.D{{Key: "order_number", Value: preauth.OrderNumber}}
 	set := bson.M{"$set": preauth}
 	_, err := collection.UpdateOne(ctx, filter, set, options.Update().SetUpsert(true))
 	return err
@@ -1247,15 +1242,15 @@ func (m *MongoDB) SavePreauthorization(ctx context.Context, preauth *entity.Prea
 
 // GetPreauthorization retrieves a preauthorization by order number
 func (m *MongoDB) GetPreauthorization(ctx context.Context, orderNumber string) (*entity.Preauthorization, error) {
-	return findOne[entity.Preauthorization](m, ctx, collectionPreauthorizations, bson.D{{"order_number", orderNumber}})
+	return findOne[entity.Preauthorization](m, ctx, collectionPreauthorizations, bson.D{{Key: "order_number", Value: orderNumber}})
 }
 
 // GetPreauthorizationByTransaction retrieves a preauthorization by transaction ID
 func (m *MongoDB) GetPreauthorizationByTransaction(ctx context.Context, transactionId int) (*entity.Preauthorization, error) {
 	collection := m.col(collectionPreauthorizations)
-	filter := bson.D{{"transaction_id", transactionId}}
+	filter := bson.D{{Key: "transaction_id", Value: transactionId}}
 	var preauth entity.Preauthorization
-	if err := collection.FindOne(ctx, filter, options.FindOne().SetSort(bson.D{{"created_at", -1}})).Decode(&preauth); err != nil {
+	if err := collection.FindOne(ctx, filter, options.FindOne().SetSort(bson.D{{Key: "created_at", Value: -1}})).Decode(&preauth); err != nil {
 		return nil, m.findError(err)
 	}
 	return &preauth, nil
@@ -1263,15 +1258,15 @@ func (m *MongoDB) GetPreauthorizationByTransaction(ctx context.Context, transact
 
 // UpdatePreauthorization updates an existing preauthorization
 func (m *MongoDB) UpdatePreauthorization(ctx context.Context, preauth *entity.Preauthorization) error {
-	filter := bson.D{{"order_number", preauth.OrderNumber}}
+	filter := bson.D{{Key: "order_number", Value: preauth.OrderNumber}}
 	update := bson.M{"$set": bson.D{
-		{"authorization_code", preauth.AuthorizationCode},
-		{"captured_amount", preauth.CapturedAmount},
-		{"status", preauth.Status},
-		{"error_code", preauth.ErrorCode},
-		{"error_message", preauth.ErrorMessage},
-		{"merchant_data", preauth.MerchantData},
-		{"updated_at", preauth.UpdatedAt},
+		{Key: "authorization_code", Value: preauth.AuthorizationCode},
+		{Key: "captured_amount", Value: preauth.CapturedAmount},
+		{Key: "status", Value: preauth.Status},
+		{Key: "error_code", Value: preauth.ErrorCode},
+		{Key: "error_message", Value: preauth.ErrorMessage},
+		{Key: "merchant_data", Value: preauth.MerchantData},
+		{Key: "updated_at", Value: preauth.UpdatedAt},
 	}}
 	return m.updateOne(ctx, collectionPreauthorizations, filter, update, "preauthorization not found")
 }
@@ -1281,8 +1276,64 @@ func (m *MongoDB) GetLastPreauthorizationOrder(ctx context.Context) (*entity.Pre
 	collection := m.col(collectionPreauthorizations)
 	filter := bson.D{}
 	var preauth entity.Preauthorization
-	if err := collection.FindOne(ctx, filter, options.FindOne().SetSort(bson.D{{"created_at", -1}})).Decode(&preauth); err != nil {
+	if err := collection.FindOne(ctx, filter, options.FindOne().SetSort(bson.D{{Key: "created_at", Value: -1}})).Decode(&preauth); err != nil {
 		return nil, m.findError(err)
 	}
 	return &preauth, nil
+}
+
+// GetUnbilledTransactions returns all finished transactions where payment_billed < payment_amount
+func (m *MongoDB) GetUnbilledTransactions(ctx context.Context) ([]*entity.Transaction, error) {
+	collection := m.col(collectionTransactions)
+	filter := bson.D{
+		{Key: "is_finished", Value: true},
+		{Key: "payment_amount", Value: bson.D{{Key: "$gt", Value: 0}}},
+		{Key: "$expr", Value: bson.D{{Key: "$lt", Value: bson.A{"$payment_billed", "$payment_amount"}}}},
+	}
+	var transactions []*entity.Transaction
+	cursor, err := collection.Find(ctx, filter)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	if err = cursor.All(ctx, &transactions); err != nil {
+		return nil, err
+	}
+	return transactions, nil
+}
+
+// SavePaymentRetry upserts a payment retry record by transaction_id
+func (m *MongoDB) SavePaymentRetry(ctx context.Context, retry *entity.PaymentRetry) error {
+	collection := m.col(collectionPaymentRetries)
+	filter := bson.D{{Key: "transaction_id", Value: retry.TransactionId}}
+	update := bson.M{"$set": retry}
+	_, err := collection.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+	return err
+}
+
+// GetPaymentRetry retrieves a payment retry record by transaction_id
+func (m *MongoDB) GetPaymentRetry(ctx context.Context, transactionId int) (*entity.PaymentRetry, error) {
+	return findOne[entity.PaymentRetry](m, ctx, collectionPaymentRetries, bson.D{{Key: "transaction_id", Value: transactionId}})
+}
+
+// GetPendingRetries returns all retry records where next_retry_time <= now
+func (m *MongoDB) GetPendingRetries(ctx context.Context, now time.Time) ([]*entity.PaymentRetry, error) {
+	collection := m.col(collectionPaymentRetries)
+	filter := bson.D{{Key: "next_retry_time", Value: bson.D{{Key: "$lte", Value: now}}}}
+	opts := options.Find().SetSort(bson.D{{Key: "next_retry_time", Value: 1}})
+	var retries []*entity.PaymentRetry
+	cursor, err := collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	if err = cursor.All(ctx, &retries); err != nil {
+		return nil, err
+	}
+	return retries, nil
+}
+
+// DeletePaymentRetry removes a payment retry record by transaction_id
+func (m *MongoDB) DeletePaymentRetry(ctx context.Context, transactionId int) error {
+	collection := m.col(collectionPaymentRetries)
+	_, err := collection.DeleteOne(ctx, bson.D{{Key: "transaction_id", Value: transactionId}})
+	return err
 }

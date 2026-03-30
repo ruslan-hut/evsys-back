@@ -112,6 +112,7 @@ func main() {
 			log.Warn("payment processing disabled (test mode)")
 			coreHandler.SetDisablePayment(true)
 		}
+		coreHandler.StartPaymentProcessor()
 	}
 
 	server := http.NewServer(conf, log, coreHandler)
@@ -135,6 +136,9 @@ func main() {
 	// Wait for shutdown signal
 	<-shutdown
 	log.Info("shutting down...")
+
+	// Stop payment processor
+	coreHandler.StopPaymentProcessor()
 
 	// Create shutdown context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
