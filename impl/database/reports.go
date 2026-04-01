@@ -290,6 +290,151 @@ func (m *MongoDB) TotalsByCharger(ctx context.Context, from, to time.Time, userG
 	return result, err
 }
 
+// TotalsByHour returns consumed energy grouped by date and hour (based on time_stop)
+func (m *MongoDB) TotalsByHour(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+	collection := m.col(collectionTransactions)
+
+	pipeline := mongo.Pipeline{
+		// Filter transactions
+		{{Key: "$match", Value: bson.D{
+			{Key: "time_stop", Value: bson.D{
+				{Key: "$gte", Value: from},
+				{Key: "$lte", Value: to},
+			}},
+			{Key: "$expr", Value: bson.D{
+				{Key: "$gt", Value: bson.A{"$meter_stop", "$meter_start"}},
+			}},
+		}}},
+		// Lookup user tags by id_tag
+		{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: collectionUserTags},
+			{Key: "localField", Value: "id_tag"},
+			{Key: "foreignField", Value: "id_tag"},
+			{Key: "as", Value: "user_tag_info"},
+		}}},
+		// Add user id to the document
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "user_id", Value: bson.D{
+				{Key: "$cond", Value: bson.D{
+					{Key: "if", Value: bson.D{{Key: "$gt", Value: bson.A{bson.D{{Key: "$size", Value: "$user_tag_info"}}, 0}}}},
+					{Key: "then", Value: bson.D{{Key: "$arrayElemAt", Value: bson.A{"$user_tag_info.user_id", 0}}}},
+					{Key: "else", Value: ""},
+				}},
+			}},
+		}}},
+		// Remove user_tag_info from the document
+		{{Key: "$unset", Value: "user_tag_info"}},
+		// Lookup users by user_id
+		{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: collectionUsers},
+			{Key: "localField", Value: "user_id"},
+			{Key: "foreignField", Value: "user_id"},
+			{Key: "as", Value: "user_info"},
+		}}},
+		// Unwind user_info
+		{{Key: "$unwind", Value: "$user_info"}},
+		// Filter by user group
+		{{Key: "$match", Value: bson.D{
+			{Key: "user_info.group", Value: userGroup},
+		}}},
+		// Calculate consumed watts
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "consumed_watts", Value: bson.D{
+				{Key: "$subtract", Value: bson.A{"$meter_stop", "$meter_start"}},
+			}},
+		}}},
+		// Group by date and hour of time_stop
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{
+				{Key: "date", Value: bson.D{{Key: "$dateToString", Value: bson.D{
+					{Key: "format", Value: "%Y-%m-%d"},
+					{Key: "date", Value: "$time_stop"},
+				}}}},
+				{Key: "hour", Value: bson.D{{Key: "$hour", Value: "$time_stop"}}},
+			}},
+			{Key: "consumed", Value: bson.D{{Key: "$sum", Value: "$consumed_watts"}}},
+		}}},
+		// Sort by date and hour
+		{{Key: "$sort", Value: bson.D{
+			{Key: "_id.date", Value: 1},
+			{Key: "_id.hour", Value: 1},
+		}}},
+		// Reshape output
+		{{Key: "$project", Value: bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "date", Value: "$_id.date"},
+			{Key: "hour", Value: "$_id.hour"},
+			{Key: "consumed", Value: 1},
+		}}},
+	}
+
+	cursor, err := collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	var lines []bson.M
+	if err = cursor.All(ctx, &lines); err != nil {
+		return nil, err
+	}
+
+	// Build a complete set of 24 hours per date, filling missing hours with 0
+	hourlyData := make(map[string]map[int]int64)
+	for _, line := range lines {
+		date := line["date"].(string)
+		hour := int(line["hour"].(int32))
+		consumed := int64(0)
+		switch v := line["consumed"].(type) {
+		case int32:
+			consumed = int64(v)
+		case int64:
+			consumed = v
+		}
+		if hourlyData[date] == nil {
+			hourlyData[date] = make(map[int]int64)
+		}
+		hourlyData[date][hour] = consumed
+	}
+
+	// Generate all dates in range and fill 24 hours per date
+	var dates []string
+	for d := from; !d.After(to); d = d.AddDate(0, 0, 1) {
+		dates = append(dates, d.Format("2006-01-02"))
+	}
+
+	// Also include dates from query results that might not be in the generated range
+	for date := range hourlyData {
+		found := false
+		for _, d := range dates {
+			if d == date {
+				found = true
+				break
+			}
+		}
+		if !found {
+			dates = append(dates, date)
+		}
+	}
+	sort.Strings(dates)
+
+	var result []interface{}
+	for _, date := range dates {
+		hours := hourlyData[date]
+		for h := 0; h < 24; h++ {
+			consumed := int64(0)
+			if hours != nil {
+				consumed = hours[h]
+			}
+			result = append(result, bson.M{
+				"date":     date,
+				"hour":     h,
+				"consumed": consumed,
+			})
+		}
+	}
+
+	return result, nil
+}
+
 // StationUptime calculates uptime/downtime for stations over a period
 // based on registered/unregistered events in sys_log
 // Only includes charge points that exist in charge_points collection and are enabled

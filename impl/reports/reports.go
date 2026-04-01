@@ -87,6 +87,27 @@ func (r *Reports) TotalsByCharger(ctx context.Context, from, to time.Time, userG
 	return data, nil
 }
 
+func (r *Reports) TotalsByHour(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+	log := r.log.With(
+		slog.Time("from", from),
+		slog.Time("to", to),
+		slog.String("userGroup", userGroup),
+	)
+	data, err := r.repo.TotalsByHour(ctx, from, to, userGroup)
+	if err != nil {
+		log.Error("totals by hour failed", sl.Err(err))
+		return []interface{}{}, nil
+	}
+	if data == nil {
+		log.Debug("totals by hour: no data")
+		return []interface{}{}, nil
+	}
+	log.With(
+		slog.Int("count", len(data)),
+	).Debug("totals by hour")
+	return data, nil
+}
+
 func (r *Reports) StationUptime(ctx context.Context, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error) {
 	log := r.log.With(
 		slog.Time("from", from),
