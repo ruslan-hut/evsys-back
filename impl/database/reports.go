@@ -17,77 +17,77 @@ func (m *MongoDB) TotalsByMonth(ctx context.Context, from, to time.Time, userGro
 
 	pipeline := mongo.Pipeline{
 		// Filter transactions
-		{{"$match", bson.D{
-			{"time_stop", bson.D{
-				{"$gte", from},
-				{"$lte", to},
+		{{Key: "$match", Value: bson.D{
+			{Key: "time_stop", Value: bson.D{
+				{Key: "$gte", Value: from},
+				{Key: "$lte", Value: to},
 			}},
-			{"$expr", bson.D{
-				{"$gt", bson.A{"$meter_stop", "$meter_start"}},
+			{Key: "$expr", Value: bson.D{
+				{Key: "$gt", Value: bson.A{"$meter_stop", "$meter_start"}},
 			}},
 		}}},
 		// Lookup user tags by `id_tag`
-		{{"$lookup", bson.D{
-			{"from", collectionUserTags},
-			{"localField", "id_tag"},
-			{"foreignField", "id_tag"},
-			{"as", "user_tag_info"},
+		{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: collectionUserTags},
+			{Key: "localField", Value: "id_tag"},
+			{Key: "foreignField", Value: "id_tag"},
+			{Key: "as", Value: "user_tag_info"},
 		}}},
 		// Add user id to the document
-		{{"$addFields", bson.D{
-			{"user_id", bson.D{
-				{"$cond", bson.D{
-					{"if", bson.D{{"$gt", bson.A{bson.D{{"$size", "$user_tag_info"}}, 0}}}},
-					{"then", bson.D{{"$arrayElemAt", bson.A{"$user_tag_info.user_id", 0}}}},
-					{"else", ""},
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "user_id", Value: bson.D{
+				{Key: "$cond", Value: bson.D{
+					{Key: "if", Value: bson.D{{Key: "$gt", Value: bson.A{bson.D{{Key: "$size", Value: "$user_tag_info"}}, 0}}}},
+					{Key: "then", Value: bson.D{{Key: "$arrayElemAt", Value: bson.A{"$user_tag_info.user_id", 0}}}},
+					{Key: "else", Value: ""},
 				}},
 			}},
 		}}},
 		// Unwind to de-nest user_tag_info array
-		//{{"$unwind", "$user_tag_info"}},
+		//{{Key: "$unwind", Value: "$user_tag_info"}},
 		// Remove user_tag_info from the document
-		{{"$unset", "user_tag_info"}},
+		{{Key: "$unset", Value: "user_tag_info"}},
 		// Lookup users by `user_id` obtained from `user_tag_info`
-		{{"$lookup", bson.D{
-			{"from", collectionUsers},
-			{"localField", "user_id"},
-			{"foreignField", "user_id"},
-			{"as", "user_info"},
+		{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: collectionUsers},
+			{Key: "localField", Value: "user_id"},
+			{Key: "foreignField", Value: "user_id"},
+			{Key: "as", Value: "user_info"},
 		}}},
 		// Unwind to de-nest user_info array
-		{{"$unwind", "$user_info"}},
+		{{Key: "$unwind", Value: "$user_info"}},
 		// Stage 5: Filter transactions by a specific user group
-		{{"$match", bson.D{
-			{"user_info.group", userGroup},
+		{{Key: "$match", Value: bson.D{
+			{Key: "user_info.group", Value: userGroup},
 		}}},
 		// Calculate consumed watts and group by year and month
-		{{"$addFields", bson.D{
-			{"consumed_watts", bson.D{
-				{"$subtract", bson.A{"$meter_stop", "$meter_start"}},
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "consumed_watts", Value: bson.D{
+				{Key: "$subtract", Value: bson.A{"$meter_stop", "$meter_start"}},
 			}},
 		}}},
-		{{"$group", bson.D{
-			{"_id", bson.D{
-				{"year", bson.D{{"$year", "$time_stop"}}},
-				{"month", bson.D{{"$month", "$time_stop"}}},
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{
+				{Key: "year", Value: bson.D{{Key: "$year", Value: "$time_stop"}}},
+				{Key: "month", Value: bson.D{{Key: "$month", Value: "$time_stop"}}},
 			}},
-			{"totalConsumed", bson.D{{"$sum", "$consumed_watts"}}},
-			{"avgWatts", bson.D{{"$avg", "$consumed_watts"}}},
-			{"count", bson.D{{"$sum", 1}}},
+			{Key: "totalConsumed", Value: bson.D{{Key: "$sum", Value: "$consumed_watts"}}},
+			{Key: "avgWatts", Value: bson.D{{Key: "$avg", Value: "$consumed_watts"}}},
+			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
 		}}},
 		// Sort by year and month
-		{{"$sort", bson.D{
-			{"_id.year", 1},
-			{"_id.month", 1},
+		{{Key: "$sort", Value: bson.D{
+			{Key: "_id.year", Value: 1},
+			{Key: "_id.month", Value: 1},
 		}}},
 		// Reshape the output if needed
-		{{"$project", bson.D{
-			{"_id", 0},
-			{"year", "$_id.year"},
-			{"month", "$_id.month"},
-			{"totalConsumed", 1},
-			{"avgWatts", 1},
-			{"count", 1},
+		{{Key: "$project", Value: bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "year", Value: "$_id.year"},
+			{Key: "month", Value: "$_id.month"},
+			{Key: "totalConsumed", Value: 1},
+			{Key: "avgWatts", Value: 1},
+			{Key: "count", Value: 1},
 		}}},
 	}
 
@@ -112,75 +112,75 @@ func (m *MongoDB) TotalsByUsers(ctx context.Context, from, to time.Time, userGro
 
 	pipeline := mongo.Pipeline{
 		// Stage 0: Filter transactions
-		{{"$match", bson.D{
-			{"time_stop", bson.D{
-				{"$gte", from},
-				{"$lte", to},
+		{{Key: "$match", Value: bson.D{
+			{Key: "time_stop", Value: bson.D{
+				{Key: "$gte", Value: from},
+				{Key: "$lte", Value: to},
 			}},
-			{"$expr", bson.D{
-				{"$gt", bson.A{"$meter_stop", "$meter_start"}},
+			{Key: "$expr", Value: bson.D{
+				{Key: "$gt", Value: bson.A{"$meter_stop", "$meter_start"}},
 			}},
 		}}},
 		// Stage 1: Lookup user tags by `id_tag`
-		{{"$lookup", bson.D{
-			{"from", collectionUserTags},
-			{"localField", "id_tag"},
-			{"foreignField", "id_tag"},
-			{"as", "user_tag_info"},
+		{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: collectionUserTags},
+			{Key: "localField", Value: "id_tag"},
+			{Key: "foreignField", Value: "id_tag"},
+			{Key: "as", Value: "user_tag_info"},
 		}}},
 		// Add user id to the document
-		{{"$addFields", bson.D{
-			{"user_id", bson.D{
-				{"$cond", bson.D{
-					{"if", bson.D{{"$gt", bson.A{bson.D{{"$size", "$user_tag_info"}}, 0}}}},
-					{"then", bson.D{{"$arrayElemAt", bson.A{"$user_tag_info.user_id", 0}}}},
-					{"else", ""},
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "user_id", Value: bson.D{
+				{Key: "$cond", Value: bson.D{
+					{Key: "if", Value: bson.D{{Key: "$gt", Value: bson.A{bson.D{{Key: "$size", Value: "$user_tag_info"}}, 0}}}},
+					{Key: "then", Value: bson.D{{Key: "$arrayElemAt", Value: bson.A{"$user_tag_info.user_id", 0}}}},
+					{Key: "else", Value: ""},
 				}},
 			}},
 		}}},
 		// Stage 2: Unwind to de-nest user_tag_info array
-		//{{"$unwind", "$user_tag_info"}},
+		//{{Key: "$unwind", Value: "$user_tag_info"}},
 		// Remove user_tag_info from the document
-		{{"$unset", "user_tag_info"}},
+		{{Key: "$unset", Value: "user_tag_info"}},
 		// Stage 3: Lookup users by `user_id` obtained from `user_tag_info`
-		{{"$lookup", bson.D{
-			{"from", collectionUsers},
-			{"localField", "user_id"},
-			{"foreignField", "user_id"},
-			{"as", "user_info"},
+		{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: collectionUsers},
+			{Key: "localField", Value: "user_id"},
+			{Key: "foreignField", Value: "user_id"},
+			{Key: "as", Value: "user_info"},
 		}}},
 		// Stage 4: Unwind to de-nest user_info array
-		{{"$unwind", "$user_info"}},
+		{{Key: "$unwind", Value: "$user_info"}},
 		// Stage 5: Filter transactions by a specific user group
-		{{"$match", bson.D{
-			{"user_info.group", userGroup},
+		{{Key: "$match", Value: bson.D{
+			{Key: "user_info.group", Value: userGroup},
 		}}},
 		// Stage 6: Calculate consumed watts and group by user_id (not name, to avoid merging different users with same name)
-		{{"$addFields", bson.D{
-			{"consumed_watts", bson.D{
-				{"$subtract", bson.A{"$meter_stop", "$meter_start"}},
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "consumed_watts", Value: bson.D{
+				{Key: "$subtract", Value: bson.A{"$meter_stop", "$meter_start"}},
 			}},
 		}}},
-		{{"$group", bson.D{
-			{"_id", bson.D{
-				{"user_id", "$user_info.user_id"},
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{
+				{Key: "user_id", Value: "$user_info.user_id"},
 			}},
-			{"user", bson.D{{"$first", "$user_info.name"}}},
-			{"totalConsumed", bson.D{{"$sum", "$consumed_watts"}}},
-			{"avgWatts", bson.D{{"$avg", "$consumed_watts"}}},
-			{"count", bson.D{{"$sum", 1}}},
+			{Key: "user", Value: bson.D{{Key: "$first", Value: "$user_info.name"}}},
+			{Key: "totalConsumed", Value: bson.D{{Key: "$sum", Value: "$consumed_watts"}}},
+			{Key: "avgWatts", Value: bson.D{{Key: "$avg", Value: "$consumed_watts"}}},
+			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
 		}}},
 		// Stage 7: Sort by user name
-		{{"$sort", bson.D{
-			{"user", 1},
+		{{Key: "$sort", Value: bson.D{
+			{Key: "user", Value: 1},
 		}}},
 		// (Optional) Stage 8: Reshape the output if needed
-		{{"$project", bson.D{
-			{"_id", 0},
-			{"user", 1},
-			{"totalConsumed", 1},
-			{"avgWatts", 1},
-			{"count", 1},
+		{{Key: "$project", Value: bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "user", Value: 1},
+			{Key: "totalConsumed", Value: 1},
+			{Key: "avgWatts", Value: 1},
+			{Key: "count", Value: 1},
 		}}},
 	}
 
@@ -204,74 +204,74 @@ func (m *MongoDB) TotalsByCharger(ctx context.Context, from, to time.Time, userG
 
 	pipeline := mongo.Pipeline{
 		// Stage 0: Filter transactions
-		{{"$match", bson.D{
-			{"time_stop", bson.D{
-				{"$gte", from},
-				{"$lte", to},
+		{{Key: "$match", Value: bson.D{
+			{Key: "time_stop", Value: bson.D{
+				{Key: "$gte", Value: from},
+				{Key: "$lte", Value: to},
 			}},
-			{"$expr", bson.D{
-				{"$gt", bson.A{"$meter_stop", "$meter_start"}},
+			{Key: "$expr", Value: bson.D{
+				{Key: "$gt", Value: bson.A{"$meter_stop", "$meter_start"}},
 			}},
 		}}},
 		// Stage 1: Lookup user tags by `id_tag`
-		{{"$lookup", bson.D{
-			{"from", collectionUserTags},
-			{"localField", "id_tag"},
-			{"foreignField", "id_tag"},
-			{"as", "user_tag_info"},
+		{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: collectionUserTags},
+			{Key: "localField", Value: "id_tag"},
+			{Key: "foreignField", Value: "id_tag"},
+			{Key: "as", Value: "user_tag_info"},
 		}}},
 		// Add user id to the document
-		{{"$addFields", bson.D{
-			{"user_id", bson.D{
-				{"$cond", bson.D{
-					{"if", bson.D{{"$gt", bson.A{bson.D{{"$size", "$user_tag_info"}}, 0}}}},
-					{"then", bson.D{{"$arrayElemAt", bson.A{"$user_tag_info.user_id", 0}}}},
-					{"else", ""},
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "user_id", Value: bson.D{
+				{Key: "$cond", Value: bson.D{
+					{Key: "if", Value: bson.D{{Key: "$gt", Value: bson.A{bson.D{{Key: "$size", Value: "$user_tag_info"}}, 0}}}},
+					{Key: "then", Value: bson.D{{Key: "$arrayElemAt", Value: bson.A{"$user_tag_info.user_id", 0}}}},
+					{Key: "else", Value: ""},
 				}},
 			}},
 		}}},
 		// Stage 2: Unwind to de-nest user_tag_info array
-		//{{"$unwind", "$user_tag_info"}},
+		//{{Key: "$unwind", Value: "$user_tag_info"}},
 		// Remove user_tag_info from the document
-		{{"$unset", "user_tag_info"}},
+		{{Key: "$unset", Value: "user_tag_info"}},
 		// Stage 3: Lookup users by `user_id` obtained from `user_tag_info`
-		{{"$lookup", bson.D{
-			{"from", collectionUsers},
-			{"localField", "user_id"},
-			{"foreignField", "user_id"},
-			{"as", "user_info"},
+		{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: collectionUsers},
+			{Key: "localField", Value: "user_id"},
+			{Key: "foreignField", Value: "user_id"},
+			{Key: "as", Value: "user_info"},
 		}}},
 		// Stage 4: Unwind to de-nest user_info array
-		{{"$unwind", "$user_info"}},
+		{{Key: "$unwind", Value: "$user_info"}},
 		// Stage 5: Filter transactions by a specific user group
-		{{"$match", bson.D{
-			{"user_info.group", userGroup},
+		{{Key: "$match", Value: bson.D{
+			{Key: "user_info.group", Value: userGroup},
 		}}},
 		// Stage 6: Calculate consumed watts and group by year and month
-		{{"$addFields", bson.D{
-			{"consumed_watts", bson.D{
-				{"$subtract", bson.A{"$meter_stop", "$meter_start"}},
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "consumed_watts", Value: bson.D{
+				{Key: "$subtract", Value: bson.A{"$meter_stop", "$meter_start"}},
 			}},
 		}}},
-		{{"$group", bson.D{
-			{"_id", bson.D{
-				{"charge_point", "$charge_point_id"},
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{
+				{Key: "charge_point", Value: "$charge_point_id"},
 			}},
-			{"totalConsumed", bson.D{{"$sum", "$consumed_watts"}}},
-			{"avgWatts", bson.D{{"$avg", "$consumed_watts"}}},
-			{"count", bson.D{{"$sum", 1}}},
+			{Key: "totalConsumed", Value: bson.D{{Key: "$sum", Value: "$consumed_watts"}}},
+			{Key: "avgWatts", Value: bson.D{{Key: "$avg", Value: "$consumed_watts"}}},
+			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
 		}}},
 		// Stage 7: Sort by charge point
-		{{"$sort", bson.D{
-			{"_id.charge_point", 1},
+		{{Key: "$sort", Value: bson.D{
+			{Key: "_id.charge_point", Value: 1},
 		}}},
 		// Stage 8: Reshape the output (uses "user" field for compatibility with ReportLine struct)
-		{{"$project", bson.D{
-			{"_id", 0},
-			{"user", "$_id.charge_point"},
-			{"totalConsumed", 1},
-			{"avgWatts", 1},
-			{"count", 1},
+		{{Key: "$project", Value: bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "user", Value: "$_id.charge_point"},
+			{Key: "totalConsumed", Value: 1},
+			{Key: "avgWatts", Value: 1},
+			{Key: "count", Value: 1},
 		}}},
 	}
 
@@ -307,12 +307,12 @@ func (m *MongoDB) StationUptime(ctx context.Context, from, to time.Time, chargeP
 
 	// Build base filter for events containing "registered" and matching enabled charge points
 	baseFilter := bson.D{
-		{"text", bson.D{{"$regex", "registered"}}},
-		{"charge_point_id", bson.D{{"$in", enabledCPs}}},
+		{Key: "text", Value: bson.D{{Key: "$regex", Value: "registered"}}},
+		{Key: "charge_point_id", Value: bson.D{{Key: "$in", Value: enabledCPs}}},
 	}
 
 	// Find earliest record timestamp and adjust 'from' if needed
-	earliestOpts := options.FindOne().SetSort(bson.D{{"timestamp", 1}}).SetProjection(bson.D{{"timestamp", 1}})
+	earliestOpts := options.FindOne().SetSort(bson.D{{Key: "timestamp", Value: 1}}).SetProjection(bson.D{{Key: "timestamp", Value: 1}})
 	var earliest struct {
 		Timestamp time.Time `bson:"timestamp"`
 	}
@@ -330,7 +330,7 @@ func (m *MongoDB) StationUptime(ctx context.Context, from, to time.Time, chargeP
 	}
 
 	// Get all relevant events sorted by charge_point_id and timestamp
-	opts := options.Find().SetSort(bson.D{{"charge_point_id", 1}, {"timestamp", 1}})
+	opts := options.Find().SetSort(bson.D{{Key: "charge_point_id", Value: 1}, {Key: "timestamp", Value: 1}})
 	cursor, err := collection.Find(ctx, baseFilter, opts)
 	if err != nil {
 		return nil, m.findError(err)
@@ -442,27 +442,27 @@ func (m *MongoDB) StationStatus(ctx context.Context, chargePointId string) ([]*e
 
 	// Build match stage with enabled charge points filter
 	matchStage := bson.D{
-		{"$match", bson.D{
-			{"text", bson.D{{"$regex", "registered"}}},
-			{"charge_point_id", bson.D{{"$in", enabledCPs}}},
+		{Key: "$match", Value: bson.D{
+			{Key: "text", Value: bson.D{{Key: "$regex", Value: "registered"}}},
+			{Key: "charge_point_id", Value: bson.D{{Key: "$in", Value: enabledCPs}}},
 		}},
 	}
 
 	pipeline := mongo.Pipeline{
 		matchStage,
 		// Sort by charge_point_id and timestamp descending
-		{{"$sort", bson.D{
-			{"charge_point_id", 1},
-			{"timestamp", -1},
+		{{Key: "$sort", Value: bson.D{
+			{Key: "charge_point_id", Value: 1},
+			{Key: "timestamp", Value: -1},
 		}}},
 		// Group by charge_point_id, take the first (most recent) event
-		{{"$group", bson.D{
-			{"_id", "$charge_point_id"},
-			{"text", bson.D{{"$first", "$text"}}},
-			{"timestamp", bson.D{{"$first", "$timestamp"}}},
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: "$charge_point_id"},
+			{Key: "text", Value: bson.D{{Key: "$first", Value: "$text"}}},
+			{Key: "timestamp", Value: bson.D{{Key: "$first", Value: "$timestamp"}}},
 		}}},
 		// Sort by charge_point_id
-		{{"$sort", bson.D{{"_id", 1}}}},
+		{{Key: "$sort", Value: bson.D{{Key: "_id", Value: 1}}}},
 	}
 
 	cursor, err := collection.Aggregate(ctx, pipeline)
@@ -502,13 +502,13 @@ func (m *MongoDB) StationStatus(ctx context.Context, chargePointId string) ([]*e
 func (m *MongoDB) getEnabledChargePointIds(ctx context.Context, chargePointId string) ([]string, error) {
 	collection := m.col(collectionChargePoints)
 
-	filter := bson.D{{"is_enabled", true}}
+	filter := bson.D{{Key: "is_enabled", Value: true}}
 	if chargePointId != "" {
 		filter = append(filter, bson.E{Key: "charge_point_id", Value: chargePointId})
 	}
 
 	// Only fetch the charge_point_id field
-	opts := options.Find().SetProjection(bson.D{{"charge_point_id", 1}})
+	opts := options.Find().SetProjection(bson.D{{Key: "charge_point_id", Value: 1}})
 	cursor, err := collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, m.findError(err)
