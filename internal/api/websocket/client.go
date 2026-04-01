@@ -170,6 +170,11 @@ func (c *Client) readPump() {
 
 		userRequest.Token = c.id
 
+		// Capture time before sending the command to avoid race condition where
+		// the charger starts a transaction before we record the timestamp,
+		// causing the time_start >= timeStart query to miss it
+		preRequestTime := time.Now()
+
 		err = c.core.WsRequest(&userRequest)
 		if err != nil {
 			c.logger.Error("ws: read pump", sl.Err(err))
@@ -178,14 +183,14 @@ func (c *Client) readPump() {
 
 		switch userRequest.Command {
 		case entity.StartTransaction:
-			timeStart, err := c.statusReader.SaveStatus(c.id, entity.StageStart, -1)
+			_, err := c.statusReader.SaveStatus(c.id, entity.StageStart, -1)
 			if err == nil {
-				go c.listenForTransactionStart(timeStart)
+				go c.listenForTransactionStart(preRequestTime)
 			}
 		case entity.StopTransaction:
-			timeStart, err := c.statusReader.SaveStatus(c.id, entity.StageStop, userRequest.TransactionId)
+			_, err := c.statusReader.SaveStatus(c.id, entity.StageStop, userRequest.TransactionId)
 			if err == nil {
-				go c.listenForTransactionStop(timeStart, userRequest.TransactionId)
+				go c.listenForTransactionStop(preRequestTime, userRequest.TransactionId)
 			}
 		case entity.CheckStatus:
 			userState, ok := c.statusReader.GetStatus(c.id)
