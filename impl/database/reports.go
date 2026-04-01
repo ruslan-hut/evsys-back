@@ -378,19 +378,20 @@ func (m *MongoDB) TotalsByHour(ctx context.Context, from, to time.Time, userGrou
 	}
 
 	// Build a complete set of 24 hours per date, filling missing hours with 0
-	hourlyData := make(map[string]map[int]int64)
+	// Convert Wh to kWh by dividing by 1000
+	hourlyData := make(map[string]map[int]float64)
 	for _, line := range lines {
 		date := line["date"].(string)
 		hour := int(line["hour"].(int32))
-		consumed := int64(0)
+		consumed := float64(0)
 		switch v := line["consumed"].(type) {
 		case int32:
-			consumed = int64(v)
+			consumed = float64(v) / 1000
 		case int64:
-			consumed = v
+			consumed = float64(v) / 1000
 		}
 		if hourlyData[date] == nil {
-			hourlyData[date] = make(map[int]int64)
+			hourlyData[date] = make(map[int]float64)
 		}
 		hourlyData[date][hour] = consumed
 	}
@@ -420,7 +421,7 @@ func (m *MongoDB) TotalsByHour(ctx context.Context, from, to time.Time, userGrou
 	for _, date := range dates {
 		hours := hourlyData[date]
 		for h := 0; h < 24; h++ {
-			consumed := int64(0)
+			consumed := float64(0)
 			if hours != nil {
 				consumed = hours[h]
 			}
