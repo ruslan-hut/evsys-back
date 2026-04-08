@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"evsys-back/entity"
+	"evsys-back/impl/core"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
 	"evsys-back/internal/lib/sl"
@@ -19,6 +20,7 @@ type Payments interface {
 	UpdatePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error
 	DeletePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error
 	SetOrder(ctx context.Context, user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, error)
+	CreateInSiteOrder(ctx context.Context, user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, *core.InSiteTokenizationParams, error)
 }
 
 func List(logger *slog.Logger, handler Payments) http.HandlerFunc {
@@ -75,6 +77,23 @@ func Save(logger *slog.Logger, handler Payments) http.HandlerFunc {
 			return
 		}
 		log.Info("payment method saved")
+
+		// The web inSite flow asks for the updated list of cards so it can
+		// refresh its UI in a single round-trip. Android does not set this
+		// flag and keeps receiving the single PaymentMethod object.
+		if r.URL.Query().Get("include_list") == "1" {
+			methods, listErr := handler.GetPaymentMethods(ctx, user.UserId)
+			if listErr != nil {
+				log.With(sl.Err(listErr)).Warn("saved but failed to load updated list")
+				render.JSON(w, r, &pm)
+				return
+			}
+			render.JSON(w, r, map[string]interface{}{
+				"saved":   &pm,
+				"methods": methods,
+			})
+			return
+		}
 
 		render.JSON(w, r, &pm)
 	}
@@ -171,8 +190,35 @@ func Order(logger *slog.Logger, handler Payments) http.HandlerFunc {
 		log = log.With(
 			slog.String("description", order.Description),
 			slog.Int("transaction_id", order.TransactionId),
+			slog.String("mode", order.Mode),
 			sl.Secret("identifier", order.Identifier),
 		)
+
+		// Web / Redsys inSite flow: sign the merchant parameters server-side
+		// and return them together with the stored order so the browser can
+		// drive the inSite JS SDK. The native Android flow does not send
+		// "mode" and therefore stays on the legacy code path below.
+		if order.Mode == "insite" {
+			updated, params, err := handler.CreateInSiteOrder(ctx, user, &order)
+			if err != nil {
+				log.With(sl.Err(err)).Error("inSite order not set")
+				response.RenderErr(w, r, 400, 2001, "Failed to set order", err)
+				return
+			}
+			log.With(
+				slog.Int("order", updated.Order),
+			).Info("payment order set (inSite)")
+			render.JSON(w, r, &entity.InSiteOrderResponse{
+				PaymentOrder:       updated,
+				SignatureVersion:   params.SignatureVersion,
+				MerchantParameters: params.MerchantParameters,
+				Signature:          params.Signature,
+				MerchantCode:       params.MerchantCode,
+				Terminal:           params.Terminal,
+				OrderNumber:        params.OrderNumber,
+			})
+			return
+		}
 
 		updated, err := handler.SetOrder(ctx, user, &order)
 		if err != nil {

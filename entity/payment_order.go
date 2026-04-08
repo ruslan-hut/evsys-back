@@ -22,8 +22,25 @@ type PaymentOrder struct {
 	TimeClosed    time.Time `json:"time_closed" bson:"time_closed"`
 	RefundAmount  int       `json:"refund_amount" bson:"refund_amount" validate:"min=0"`
 	RefundTime    time.Time `json:"refund_time" bson:"refund_time"`
+	// Mode selects the response variant: empty (default) for the Android/native
+	// SDK flow, "insite" for the Redsys inSite web flow. Not persisted.
+	Mode string `json:"mode,omitempty" bson:"-" validate:"omitempty,oneof=insite"`
 }
 
 func (p *PaymentOrder) Bind(_ *http.Request) error {
 	return validate.Struct(p)
+}
+
+// InSiteOrderResponse is the response returned by POST /payment/order when
+// mode=="insite". It embeds the stored PaymentOrder (so callers still see
+// the generated order number and timestamps) and adds the pre-signed Redsys
+// inSite parameters the browser must submit to the Redsys JS SDK.
+type InSiteOrderResponse struct {
+	*PaymentOrder
+	SignatureVersion   string `json:"Ds_SignatureVersion"`
+	MerchantParameters string `json:"Ds_MerchantParameters"`
+	Signature          string `json:"Ds_Signature"`
+	MerchantCode       string `json:"merchant_code"`
+	Terminal           string `json:"terminal"`
+	OrderNumber        string `json:"order_number"`
 }

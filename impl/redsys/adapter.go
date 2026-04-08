@@ -101,3 +101,25 @@ func (a *Adapter) Refund(ctx context.Context, req core.RefundRequest) (*core.Cap
 	}
 	return toCoreResponse(resp), nil
 }
+
+// BuildInSiteTokenizationParams implements core.RedsysClient. It delegates
+// to the Redsys Client, which signs the payload without performing any HTTP
+// call — tokenization happens in the browser via the inSite JS SDK.
+func (a *Adapter) BuildInSiteTokenizationParams(req core.InSiteTokenizationRequest) (*core.InSiteTokenizationParams, error) {
+	params, err := a.client.BuildTokenizationParams(InSiteTokenizationRequest{
+		OrderNumber: req.OrderNumber,
+		Amount:      req.Amount,
+		Description: req.Description,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &core.InSiteTokenizationParams{
+		SignatureVersion:   params.SignatureVersion,
+		MerchantParameters: params.MerchantParameters,
+		Signature:          params.Signature,
+		MerchantCode:       params.MerchantCode,
+		Terminal:           params.Terminal,
+		OrderNumber:        params.OrderNumber,
+	}, nil
+}

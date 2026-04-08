@@ -48,6 +48,27 @@ type RedsysClient interface {
 	Preauthorize(ctx context.Context, req PreauthorizeRequest) (*CaptureResponse, error)
 	Pay(ctx context.Context, req PayRequest) (*CaptureResponse, error)
 	Refund(ctx context.Context, req RefundRequest) (*CaptureResponse, error)
+	BuildInSiteTokenizationParams(req InSiteTokenizationRequest) (*InSiteTokenizationParams, error)
+}
+
+// InSiteTokenizationRequest asks the Redsys adapter for a signed payload
+// suitable for the browser inSite JS SDK. The order number must be the
+// 12-digit normalized form expected by Redsys.
+type InSiteTokenizationRequest struct {
+	OrderNumber string
+	Amount      int
+	Description string
+}
+
+// InSiteTokenizationParams is the signed Redsys payload the frontend feeds
+// into the inSite widget.
+type InSiteTokenizationParams struct {
+	SignatureVersion   string
+	MerchantParameters string
+	Signature          string
+	MerchantCode       string
+	Terminal           string
+	OrderNumber        string
 }
 
 // CaptureRequest for Redsys capture operations
@@ -463,6 +484,34 @@ func (c *Core) DeletePaymentMethod(ctx context.Context, user *entity.User, pm *e
 	// delete only methods, belonging to user that requested deletion
 	pm.UserId = user.UserId
 	return c.repo.DeletePaymentMethod(ctx, pm)
+}
+
+// CreateInSiteOrder persists a new PaymentOrder (via SetOrder) and returns
+// the Redsys inSite signed payload the browser needs to start card
+// tokenization. The Android/native flow does NOT go through this path —
+// SetOrder alone is used there, preserving full backward compatibility.
+func (c *Core) CreateInSiteOrder(ctx context.Context, user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, *InSiteTokenizationParams, error) {
+	if c.redsys == nil {
+		return nil, nil, fmt.Errorf("redsys client not configured")
+	}
+
+	// Delegate order creation (auto-numbering, interrupted-order cleanup,
+	// user binding, persistence) to the existing SetOrder logic.
+	stored, err := c.SetOrder(ctx, user, order)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	params, err := c.redsys.BuildInSiteTokenizationParams(InSiteTokenizationRequest{
+		OrderNumber: normalizeOrderNumber(fmt.Sprintf("%d", stored.Order)),
+		Amount:      stored.Amount,
+		Description: stored.Description,
+	})
+	if err != nil {
+		return stored, nil, fmt.Errorf("build inSite params: %w", err)
+	}
+
+	return stored, params, nil
 }
 
 func (c *Core) SetOrder(ctx context.Context, user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, error) {
