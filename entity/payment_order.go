@@ -23,40 +23,34 @@ type PaymentOrder struct {
 	RefundAmount  int       `json:"refund_amount" bson:"refund_amount" validate:"min=0"`
 	RefundTime    time.Time `json:"refund_time" bson:"refund_time"`
 	// Mode selects the response variant: empty (default) for the Android/native
-	// SDK flow, "insite" for the Redsys inSite web flow. Not persisted.
-	Mode string `json:"mode,omitempty" bson:"-" validate:"omitempty,oneof=insite"`
+	// SDK flow, "web" for the Redsys TPV Virtual hosted-form redirect flow
+	// used by the "add card" page in the Angular app. Not persisted.
+	Mode string `json:"mode,omitempty" bson:"-" validate:"omitempty,oneof=web"`
+
+	// ReturnUrlOk / ReturnUrlKo are the browser-facing redirect targets
+	// used by the web flow. Not persisted. Ignored for the legacy mode.
+	ReturnUrlOk string `json:"return_url_ok,omitempty" bson:"-" validate:"omitempty,url"`
+	ReturnUrlKo string `json:"return_url_ko,omitempty" bson:"-" validate:"omitempty,url"`
+	// Language is a Redsys numeric language code, e.g. "001" Spanish,
+	// "002" English. Optional — the client leaves it blank to fall back
+	// to the backend default.
+	Language string `json:"language,omitempty" bson:"-" validate:"omitempty"`
 }
 
 func (p *PaymentOrder) Bind(_ *http.Request) error {
 	return validate.Struct(p)
 }
 
-// InSiteOrderResponse is the response returned by POST /payment/order when
-// mode=="insite". It embeds the stored PaymentOrder (so callers still see
-// the generated order number and timestamps) and exposes the three merchant
-// identifiers the Redsys inSite JS SDK needs to draw the card form:
-//
-//	getInSiteFormJSON({ fuc, terminal, order, ... })
-//
-// No signing happens at this stage — inSite does not require it. The
-// signed REST call to Redsys happens later, on /payment/tokenize, after
-// the browser has handed us the temporary idOper.
-type InSiteOrderResponse struct {
+// WebOrderResponse is returned by POST /payment/order when mode=="web".
+// It embeds the stored PaymentOrder (so callers still see the generated
+// order number and timestamps) and adds the signed Redsys TPV Virtual
+// hosted-form triplet the browser must auto-POST to `form_url`. On
+// success, Redsys calls POST /payment/notify server-to-server with the
+// permanent card token and then redirects the browser to return_url_ok.
+type WebOrderResponse struct {
 	*PaymentOrder
-	MerchantCode string `json:"merchant_code"`
-	Terminal     string `json:"terminal"`
-	OrderNumber  string `json:"order_number"`
-}
-
-// TokenizeRequest is the payload sent by the web client to
-// POST /payment/tokenize after the Redsys inSite SDK has issued a
-// temporary operation identifier (idOper, valid for 30 minutes).
-type TokenizeRequest struct {
-	Order       int    `json:"order" validate:"required,min=1"`
-	IdOper      string `json:"id_oper" validate:"required"`
-	Description string `json:"description" validate:"omitempty"`
-}
-
-func (r *TokenizeRequest) Bind(_ *http.Request) error {
-	return validate.Struct(r)
+	FormUrl            string `json:"form_url"`
+	SignatureVersion   string `json:"Ds_SignatureVersion"`
+	MerchantParameters string `json:"Ds_MerchantParameters"`
+	Signature          string `json:"Ds_Signature"`
 }

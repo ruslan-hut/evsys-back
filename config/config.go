@@ -40,8 +40,17 @@ type Config struct {
 		Terminal       string `yaml:"terminal" env-default:"001"`
 		SecretKey      string `yaml:"secret_key" env-default:""`
 		RestApiUrl     string `yaml:"rest_api_url" env-default:"https://sis-t.redsys.es:25443/sis/rest/trataPeticionREST"`
-		Currency       string `yaml:"currency" env-default:"978"`
-		ApiKey         string `yaml:"api_key" env-default:""`
+		// FormUrl is the Redsys TPV Virtual entry (hosted card form) URL
+		// that the browser POSTs to during the "add card" flow. Use the
+		// production host in production and the sandbox host when testing.
+		FormUrl string `yaml:"form_url" env-default:"https://sis-t.redsys.es:25443/sis/realizarPago"`
+		// NotifyUrl is the publicly reachable URL of this backend's
+		// POST /api/v1/payment/notify endpoint. Redsys hits it
+		// server-to-server with the signed result of each authorization.
+		// If empty, the add-card web flow will refuse to build a form.
+		NotifyUrl string `yaml:"notify_url" env-default:""`
+		Currency  string `yaml:"currency" env-default:"978"`
+		ApiKey    string `yaml:"api_key" env-default:""`
 	} `yaml:"redsys"`
 }
 

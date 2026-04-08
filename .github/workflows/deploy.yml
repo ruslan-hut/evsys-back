@@ -33,6 +33,8 @@ jobs:
           sed -i 's|${REDSYS_TERMINAL}|'"$REDSYS_TERMINAL"'|g' back.yml
           sed -i 's|${REDSYS_SECRET_KEY}|'"$REDSYS_SECRET_KEY"'|g' back.yml
           sed -i 's|${REDSYS_REST_API_URL}|'"$REDSYS_REST_API_URL"'|g' back.yml
+          sed -i 's|${REDSYS_FORM_URL}|'"$REDSYS_FORM_URL"'|g' back.yml
+          sed -i 's|${REDSYS_NOTIFY_URL}|'"$REDSYS_NOTIFY_URL"'|g' back.yml
           sed -i 's|${REDSYS_CURRENCY}|'"$REDSYS_CURRENCY"'|g' back.yml
           sed -i 's|${REDSYS_DISABLE_PAYMENT}|'"$REDSYS_DISABLE_PAYMENT"'|g' back.yml
           sed -i 's|${PAYMENT_API_KEY}|'"$PAYMENT_API_KEY"'|g' back.yml
@@ -56,6 +58,8 @@ jobs:
           REDSYS_TERMINAL: ${{ secrets.REDSYS_TERMINAL }}
           REDSYS_SECRET_KEY: ${{ secrets.REDSYS_SECRET_KEY }}
           REDSYS_REST_API_URL: ${{ secrets.REDSYS_REST_API_URL }}
+          REDSYS_FORM_URL: ${{ secrets.REDSYS_FORM_URL }}
+          REDSYS_NOTIFY_URL: ${{ secrets.REDSYS_NOTIFY_URL }}
           REDSYS_CURRENCY: ${{ secrets.REDSYS_CURRENCY }}
           REDSYS_DISABLE_PAYMENT: ${{ vars.REDSYS_DISABLE_PAYMENT }}
           PAYMENT_API_KEY: ${{ secrets.PAYMENT_API_KEY }}

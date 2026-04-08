@@ -104,6 +104,8 @@ func main() {
 			Terminal:     conf.Redsys.Terminal,
 			SecretKey:    conf.Redsys.SecretKey,
 			RestApiUrl:   conf.Redsys.RestApiUrl,
+			FormUrl:      conf.Redsys.FormUrl,
+			NotifyUrl:    conf.Redsys.NotifyUrl,
 			Currency:     conf.Redsys.Currency,
 		}, log)
 		coreHandler.SetRedsys(redsys.NewAdapter(redsysClient))

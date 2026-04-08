@@ -102,38 +102,25 @@ func (a *Adapter) Refund(ctx context.Context, req core.RefundRequest) (*core.Cap
 	return toCoreResponse(resp), nil
 }
 
-// Tokenize implements core.RedsysClient. It performs a Customer-Initiated
-// authorization against Redsys REST using the temporary idOper returned
-// by the inSite JS SDK, and extracts the permanent card token from the
-// response.
-func (a *Adapter) Tokenize(ctx context.Context, req core.TokenizeRequest) (*core.TokenizeResponse, error) {
-	resp, err := a.client.Tokenize(ctx, TokenizeRequest{
+// BuildEntryForm implements core.RedsysClient. It signs a Redsys TPV
+// Virtual hosted-form payload for the web "add card" redirect flow;
+// no HTTP call is made here — signing only.
+func (a *Adapter) BuildEntryForm(req core.EntryFormRequest) (*core.EntryFormResponse, error) {
+	resp, err := a.client.BuildEntryForm(EntryFormRequest{
 		OrderNumber: req.OrderNumber,
-		IdOper:      req.IdOper,
 		Amount:      req.Amount,
+		Description: req.Description,
+		UrlOk:       req.UrlOk,
+		UrlKo:       req.UrlKo,
+		Language:    req.Language,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &core.TokenizeResponse{
-		Success:           resp.Success,
-		ResponseCode:      resp.ResponseCode,
-		ErrorCode:         resp.ErrorCode,
-		ErrorMessage:      resp.ErrorMessage,
-		CardIdentifier:    resp.CardIdentifier,
-		CofTxnid:          resp.CofTxnid,
-		CardBrand:         resp.CardBrand,
-		CardCountry:       resp.CardCountry,
-		CardType:          resp.CardType,
-		ExpiryDate:        resp.ExpiryDate,
-		AuthorizationCode: resp.AuthorizationCode,
+	return &core.EntryFormResponse{
+		FormUrl:            resp.FormUrl,
+		SignatureVersion:   resp.SignatureVersion,
+		MerchantParameters: resp.MerchantParameters,
+		Signature:          resp.Signature,
 	}, nil
 }
-
-// MerchantCode implements core.RedsysClient. Exposes the configured FUC
-// so Core.CreateInSiteOrder can hand it to the Angular frontend without
-// duplicating configuration across layers.
-func (a *Adapter) MerchantCode() string { return a.client.GetConfig().MerchantCode }
-
-// Terminal implements core.RedsysClient.
-func (a *Adapter) Terminal() string { return a.client.GetConfig().Terminal }

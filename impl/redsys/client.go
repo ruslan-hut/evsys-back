@@ -33,7 +33,13 @@ type Config struct {
 	Terminal     string
 	SecretKey    string
 	RestApiUrl   string
-	Currency     string
+	// FormUrl is the TPV Virtual hosted-form entry URL (realizarPago).
+	// Used by BuildEntryForm for the web "add card" redirect flow.
+	FormUrl string
+	// NotifyUrl is the public URL of our /payment/notify endpoint, which
+	// Redsys calls server-to-server with the signed response.
+	NotifyUrl string
+	Currency  string
 }
 
 // Client is the Redsys REST API client
@@ -64,16 +70,19 @@ type MerchantParameters struct {
 	Order             string `json:"DS_MERCHANT_ORDER"`
 	AuthorisationCode string `json:"DS_MERCHANT_AUTHORISATIONCODE,omitempty"`
 	Identifier        string `json:"DS_MERCHANT_IDENTIFIER,omitempty"`
-	// IdOper is the temporary operation identifier returned by the Redsys
-	// inSite JS SDK on the browser side. Used only on the
-	// tokenize-after-inSite path; the native/MIT paths leave it empty.
-	IdOper        string `json:"DS_MERCHANT_IDOPER,omitempty"`
-	DirectPayment string `json:"DS_MERCHANT_DIRECTPAYMENT,omitempty"`
+	DirectPayment     string `json:"DS_MERCHANT_DIRECTPAYMENT,omitempty"`
 	// MIT (Merchant Initiated Transaction) / PSD2 fields
 	Exception string `json:"DS_MERCHANT_EXCEP_SCA,omitempty"`
 	CofIni    string `json:"DS_MERCHANT_COF_INI,omitempty"`
 	CofType   string `json:"DS_MERCHANT_COF_TYPE,omitempty"`
 	CofTid    string `json:"DS_MERCHANT_COF_TXNID,omitempty"`
+	// Hosted-form / TPV Virtual entry fields. Only populated by the
+	// BuildEntryForm path used for the web "add card" redirect flow.
+	ProductDescription string `json:"DS_MERCHANT_PRODUCTDESCRIPTION,omitempty"`
+	ConsumerLanguage   string `json:"DS_MERCHANT_CONSUMERLANGUAGE,omitempty"`
+	UrlOk              string `json:"DS_MERCHANT_URLOK,omitempty"`
+	UrlKo              string `json:"DS_MERCHANT_URLKO,omitempty"`
+	MerchantUrl        string `json:"DS_MERCHANT_MERCHANTURL,omitempty"`
 }
 
 // Request represents the Redsys REST API request body
@@ -156,30 +165,27 @@ type PayRequest struct {
 	CofTid      string
 }
 
-// TokenizeRequest represents a Customer-Initiated Transaction that
-// exchanges a Redsys inSite temporary idOper (obtained in the browser
-// via getInSiteFormJSON) for a permanent card token plus the initial
-// COF transaction id. Used once, per card, during "Add card" flow.
-type TokenizeRequest struct {
+// EntryFormRequest describes the inputs needed to build a signed
+// Redsys TPV Virtual "realizarPago" form POST payload for the web
+// "add card" tokenization flow. No HTTP call is made here — the
+// merchant server only signs the payload; the browser then submits a
+// form to `FormUrl` with the three Ds_* hidden fields.
+type EntryFormRequest struct {
 	OrderNumber string // 12-digit normalized order number
-	IdOper      string // temporary id returned by inSite JS SDK
-	Amount      int    // verification amount, typically 0 for zero-auth
+	Amount      int    // typically 0 for zero-auth tokenization
+	Description string // optional DS_MERCHANT_PRODUCTDESCRIPTION
+	UrlOk       string // browser return on success (from the frontend)
+	UrlKo       string // browser return on failure (from the frontend)
+	Language    string // Redsys numeric language code, e.g. "001" ES, "002" EN
 }
 
-// TokenizeResponse mirrors CaptureResponse but only exposes the fields
-// we actually need to persist a new saved card.
-type TokenizeResponse struct {
-	Success           bool
-	ResponseCode      string
-	ErrorCode         string
-	ErrorMessage      string
-	CardIdentifier    string // Ds_Merchant_Identifier — the permanent card token
-	CofTxnid          string // Ds_Merchant_Cof_Txnid — required for future MIT
-	CardBrand         string
-	CardCountry       string
-	CardType          string
-	ExpiryDate        string
-	AuthorizationCode string
+// EntryFormResponse is what the frontend needs to auto-submit a form
+// to the Redsys entry URL.
+type EntryFormResponse struct {
+	FormUrl            string // sis.redsys.es/sis/realizarPago (or sandbox)
+	SignatureVersion   string // HMAC_SHA256_V1
+	MerchantParameters string // base64-encoded JSON
+	Signature          string // base64-encoded HMAC-SHA256
 }
 
 // RefundRequest represents a refund request (transaction type "3")
@@ -208,58 +214,75 @@ func (c *Client) Pay(ctx context.Context, req PayRequest) (*CaptureResponse, err
 	return c.performMITTransaction(ctx, req.OrderNumber, req.Amount, req.CardToken, req.CofTid, TransactionTypePay)
 }
 
-// Tokenize exchanges a temporary Redsys inSite idOper (obtained on the
-// browser side via getInSiteFormJSON) for a permanent card token. This
-// is a Customer-Initiated Transaction, so it does NOT use the MIT/SCA
-// exception fields that performMITTransaction sets. On success the
-// response carries:
+// BuildEntryForm signs a Redsys TPV Virtual "realizarPago" payload for
+// the web "add card" flow. The backend builds a zero-authorization
+// payment request (transaction type "0") with DS_MERCHANT_IDENTIFIER
+// set to "REQUIRED" so Redsys issues a permanent card token, marks the
+// call as the start of a Credential-on-File chain, and includes the
+// URLs that Redsys must redirect the browser to on success/failure
+// plus the server-to-server notification URL.
 //
-//   - Ds_Merchant_Identifier — permanent card token (stored in
-//     PaymentMethod.Identifier and later used as DS_MERCHANT_IDENTIFIER
-//     for MIT charges).
-//   - Ds_Merchant_Cof_Txnid — initial Credential-on-File transaction
-//     id (stored in PaymentMethod.CofTid and later replayed as
-//     DS_MERCHANT_COF_TXNID for MIT charges).
+// The returned Ds_* triplet must be submitted by the browser as a
+// standard HTML form POST to `FormUrl` — Redsys then hosts the entire
+// card entry + 3DS flow and, on success, POSTs the signed response
+// to `NotifyUrl`. The browser is redirected to either UrlOk or UrlKo
+// so the user sees an outcome page in our app.
 //
-// Amount is typically zero for a zero-auth verification but the caller
-// can pass a positive value if the issuer rejects zero-auth.
-func (c *Client) Tokenize(ctx context.Context, req TokenizeRequest) (*TokenizeResponse, error) {
-	log := c.log.With(
-		slog.String("order", req.OrderNumber),
-		slog.Int("amount", req.Amount),
-		slog.String("tx_type", TransactionTypePay),
-		slog.String("flow", "insite-tokenize"),
-	)
+// No HTTP call is made here; signing only.
+func (c *Client) BuildEntryForm(req EntryFormRequest) (*EntryFormResponse, error) {
+	if c.config.FormUrl == "" {
+		return nil, fmt.Errorf("redsys form url not configured")
+	}
+	if c.config.NotifyUrl == "" {
+		return nil, fmt.Errorf("redsys notify url not configured")
+	}
+	if req.OrderNumber == "" {
+		return nil, fmt.Errorf("order number is required")
+	}
+	if req.Amount < 0 {
+		return nil, fmt.Errorf("amount must not be negative")
+	}
+	if req.UrlOk == "" || req.UrlKo == "" {
+		return nil, fmt.Errorf("both UrlOk and UrlKo are required")
+	}
+	lang := req.Language
+	if lang == "" {
+		lang = "001" // Spanish
+	}
 
 	params := MerchantParameters{
-		MerchantCode:    c.config.MerchantCode,
-		Terminal:        c.config.Terminal,
-		TransactionType: TransactionTypePay,
-		Amount:          fmt.Sprintf("%d", req.Amount),
-		Currency:        c.config.Currency,
-		Order:           req.OrderNumber,
-		IdOper:          req.IdOper,
-		Identifier:      "REQUIRED", // ask Redsys to issue a permanent token
-		CofIni:          "S",        // start of a Credential-on-File chain
-		CofType:         "R",        // recurring use (EV charging)
+		MerchantCode:       c.config.MerchantCode,
+		Terminal:           c.config.Terminal,
+		TransactionType:    TransactionTypePay, // "0" — authorization
+		Amount:             fmt.Sprintf("%d", req.Amount),
+		Currency:           c.config.Currency,
+		Order:              req.OrderNumber,
+		Identifier:         "REQUIRED", // ask Redsys to issue a permanent token
+		CofIni:             "S",        // start of a Credential-on-File chain
+		CofType:            "R",        // recurring usage (EV charging)
+		ProductDescription: req.Description,
+		ConsumerLanguage:   lang,
+		UrlOk:              req.UrlOk,
+		UrlKo:              req.UrlKo,
+		MerchantUrl:        c.config.NotifyUrl,
 	}
 
-	resp, err := c.sendRequest(ctx, log, params, req.OrderNumber)
+	paramsJSON, err := json.Marshal(params)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal merchant parameters: %w", err)
+	}
+	merchantParams := base64.StdEncoding.EncodeToString(paramsJSON)
+
+	signature, err := GenerateSignature(merchantParams, c.config.SecretKey, req.OrderNumber)
+	if err != nil {
+		return nil, fmt.Errorf("generate signature: %w", err)
 	}
 
-	return &TokenizeResponse{
-		Success:           resp.Success,
-		ResponseCode:      resp.ResponseCode,
-		ErrorCode:         resp.ErrorCode,
-		ErrorMessage:      resp.ErrorMessage,
-		CardIdentifier:    resp.MerchantIdentifier,
-		CofTxnid:          resp.CofTxnid,
-		CardBrand:         resp.CardBrand,
-		CardCountry:       resp.CardCountry,
-		ExpiryDate:        resp.ExpiryDate,
-		AuthorizationCode: resp.AuthorizationCode,
+	return &EntryFormResponse{
+		FormUrl:            c.config.FormUrl,
+		SignatureVersion:   "HMAC_SHA256_V1",
+		MerchantParameters: merchantParams,
+		Signature:          signature,
 	}, nil
 }
 

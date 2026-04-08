@@ -29,5 +29,7 @@ redsys:
   terminal: ${REDSYS_TERMINAL}
   secret_key: ${REDSYS_SECRET_KEY}
   rest_api_url: ${REDSYS_REST_API_URL}
+  form_url: ${REDSYS_FORM_URL}
+  notify_url: ${REDSYS_NOTIFY_URL}
   currency: ${REDSYS_CURRENCY}
   api_key: ${PAYMENT_API_KEY}

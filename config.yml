@@ -29,5 +29,7 @@ redsys:
   terminal: "001"
   secret_key: ""
   rest_api_url: "https://sis-t.redsys.es:25443/sis/rest/trataPeticionREST"
+  form_url: "https://sis-t.redsys.es:25443/sis/realizarPago"
+  notify_url: ""
   currency: "978"
   api_key: ""
