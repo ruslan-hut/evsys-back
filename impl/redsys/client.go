@@ -64,7 +64,11 @@ type MerchantParameters struct {
 	Order             string `json:"DS_MERCHANT_ORDER"`
 	AuthorisationCode string `json:"DS_MERCHANT_AUTHORISATIONCODE,omitempty"`
 	Identifier        string `json:"DS_MERCHANT_IDENTIFIER,omitempty"`
-	DirectPayment     string `json:"DS_MERCHANT_DIRECTPAYMENT,omitempty"`
+	// IdOper is the temporary operation identifier returned by the Redsys
+	// inSite JS SDK on the browser side. Used only on the
+	// tokenize-after-inSite path; the native/MIT paths leave it empty.
+	IdOper        string `json:"DS_MERCHANT_IDOPER,omitempty"`
+	DirectPayment string `json:"DS_MERCHANT_DIRECTPAYMENT,omitempty"`
 	// MIT (Merchant Initiated Transaction) / PSD2 fields
 	Exception string `json:"DS_MERCHANT_EXCEP_SCA,omitempty"`
 	CofIni    string `json:"DS_MERCHANT_COF_INI,omitempty"`
@@ -152,6 +156,32 @@ type PayRequest struct {
 	CofTid      string
 }
 
+// TokenizeRequest represents a Customer-Initiated Transaction that
+// exchanges a Redsys inSite temporary idOper (obtained in the browser
+// via getInSiteFormJSON) for a permanent card token plus the initial
+// COF transaction id. Used once, per card, during "Add card" flow.
+type TokenizeRequest struct {
+	OrderNumber string // 12-digit normalized order number
+	IdOper      string // temporary id returned by inSite JS SDK
+	Amount      int    // verification amount, typically 0 for zero-auth
+}
+
+// TokenizeResponse mirrors CaptureResponse but only exposes the fields
+// we actually need to persist a new saved card.
+type TokenizeResponse struct {
+	Success           bool
+	ResponseCode      string
+	ErrorCode         string
+	ErrorMessage      string
+	CardIdentifier    string // Ds_Merchant_Identifier — the permanent card token
+	CofTxnid          string // Ds_Merchant_Cof_Txnid — required for future MIT
+	CardBrand         string
+	CardCountry       string
+	CardType          string
+	ExpiryDate        string
+	AuthorizationCode string
+}
+
 // RefundRequest represents a refund request (transaction type "3")
 type RefundRequest struct {
 	OrderNumber string
@@ -176,6 +206,61 @@ func (c *Client) Preauthorize(ctx context.Context, req PreauthorizeRequest) (*Ca
 // Pay performs a direct MIT payment with a saved card token (transaction type "0")
 func (c *Client) Pay(ctx context.Context, req PayRequest) (*CaptureResponse, error) {
 	return c.performMITTransaction(ctx, req.OrderNumber, req.Amount, req.CardToken, req.CofTid, TransactionTypePay)
+}
+
+// Tokenize exchanges a temporary Redsys inSite idOper (obtained on the
+// browser side via getInSiteFormJSON) for a permanent card token. This
+// is a Customer-Initiated Transaction, so it does NOT use the MIT/SCA
+// exception fields that performMITTransaction sets. On success the
+// response carries:
+//
+//   - Ds_Merchant_Identifier — permanent card token (stored in
+//     PaymentMethod.Identifier and later used as DS_MERCHANT_IDENTIFIER
+//     for MIT charges).
+//   - Ds_Merchant_Cof_Txnid — initial Credential-on-File transaction
+//     id (stored in PaymentMethod.CofTid and later replayed as
+//     DS_MERCHANT_COF_TXNID for MIT charges).
+//
+// Amount is typically zero for a zero-auth verification but the caller
+// can pass a positive value if the issuer rejects zero-auth.
+func (c *Client) Tokenize(ctx context.Context, req TokenizeRequest) (*TokenizeResponse, error) {
+	log := c.log.With(
+		slog.String("order", req.OrderNumber),
+		slog.Int("amount", req.Amount),
+		slog.String("tx_type", TransactionTypePay),
+		slog.String("flow", "insite-tokenize"),
+	)
+
+	params := MerchantParameters{
+		MerchantCode:    c.config.MerchantCode,
+		Terminal:        c.config.Terminal,
+		TransactionType: TransactionTypePay,
+		Amount:          fmt.Sprintf("%d", req.Amount),
+		Currency:        c.config.Currency,
+		Order:           req.OrderNumber,
+		IdOper:          req.IdOper,
+		Identifier:      "REQUIRED", // ask Redsys to issue a permanent token
+		CofIni:          "S",        // start of a Credential-on-File chain
+		CofType:         "R",        // recurring use (EV charging)
+	}
+
+	resp, err := c.sendRequest(ctx, log, params, req.OrderNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TokenizeResponse{
+		Success:           resp.Success,
+		ResponseCode:      resp.ResponseCode,
+		ErrorCode:         resp.ErrorCode,
+		ErrorMessage:      resp.ErrorMessage,
+		CardIdentifier:    resp.MerchantIdentifier,
+		CofTxnid:          resp.CofTxnid,
+		CardBrand:         resp.CardBrand,
+		CardCountry:       resp.CardCountry,
+		ExpiryDate:        resp.ExpiryDate,
+		AuthorizationCode: resp.AuthorizationCode,
+	}, nil
 }
 
 // Refund performs a refund for a given order (transaction type "3")

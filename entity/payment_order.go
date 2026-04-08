@@ -33,14 +33,30 @@ func (p *PaymentOrder) Bind(_ *http.Request) error {
 
 // InSiteOrderResponse is the response returned by POST /payment/order when
 // mode=="insite". It embeds the stored PaymentOrder (so callers still see
-// the generated order number and timestamps) and adds the pre-signed Redsys
-// inSite parameters the browser must submit to the Redsys JS SDK.
+// the generated order number and timestamps) and exposes the three merchant
+// identifiers the Redsys inSite JS SDK needs to draw the card form:
+//
+//	getInSiteFormJSON({ fuc, terminal, order, ... })
+//
+// No signing happens at this stage — inSite does not require it. The
+// signed REST call to Redsys happens later, on /payment/tokenize, after
+// the browser has handed us the temporary idOper.
 type InSiteOrderResponse struct {
 	*PaymentOrder
-	SignatureVersion   string `json:"Ds_SignatureVersion"`
-	MerchantParameters string `json:"Ds_MerchantParameters"`
-	Signature          string `json:"Ds_Signature"`
-	MerchantCode       string `json:"merchant_code"`
-	Terminal           string `json:"terminal"`
-	OrderNumber        string `json:"order_number"`
+	MerchantCode string `json:"merchant_code"`
+	Terminal     string `json:"terminal"`
+	OrderNumber  string `json:"order_number"`
+}
+
+// TokenizeRequest is the payload sent by the web client to
+// POST /payment/tokenize after the Redsys inSite SDK has issued a
+// temporary operation identifier (idOper, valid for 30 minutes).
+type TokenizeRequest struct {
+	Order       int    `json:"order" validate:"required,min=1"`
+	IdOper      string `json:"id_oper" validate:"required"`
+	Description string `json:"description" validate:"omitempty"`
+}
+
+func (r *TokenizeRequest) Bind(_ *http.Request) error {
+	return validate.Struct(r)
 }

@@ -102,24 +102,38 @@ func (a *Adapter) Refund(ctx context.Context, req core.RefundRequest) (*core.Cap
 	return toCoreResponse(resp), nil
 }
 
-// BuildInSiteTokenizationParams implements core.RedsysClient. It delegates
-// to the Redsys Client, which signs the payload without performing any HTTP
-// call — tokenization happens in the browser via the inSite JS SDK.
-func (a *Adapter) BuildInSiteTokenizationParams(req core.InSiteTokenizationRequest) (*core.InSiteTokenizationParams, error) {
-	params, err := a.client.BuildTokenizationParams(InSiteTokenizationRequest{
+// Tokenize implements core.RedsysClient. It performs a Customer-Initiated
+// authorization against Redsys REST using the temporary idOper returned
+// by the inSite JS SDK, and extracts the permanent card token from the
+// response.
+func (a *Adapter) Tokenize(ctx context.Context, req core.TokenizeRequest) (*core.TokenizeResponse, error) {
+	resp, err := a.client.Tokenize(ctx, TokenizeRequest{
 		OrderNumber: req.OrderNumber,
+		IdOper:      req.IdOper,
 		Amount:      req.Amount,
-		Description: req.Description,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &core.InSiteTokenizationParams{
-		SignatureVersion:   params.SignatureVersion,
-		MerchantParameters: params.MerchantParameters,
-		Signature:          params.Signature,
-		MerchantCode:       params.MerchantCode,
-		Terminal:           params.Terminal,
-		OrderNumber:        params.OrderNumber,
+	return &core.TokenizeResponse{
+		Success:           resp.Success,
+		ResponseCode:      resp.ResponseCode,
+		ErrorCode:         resp.ErrorCode,
+		ErrorMessage:      resp.ErrorMessage,
+		CardIdentifier:    resp.CardIdentifier,
+		CofTxnid:          resp.CofTxnid,
+		CardBrand:         resp.CardBrand,
+		CardCountry:       resp.CardCountry,
+		CardType:          resp.CardType,
+		ExpiryDate:        resp.ExpiryDate,
+		AuthorizationCode: resp.AuthorizationCode,
 	}, nil
 }
+
+// MerchantCode implements core.RedsysClient. Exposes the configured FUC
+// so Core.CreateInSiteOrder can hand it to the Angular frontend without
+// duplicating configuration across layers.
+func (a *Adapter) MerchantCode() string { return a.client.GetConfig().MerchantCode }
+
+// Terminal implements core.RedsysClient.
+func (a *Adapter) Terminal() string { return a.client.GetConfig().Terminal }

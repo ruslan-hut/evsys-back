@@ -125,6 +125,7 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 			r.Post("/payment/update", payments.Update(log, core))
 			r.Post("/payment/delete", payments.Delete(log, core))
 			r.Post("/payment/order", payments.Order(log, core))
+			r.Post("/payment/tokenize", payments.Tokenize(log, core))
 
 			r.Get("/report/month", report.MonthlyStatistics(log, core))
 			r.Get("/report/user", report.UsersStatistics(log, core))

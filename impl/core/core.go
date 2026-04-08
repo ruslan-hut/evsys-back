@@ -48,27 +48,38 @@ type RedsysClient interface {
 	Preauthorize(ctx context.Context, req PreauthorizeRequest) (*CaptureResponse, error)
 	Pay(ctx context.Context, req PayRequest) (*CaptureResponse, error)
 	Refund(ctx context.Context, req RefundRequest) (*CaptureResponse, error)
-	BuildInSiteTokenizationParams(req InSiteTokenizationRequest) (*InSiteTokenizationParams, error)
+	// Tokenize exchanges a temporary inSite idOper for a permanent card
+	// token via Redsys REST. Used by POST /payment/tokenize.
+	Tokenize(ctx context.Context, req TokenizeRequest) (*TokenizeResponse, error)
+	// MerchantCode / Terminal expose the merchant identifiers that the
+	// browser-side inSite SDK needs (passed through to the frontend by
+	// CreateInSiteOrder). No secrets leak — these are public values.
+	MerchantCode() string
+	Terminal() string
 }
 
-// InSiteTokenizationRequest asks the Redsys adapter for a signed payload
-// suitable for the browser inSite JS SDK. The order number must be the
-// 12-digit normalized form expected by Redsys.
-type InSiteTokenizationRequest struct {
+// TokenizeRequest is what Core passes to the Redsys adapter when the
+// browser has completed inSite entry and handed us a temporary idOper.
+type TokenizeRequest struct {
 	OrderNumber string
+	IdOper      string
 	Amount      int
-	Description string
 }
 
-// InSiteTokenizationParams is the signed Redsys payload the frontend feeds
-// into the inSite widget.
-type InSiteTokenizationParams struct {
-	SignatureVersion   string
-	MerchantParameters string
-	Signature          string
-	MerchantCode       string
-	Terminal           string
-	OrderNumber        string
+// TokenizeResponse mirrors the Redsys REST response for a tokenization
+// call, exposing just the fields needed to create a PaymentMethod row.
+type TokenizeResponse struct {
+	Success           bool
+	ResponseCode      string
+	ErrorCode         string
+	ErrorMessage      string
+	CardIdentifier    string
+	CofTxnid          string
+	CardBrand         string
+	CardCountry       string
+	CardType          string
+	ExpiryDate        string
+	AuthorizationCode string
 }
 
 // CaptureRequest for Redsys capture operations
@@ -486,11 +497,21 @@ func (c *Core) DeletePaymentMethod(ctx context.Context, user *entity.User, pm *e
 	return c.repo.DeletePaymentMethod(ctx, pm)
 }
 
+// InSiteOrderInfo carries the merchant identifiers the browser needs to
+// initialise the Redsys inSite form, alongside the normalized 12-digit
+// order string Redsys expects.
+type InSiteOrderInfo struct {
+	MerchantCode string
+	Terminal     string
+	OrderNumber  string
+}
+
 // CreateInSiteOrder persists a new PaymentOrder (via SetOrder) and returns
-// the Redsys inSite signed payload the browser needs to start card
-// tokenization. The Android/native flow does NOT go through this path —
-// SetOrder alone is used there, preserving full backward compatibility.
-func (c *Core) CreateInSiteOrder(ctx context.Context, user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, *InSiteTokenizationParams, error) {
+// the public merchant identifiers the browser must pass to
+// `getInSiteFormJSON`. No signing happens here — inSite does not require
+// pre-signed parameters. The Android/native flow does NOT go through this
+// path and keeps using SetOrder directly.
+func (c *Core) CreateInSiteOrder(ctx context.Context, user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, *InSiteOrderInfo, error) {
 	if c.redsys == nil {
 		return nil, nil, fmt.Errorf("redsys client not configured")
 	}
@@ -502,16 +523,102 @@ func (c *Core) CreateInSiteOrder(ctx context.Context, user *entity.User, order *
 		return nil, nil, err
 	}
 
-	params, err := c.redsys.BuildInSiteTokenizationParams(InSiteTokenizationRequest{
-		OrderNumber: normalizeOrderNumber(fmt.Sprintf("%d", stored.Order)),
-		Amount:      stored.Amount,
-		Description: stored.Description,
-	})
-	if err != nil {
-		return stored, nil, fmt.Errorf("build inSite params: %w", err)
+	return stored, &InSiteOrderInfo{
+		MerchantCode: c.redsys.MerchantCode(),
+		Terminal:     c.redsys.Terminal(),
+		OrderNumber:  normalizeOrderNumber(fmt.Sprintf("%d", stored.Order)),
+	}, nil
+}
+
+// TokenizeCard completes the Redsys inSite add-card flow: it takes the
+// temporary idOper returned by the browser SDK, calls Redsys REST to
+// exchange it for a permanent card token, and persists a PaymentMethod
+// row bound to the current user. Returns the saved method together with
+// the user's full updated list so the caller can refresh the UI in one
+// round-trip.
+func (c *Core) TokenizeCard(ctx context.Context, user *entity.User, req *entity.TokenizeRequest) (*entity.PaymentMethod, []*entity.PaymentMethod, error) {
+	if c.redsys == nil {
+		return nil, nil, fmt.Errorf("redsys client not configured")
+	}
+	if user == nil {
+		return nil, nil, fmt.Errorf("user is nil")
+	}
+	if req == nil || req.IdOper == "" || req.Order <= 0 {
+		return nil, nil, fmt.Errorf("invalid tokenize request")
 	}
 
-	return stored, params, nil
+	// Ensure the order exists and belongs to this user before touching
+	// Redsys — protects against cross-user replay of idOper+order pairs.
+	stored, err := c.repo.GetPaymentOrder(ctx, req.Order)
+	if err != nil || stored == nil {
+		return nil, nil, fmt.Errorf("order not found: %w", err)
+	}
+	if stored.UserId != user.UserId {
+		return nil, nil, fmt.Errorf("order does not belong to user")
+	}
+
+	orderNumber := normalizeOrderNumber(fmt.Sprintf("%d", stored.Order))
+
+	// Zero-auth tokenization (matches the Android flow which also passes
+	// amount=0). If the issuer rejects zero-auth the caller can bump the
+	// order amount before calling this method.
+	resp, err := c.redsys.Tokenize(ctx, TokenizeRequest{
+		OrderNumber: orderNumber,
+		IdOper:      req.IdOper,
+		Amount:      stored.Amount,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("redsys tokenize: %w", err)
+	}
+	if !resp.Success {
+		return nil, nil, fmt.Errorf("redsys rejected tokenization: code=%s error=%s %s", resp.ResponseCode, resp.ErrorCode, resp.ErrorMessage)
+	}
+	if resp.CardIdentifier == "" {
+		return nil, nil, fmt.Errorf("redsys did not return a card identifier")
+	}
+
+	description := req.Description
+	if description == "" {
+		description = "Card"
+	}
+
+	last4 := ""
+	// Redsys does not always return a card number in the tokenization
+	// response; when it does it is already masked to the last 4 digits.
+	// CardBrand / CardCountry / ExpiryDate are populated from the
+	// response for display purposes.
+	pm := &entity.PaymentMethod{
+		Description: description,
+		Identifier:  resp.CardIdentifier,
+		CardNumber:  last4,
+		CardType:    resp.CardType,
+		CardBrand:   resp.CardBrand,
+		CardCountry: resp.CardCountry,
+		ExpiryDate:  resp.ExpiryDate,
+		IsDefault:   false,
+		CofTid:      resp.CofTxnid,
+	}
+
+	if err := c.SavePaymentMethod(ctx, user, pm); err != nil {
+		return nil, nil, fmt.Errorf("save payment method: %w", err)
+	}
+
+	// Close the order so interrupted-order cleanup does not touch it.
+	stored.IsCompleted = true
+	stored.Result = "tokenized"
+	stored.Identifier = resp.CardIdentifier
+	stored.TimeClosed = time.Now()
+	_ = c.repo.SavePaymentOrder(ctx, stored)
+
+	methods, err := c.repo.GetPaymentMethods(ctx, user.UserId)
+	if err != nil {
+		// Method was saved successfully; a list-load failure should not
+		// propagate as a tokenization failure. Return the saved method
+		// alone and let the caller refetch if needed.
+		c.log.With(sl.Err(err)).Warn("tokenize: failed to load updated methods list")
+		return pm, nil, nil
+	}
+	return pm, methods, nil
 }
 
 func (c *Core) SetOrder(ctx context.Context, user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, error) {

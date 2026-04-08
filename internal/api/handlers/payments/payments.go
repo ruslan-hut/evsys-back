@@ -20,7 +20,8 @@ type Payments interface {
 	UpdatePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error
 	DeletePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error
 	SetOrder(ctx context.Context, user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, error)
-	CreateInSiteOrder(ctx context.Context, user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, *core.InSiteTokenizationParams, error)
+	CreateInSiteOrder(ctx context.Context, user *entity.User, order *entity.PaymentOrder) (*entity.PaymentOrder, *core.InSiteOrderInfo, error)
+	TokenizeCard(ctx context.Context, user *entity.User, req *entity.TokenizeRequest) (*entity.PaymentMethod, []*entity.PaymentMethod, error)
 }
 
 func List(logger *slog.Logger, handler Payments) http.HandlerFunc {
@@ -194,12 +195,14 @@ func Order(logger *slog.Logger, handler Payments) http.HandlerFunc {
 			sl.Secret("identifier", order.Identifier),
 		)
 
-		// Web / Redsys inSite flow: sign the merchant parameters server-side
-		// and return them together with the stored order so the browser can
-		// drive the inSite JS SDK. The native Android flow does not send
-		// "mode" and therefore stays on the legacy code path below.
+		// Web / Redsys inSite flow: persist the order and return the
+		// merchant identifiers the browser needs to initialize the Redsys
+		// inSite JS SDK. No signing happens here — inSite does not require
+		// pre-signed merchant parameters. The native Android flow does
+		// not send "mode" and therefore stays on the legacy code path
+		// below.
 		if order.Mode == "insite" {
-			updated, params, err := handler.CreateInSiteOrder(ctx, user, &order)
+			updated, info, err := handler.CreateInSiteOrder(ctx, user, &order)
 			if err != nil {
 				log.With(sl.Err(err)).Error("inSite order not set")
 				response.RenderErr(w, r, 400, 2001, "Failed to set order", err)
@@ -209,13 +212,10 @@ func Order(logger *slog.Logger, handler Payments) http.HandlerFunc {
 				slog.Int("order", updated.Order),
 			).Info("payment order set (inSite)")
 			render.JSON(w, r, &entity.InSiteOrderResponse{
-				PaymentOrder:       updated,
-				SignatureVersion:   params.SignatureVersion,
-				MerchantParameters: params.MerchantParameters,
-				Signature:          params.Signature,
-				MerchantCode:       params.MerchantCode,
-				Terminal:           params.Terminal,
-				OrderNumber:        params.OrderNumber,
+				PaymentOrder: updated,
+				MerchantCode: info.MerchantCode,
+				Terminal:     info.Terminal,
+				OrderNumber:  info.OrderNumber,
 			})
 			return
 		}
@@ -231,5 +231,48 @@ func Order(logger *slog.Logger, handler Payments) http.HandlerFunc {
 		).Info("payment order set")
 
 		render.JSON(w, r, &updated)
+	}
+}
+
+// Tokenize exchanges a temporary Redsys inSite idOper (obtained on the
+// browser via getInSiteFormJSON) for a permanent card token via a signed
+// REST call to Redsys, persists a new PaymentMethod, and returns the
+// updated list of the user's cards in a single round-trip. This endpoint
+// is web-only — Android never calls it.
+func Tokenize(logger *slog.Logger, handler Payments) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
+
+		log := logger.With(
+			sl.Module("handlers.payments"),
+			slog.String("user", user.Username),
+			sl.Secret("user_id", user.UserId),
+			slog.String("request_id", middleware.GetReqID(ctx)),
+		)
+
+		var req entity.TokenizeRequest
+		if err := render.Bind(r, &req); err != nil {
+			log.With(sl.Err(err)).Error("bind")
+			response.RenderErr(w, r, 400, 2001, "Failed to decode", err)
+			return
+		}
+		log = log.With(
+			slog.Int("order", req.Order),
+			sl.Secret("id_oper", req.IdOper),
+		)
+
+		saved, methods, err := handler.TokenizeCard(ctx, user, &req)
+		if err != nil {
+			log.With(sl.Err(err)).Error("tokenization failed")
+			response.RenderErr(w, r, 400, 2001, "Failed to tokenize card", err)
+			return
+		}
+		log.Info("card tokenized")
+
+		render.JSON(w, r, map[string]interface{}{
+			"saved":   saved,
+			"methods": methods,
+		})
 	}
 }
