@@ -41,8 +41,8 @@ func (c *Client) BuildTokenizationParams(req InSiteTokenizationRequest) (*InSite
 	if req.OrderNumber == "" {
 		return nil, fmt.Errorf("order number is required")
 	}
-	if req.Amount <= 0 {
-		return nil, fmt.Errorf("amount must be positive")
+	if req.Amount < 0 {
+		return nil, fmt.Errorf("amount must not be negative")
 	}
 
 	params := MerchantParameters{
