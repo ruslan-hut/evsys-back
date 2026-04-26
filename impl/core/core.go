@@ -45,6 +45,7 @@ type Core struct {
 // MailService is the optional dependency that sends report emails on demand.
 type MailService interface {
 	SendNow(ctx context.Context, sub *entity.MailSubscription) error
+	SendTest(ctx context.Context, to string) error
 }
 
 // RedsysClient interface for Redsys operations
@@ -188,6 +189,21 @@ func (c *Core) DeleteMailSubscription(ctx context.Context, author *entity.User, 
 		return err
 	}
 	return c.repo.DeleteMailSubscription(ctx, id)
+}
+
+// SendTestMail dispatches a minimal diagnostic email to verify Brevo
+// credentials and sender verification. Admin-only.
+func (c *Core) SendTestMail(ctx context.Context, author *entity.User, to string) error {
+	if err := c.requirePowerUser(author); err != nil {
+		return err
+	}
+	if c.mail == nil {
+		return fmt.Errorf("mail service not configured")
+	}
+	if to == "" {
+		return fmt.Errorf("recipient email is required")
+	}
+	return c.mail.SendTest(ctx, to)
 }
 
 // SendMailSubscriptionNow triggers an immediate report email for a subscription.

@@ -2,6 +2,7 @@ package mail
 
 import (
 	"context"
+	"encoding/json"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
@@ -19,6 +20,11 @@ type Handler interface {
 	SaveMailSubscription(ctx context.Context, author *entity.User, sub *entity.MailSubscription) (*entity.MailSubscription, error)
 	DeleteMailSubscription(ctx context.Context, author *entity.User, id string) error
 	SendMailSubscriptionNow(ctx context.Context, author *entity.User, id string) error
+	SendTestMail(ctx context.Context, author *entity.User, to string) error
+}
+
+type testMailRequest struct {
+	Email string `json:"email"`
 }
 
 func loggerWith(logger *slog.Logger, r *http.Request, author *entity.User) *slog.Logger {
@@ -119,6 +125,28 @@ func Delete(logger *slog.Logger, h Handler) http.HandlerFunc {
 			return
 		}
 		log.Info("mail subscription deleted", slog.String("id", id))
+		render.JSON(w, r, map[string]interface{}{"success": true})
+	}
+}
+
+func Test(logger *slog.Logger, h Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		author := cont.GetUser(ctx)
+		log := loggerWith(logger, r, author)
+
+		var req testMailRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			log.Error("decode test mail request", sl.Err(err))
+			response.RenderErr(w, r, 400, 2001, "Failed to decode request", err)
+			return
+		}
+		if err := h.SendTestMail(ctx, author, req.Email); err != nil {
+			log.Error("send test mail", sl.Err(err))
+			response.RenderErr(w, r, 400, 2001, "Failed to send test mail", err)
+			return
+		}
+		log.Info("test mail sent", slog.String("to", req.Email))
 		render.JSON(w, r, map[string]interface{}{"success": true})
 	}
 }

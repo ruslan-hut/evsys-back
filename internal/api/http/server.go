@@ -117,6 +117,7 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 				r.Put("/mail/subscriptions/{id}", mail.Update(log, core))
 				r.Delete("/mail/subscriptions/{id}", mail.Delete(log, core))
 				r.Post("/mail/subscriptions/{id}/send-now", mail.SendNow(log, core))
+				r.Post("/mail/test", mail.Test(log, core))
 			})
 
 			r.Post("/csc", centralsystem.Command(log, core))

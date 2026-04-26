@@ -38,6 +38,11 @@ jobs:
           sed -i 's|${REDSYS_CURRENCY}|'"$REDSYS_CURRENCY"'|g' back.yml
           sed -i 's|${REDSYS_DISABLE_PAYMENT}|'"$REDSYS_DISABLE_PAYMENT"'|g' back.yml
           sed -i 's|${PAYMENT_API_KEY}|'"$PAYMENT_API_KEY"'|g' back.yml
+          sed -i 's|${BREVO_ENABLED}|'"$BREVO_ENABLED"'|g' back.yml
+          sed -i 's|${BREVO_API_KEY}|'"$BREVO_API_KEY"'|g' back.yml
+          sed -i 's|${BREVO_SENDER_NAME}|'"$BREVO_SENDER_NAME"'|g' back.yml
+          sed -i 's|${BREVO_SENDER_EMAIL}|'"$BREVO_SENDER_EMAIL"'|g' back.yml
+          sed -i 's|${BREVO_API_URL}|'"$BREVO_API_URL"'|g' back.yml
 
         env:
           TIME_ZONE: ${{ vars.TIME_ZONE }}
@@ -63,6 +68,11 @@ jobs:
           REDSYS_CURRENCY: ${{ secrets.REDSYS_CURRENCY }}
           REDSYS_DISABLE_PAYMENT: ${{ vars.REDSYS_DISABLE_PAYMENT }}
           PAYMENT_API_KEY: ${{ secrets.PAYMENT_API_KEY }}
+          BREVO_ENABLED: ${{ vars.BREVO_ENABLED }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          BREVO_SENDER_NAME: ${{ vars.BREVO_SENDER_NAME }}
+          BREVO_SENDER_EMAIL: ${{ vars.BREVO_SENDER_EMAIL }}
+          BREVO_API_URL: ${{ vars.BREVO_API_URL }}
 
       - name: Copy Configuration to Server
         uses: appleboy/scp-action@master

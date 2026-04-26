@@ -138,7 +138,23 @@ triggers `.github/workflows/deploy.yml`).
 
 ---
 
-## 6. Manage subscribers (admin UI)
+## 6. Send a test mail (no subscription required)
+
+Before configuring any subscriptions, verify the Brevo pipeline end-to-end:
+
+- **Admin UI**: open **Manage → Mail reports** (`/mail-subscriptions`). The
+  first card on the page is **Test mail provider** — enter any address and
+  click **Send test mail**. A minimal "Mail integration is working" message is
+  delivered through Brevo using the configured sender.
+- **API**: `POST /api/v1/mail/test` with body `{"email":"you@example.com"}`
+  (admin/operator token required). A `200 {success: true}` response means
+  Brevo accepted the message; check the recipient's inbox to confirm
+  delivery. Errors include the Brevo HTTP status and body in the backend log.
+
+This path bypasses the report repository, so it works even when no
+subscriptions exist and no charging sessions have been recorded.
+
+## 7. Manage subscribers (admin UI)
 
 Recipients are stored per-environment in the `mail_subscriptions` MongoDB
 collection and managed via the admin frontend at **Manage → Mail reports**
@@ -157,7 +173,7 @@ end-to-end delivery without waiting for the scheduler.
 
 ---
 
-## 7. Schedule semantics
+## 8. Schedule semantics
 
 The scheduler runs in a single goroutine that wakes once per day at **06:00 UTC**:
 
@@ -172,7 +188,7 @@ errors are logged per-recipient and never abort the rest of the batch.
 
 ---
 
-## 8. Report content
+## 9. Report content
 
 Each email is a single inline HTML table — no attachments. Columns:
 
@@ -187,7 +203,7 @@ endpoint feeds both: `GET /api/v1/report/charger?from&to&group=...`.
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom                                  | Likely cause / fix                                                      |
 |------------------------------------------|-------------------------------------------------------------------------|

@@ -163,6 +163,7 @@ Admin/operator only (`RequirePowerUser`):
 - `PUT    /api/v1/mail/subscriptions/{id}`          — Update subscription
 - `DELETE /api/v1/mail/subscriptions/{id}`          — Delete subscription
 - `POST   /api/v1/mail/subscriptions/{id}/send-now` — Trigger an immediate report email
+- `POST   /api/v1/mail/test`                        — Send a minimal diagnostic email `{email}` to verify Brevo
 
 `period` is one of `daily | weekly | monthly`. `user_group` matches the same value the frontend statistic page sends as the `group` query param (e.g. `default`, `office`).
 

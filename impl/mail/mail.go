@@ -168,6 +168,24 @@ func (s *Service) RunOnce(ctx context.Context, period string) error {
 	return nil
 }
 
+// SendTest sends a minimal diagnostic email to the given address. It exercises
+// the Brevo client (credentials, sender verification, network) without
+// touching the report repository, so admins can validate the mail pipeline
+// before any subscription exists.
+func (s *Service) SendTest(ctx context.Context, to string) error {
+	now := s.now()
+	subject := "EVSys mail test"
+	body := fmt.Sprintf(
+		`<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#222;">`+
+			`<h2>Mail integration is working</h2>`+
+			`<p>This is a test message sent from the EVSys backend to verify the Brevo configuration.</p>`+
+			`<p style="color:#666;">Sent at %s UTC.</p>`+
+			`</body></html>`,
+		now.UTC().Format("2006-01-02 15:04:05"),
+	)
+	return s.sender.Send(ctx, to, subject, body)
+}
+
 // SendNow runs the report for a single subscription immediately, useful as an
 // admin "test" action. It honours the subscription's period to compute the date
 // range, but ignores the Enabled flag.
