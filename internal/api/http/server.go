@@ -6,6 +6,7 @@ import (
 	centralsystem "evsys-back/internal/api/handlers/central-system"
 	"evsys-back/internal/api/handlers/helper"
 	"evsys-back/internal/api/handlers/locations"
+	"evsys-back/internal/api/handlers/mail"
 	"evsys-back/internal/api/handlers/payments"
 	"evsys-back/internal/api/handlers/report"
 	"evsys-back/internal/api/handlers/transactions"
@@ -52,6 +53,7 @@ type Core interface {
 	payments.Preauthorizations
 	payments.DirectPayments
 	report.Reports
+	mail.Handler
 
 	websocket.Core
 }
@@ -109,6 +111,12 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 				r.Post("/user-tags/create", usertags.Create(log, core))
 				r.Put("/user-tags/update/{idTag}", usertags.Update(log, core))
 				r.Delete("/user-tags/delete/{idTag}", usertags.Delete(log, core))
+
+				r.Get("/mail/subscriptions", mail.List(log, core))
+				r.Post("/mail/subscriptions", mail.Create(log, core))
+				r.Put("/mail/subscriptions/{id}", mail.Update(log, core))
+				r.Delete("/mail/subscriptions/{id}", mail.Delete(log, core))
+				r.Post("/mail/subscriptions/{id}/send-now", mail.SendNow(log, core))
 			})
 
 			r.Post("/csc", centralsystem.Command(log, core))

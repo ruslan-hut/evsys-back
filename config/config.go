@@ -52,6 +52,13 @@ type Config struct {
 		Currency  string `yaml:"currency" env-default:"978"`
 		ApiKey    string `yaml:"api_key" env-default:""`
 	} `yaml:"redsys"`
+	Brevo struct {
+		Enabled    bool   `yaml:"enabled" env-default:"false"`
+		ApiKey     string `yaml:"api_key" env-default:""`
+		SenderName string `yaml:"sender_name" env-default:"EVSys Reports"`
+		SenderMail string `yaml:"sender_email" env-default:"noreply@example.com"`
+		ApiUrl     string `yaml:"api_url" env-default:"https://api.brevo.com/v3/smtp/email"`
+	} `yaml:"brevo"`
 }
 
 var instance *Config

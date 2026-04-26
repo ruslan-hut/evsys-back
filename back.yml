@@ -33,3 +33,9 @@ redsys:
   notify_url: ${REDSYS_NOTIFY_URL}
   currency: ${REDSYS_CURRENCY}
   api_key: ${PAYMENT_API_KEY}
+brevo:
+  enabled: ${BREVO_ENABLED}
+  api_key: ${BREVO_API_KEY}
+  sender_name: ${BREVO_SENDER_NAME}
+  sender_email: ${BREVO_SENDER_EMAIL}
+  api_url: ${BREVO_API_URL}

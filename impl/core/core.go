@@ -34,11 +34,17 @@ type Core struct {
 	cs                   CentralSystem
 	reports              Reports
 	redsys               RedsysClient
+	mail                 MailService
 	currency             string
 	disablePayment       bool
 	paymentLocks         sync.Map
 	stopPaymentProcessor chan struct{}
 	log                  *slog.Logger
+}
+
+// MailService is the optional dependency that sends report emails on demand.
+type MailService interface {
+	SendNow(ctx context.Context, sub *entity.MailSubscription) error
 }
 
 // RedsysClient interface for Redsys operations
@@ -154,6 +160,52 @@ func (c *Core) SetCurrency(currency string) {
 
 func (c *Core) SetDisablePayment(disable bool) {
 	c.disablePayment = disable
+}
+
+func (c *Core) SetMailService(m MailService) {
+	c.mail = m
+}
+
+// ListMailSubscriptions returns all mail subscriptions (admin only).
+func (c *Core) ListMailSubscriptions(ctx context.Context, author *entity.User) ([]*entity.MailSubscription, error) {
+	if err := c.requirePowerUser(author); err != nil {
+		return nil, err
+	}
+	return c.repo.ListMailSubscriptions(ctx)
+}
+
+// SaveMailSubscription creates or updates a mail subscription (admin only).
+func (c *Core) SaveMailSubscription(ctx context.Context, author *entity.User, sub *entity.MailSubscription) (*entity.MailSubscription, error) {
+	if err := c.requirePowerUser(author); err != nil {
+		return nil, err
+	}
+	return c.repo.SaveMailSubscription(ctx, sub)
+}
+
+// DeleteMailSubscription removes a mail subscription (admin only).
+func (c *Core) DeleteMailSubscription(ctx context.Context, author *entity.User, id string) error {
+	if err := c.requirePowerUser(author); err != nil {
+		return err
+	}
+	return c.repo.DeleteMailSubscription(ctx, id)
+}
+
+// SendMailSubscriptionNow triggers an immediate report email for a subscription.
+func (c *Core) SendMailSubscriptionNow(ctx context.Context, author *entity.User, id string) error {
+	if err := c.requirePowerUser(author); err != nil {
+		return err
+	}
+	if c.mail == nil {
+		return fmt.Errorf("mail service not configured")
+	}
+	sub, err := c.repo.GetMailSubscription(ctx, id)
+	if err != nil {
+		return err
+	}
+	if sub == nil {
+		return fmt.Errorf("subscription not found")
+	}
+	return c.mail.SendNow(ctx, sub)
 }
 
 // normalizeOrderNumber pads order number to 12 digits with leading zeros

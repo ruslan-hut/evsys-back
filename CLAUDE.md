@@ -39,6 +39,8 @@ impl/                       Core implementations
 ├── database-mock/          In-memory mock for local dev (returns stubs)
 ├── authenticator/          Token-based auth + optional Firebase
 ├── redsys/                 Redsys payment gateway client (MIT payments, preauth, refunds)
+├── brevo/                  Brevo (Sendinblue) transactional email client
+├── mail/                   Scheduled report-mail service (daily/weekly/monthly)
 ├── reports/                Statistics generation
 ├── status-reader/          Transaction state management
 └── central-system/         External API proxy
@@ -74,13 +76,15 @@ entity/                     Domain models and DTOs (26 files)
 - **Payment method fallback** — auto-switches to alternative method when FailCount > 0
 - **DisablePayment mode** — bypasses Redsys calls for testing (`redsys.disable_payment: true`)
 
+**Mail Reports (Brevo)**: `impl/brevo/` posts transactional emails to the Brevo HTTP API; `impl/mail/` runs a goroutine that wakes daily at 06:00 UTC and dispatches per-charger statistics to admin-managed subscribers (daily / weekly on Mon / monthly on the 1st). See [docs/brevo-setup.md](docs/brevo-setup.md) for provider setup.
+
 ## Configuration
 
 Two config files:
 - `config.yml` - Local development (hardcoded values, mongo disabled)
 - `back.yml` - Deployment template with `${ENV_VAR}` placeholders
 
-Key config sections: `listen` (server), `mongo` (database), `central_system` (external API), `firebase_key` (optional auth), `redsys` (payment gateway).
+Key config sections: `listen` (server), `mongo` (database), `central_system` (external API), `firebase_key` (optional auth), `redsys` (payment gateway), `brevo` (mail provider).
 
 ### Redsys Payment Config
 
@@ -96,7 +100,18 @@ redsys:
   api_key: ""                 # API key for service-to-service auth (central system → payment endpoints)
 ```
 
-## Local Development
+### Brevo Mail Config
+
+```yaml
+brevo:
+  enabled: false                                   # Enable scheduled report emails
+  api_key: ""                                      # Brevo v3 API key (xkeysib-...)
+  sender_name: "EVSys Reports"                     # From-name shown in inbox
+  sender_email: "noreply@example.com"              # Verified Brevo sender address
+  api_url: "https://api.brevo.com/v3/smtp/email"   # Brevo transactional endpoint
+```
+
+See [docs/brevo-setup.md](docs/brevo-setup.md) for full provider walk-through.
 
 1. With mock DB (no external dependencies):
    ```bash
@@ -140,6 +155,17 @@ API-key-authenticated (service-to-service, `Authorization: Bearer {api_key}`):
 Unauthenticated (Redsys webhook):
 - `POST /api/v1/payment/notify` — Redsys async payment notification
 
+## Mail Subscription API Endpoints
+
+Admin/operator only (`RequirePowerUser`):
+- `GET    /api/v1/mail/subscriptions`               — List all subscriptions
+- `POST   /api/v1/mail/subscriptions`               — Create subscription `{email, period, user_group, enabled}`
+- `PUT    /api/v1/mail/subscriptions/{id}`          — Update subscription
+- `DELETE /api/v1/mail/subscriptions/{id}`          — Delete subscription
+- `POST   /api/v1/mail/subscriptions/{id}/send-now` — Trigger an immediate report email
+
+`period` is one of `daily | weekly | monthly`. `user_group` matches the same value the frontend statistic page sends as the `group` query param (e.g. `default`, `office`).
+
 ## Deployment
 
 CI/CD via GitHub Actions (`.github/workflows/deploy.yml`):
@@ -150,4 +176,4 @@ CI/CD via GitHub Actions (`.github/workflows/deploy.yml`):
 
 ## User Preferences
 
-- **Do not run build/test commands** - The user will build and test by themselves
+- **Always verify builds on significant code changes** - Run `go build ./...` (and `go vet ./...` when warranted) after non-trivial backend edits. For the Angular frontend at `~/projects/evsys-front`, run `npm run build` after non-trivial changes. Skip only for purely trivial edits (typos, comments, single-line tweaks).

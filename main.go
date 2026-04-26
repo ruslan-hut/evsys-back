@@ -4,10 +4,12 @@ import (
 	"context"
 	"evsys-back/config"
 	"evsys-back/impl/authenticator"
+	"evsys-back/impl/brevo"
 	"evsys-back/impl/central-system"
 	"evsys-back/impl/core"
 	"evsys-back/impl/database"
 	databasemock "evsys-back/impl/database-mock"
+	"evsys-back/impl/mail"
 	"evsys-back/impl/redsys"
 	"evsys-back/impl/reports"
 	statusreader "evsys-back/impl/status-reader"
@@ -117,6 +119,29 @@ func main() {
 		coreHandler.StartPaymentProcessor()
 	}
 
+	var mailService *mail.Service
+	if conf.Brevo.Enabled {
+		log.With(
+			slog.String("sender", conf.Brevo.SenderMail),
+			sl.Secret("api_key", conf.Brevo.ApiKey),
+		).Info("initializing brevo mail client")
+		brevoClient := brevo.New(brevo.Config{
+			ApiKey:     conf.Brevo.ApiKey,
+			SenderName: conf.Brevo.SenderName,
+			SenderMail: conf.Brevo.SenderMail,
+			ApiUrl:     conf.Brevo.ApiUrl,
+		}, log)
+		var mailRepo mail.Repository
+		if conf.Mongo.Enabled {
+			mailRepo = mongo
+		} else {
+			mailRepo = mockDb
+		}
+		mailService = mail.New(mailRepo, rep, brevoClient, log)
+		coreHandler.SetMailService(mailService)
+		mailService.Start()
+	}
+
 	server := http.NewServer(conf, log, coreHandler)
 	if conf.Mongo.Enabled {
 		server.SetStatusReader(statusreader.New(log, mongo))
@@ -141,6 +166,11 @@ func main() {
 
 	// Stop payment processor
 	coreHandler.StopPaymentProcessor()
+
+	// Stop mail scheduler
+	if mailService != nil {
+		mailService.Stop()
+	}
 
 	// Create shutdown context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

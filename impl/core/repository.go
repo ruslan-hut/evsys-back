@@ -56,4 +56,11 @@ type Repository interface {
 	GetPreauthorizationByTransaction(ctx context.Context, transactionId int) (*entity.Preauthorization, error)
 	UpdatePreauthorization(ctx context.Context, preauth *entity.Preauthorization) error
 	GetLastPreauthorizationOrder(ctx context.Context) (*entity.Preauthorization, error)
+
+	// Mail subscriptions
+	ListMailSubscriptions(ctx context.Context) ([]*entity.MailSubscription, error)
+	ListMailSubscriptionsByPeriod(ctx context.Context, period string) ([]*entity.MailSubscription, error)
+	GetMailSubscription(ctx context.Context, id string) (*entity.MailSubscription, error)
+	SaveMailSubscription(ctx context.Context, sub *entity.MailSubscription) (*entity.MailSubscription, error)
+	DeleteMailSubscription(ctx context.Context, id string) error
 }

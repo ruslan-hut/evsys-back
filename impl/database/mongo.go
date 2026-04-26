@@ -35,6 +35,7 @@ const (
 	collectionLocations         = "locations"
 	collectionPreauthorizations = "preauthorizations"
 	collectionPaymentRetries    = "payment_retries"
+	collectionMailSubscriptions = "mail_subscriptions"
 )
 
 type MongoDB struct {
@@ -1336,4 +1337,73 @@ func (m *MongoDB) DeletePaymentRetry(ctx context.Context, transactionId int) err
 	collection := m.col(collectionPaymentRetries)
 	_, err := collection.DeleteOne(ctx, bson.D{{Key: "transaction_id", Value: transactionId}})
 	return err
+}
+
+// ListMailSubscriptions returns all subscriptions ordered by creation time.
+func (m *MongoDB) ListMailSubscriptions(ctx context.Context) ([]*entity.MailSubscription, error) {
+	collection := m.col(collectionMailSubscriptions)
+	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}})
+	cursor, err := collection.Find(ctx, bson.M{}, opts)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	var subs []*entity.MailSubscription
+	if err = cursor.All(ctx, &subs); err != nil {
+		return nil, err
+	}
+	return subs, nil
+}
+
+// ListMailSubscriptionsByPeriod returns enabled subscriptions matching the period.
+func (m *MongoDB) ListMailSubscriptionsByPeriod(ctx context.Context, period string) ([]*entity.MailSubscription, error) {
+	collection := m.col(collectionMailSubscriptions)
+	filter := bson.D{
+		{Key: "period", Value: period},
+		{Key: "enabled", Value: true},
+	}
+	cursor, err := collection.Find(ctx, filter)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	var subs []*entity.MailSubscription
+	if err = cursor.All(ctx, &subs); err != nil {
+		return nil, err
+	}
+	return subs, nil
+}
+
+// GetMailSubscription returns one subscription by id.
+func (m *MongoDB) GetMailSubscription(ctx context.Context, id string) (*entity.MailSubscription, error) {
+	return findOne[entity.MailSubscription](m, ctx, collectionMailSubscriptions, bson.D{{Key: "_id", Value: id}})
+}
+
+// SaveMailSubscription inserts a new subscription or updates an existing one.
+func (m *MongoDB) SaveMailSubscription(ctx context.Context, sub *entity.MailSubscription) (*entity.MailSubscription, error) {
+	collection := m.col(collectionMailSubscriptions)
+	now := time.Now().UTC()
+	sub.UpdatedAt = now
+	if sub.Id == "" {
+		sub.Id = primitive.NewObjectID().Hex()
+		sub.CreatedAt = now
+		if _, err := collection.InsertOne(ctx, sub); err != nil {
+			return nil, err
+		}
+		return sub, nil
+	}
+	update := bson.M{"$set": bson.M{
+		"email":      sub.Email,
+		"period":     sub.Period,
+		"user_group": sub.UserGroup,
+		"enabled":    sub.Enabled,
+		"updated_at": sub.UpdatedAt,
+	}}
+	if err := m.updateOne(ctx, collectionMailSubscriptions, bson.D{{Key: "_id", Value: sub.Id}}, update, "subscription not found"); err != nil {
+		return nil, err
+	}
+	return sub, nil
+}
+
+// DeleteMailSubscription removes a subscription by id.
+func (m *MongoDB) DeleteMailSubscription(ctx context.Context, id string) error {
+	return m.deleteOne(ctx, collectionMailSubscriptions, bson.D{{Key: "_id", Value: id}}, "subscription not found")
 }

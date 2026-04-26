@@ -33,3 +33,9 @@ redsys:
   notify_url: ""
   currency: "978"
   api_key: ""
+brevo:
+  enabled: false
+  api_key: ""
+  sender_name: "EVSys Reports"
+  sender_email: "noreply@example.com"
+  api_url: "https://api.brevo.com/v3/smtp/email"

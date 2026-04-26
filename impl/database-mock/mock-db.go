@@ -25,6 +25,7 @@ type MockDB struct {
 	preauthorizations map[string]*entity.Preauthorization // key: orderNumber
 	preauthByTx       map[int]*entity.Preauthorization    // key: transactionId
 	paymentRetries    map[int]*entity.PaymentRetry        // key: transactionId
+	mailSubscriptions map[string]*entity.MailSubscription // key: id
 	lastOrderId       int
 	mux               sync.RWMutex
 }
@@ -47,6 +48,7 @@ func NewMockDB() *MockDB {
 		preauthorizations: make(map[string]*entity.Preauthorization),
 		preauthByTx:       make(map[int]*entity.Preauthorization),
 		paymentRetries:    make(map[int]*entity.PaymentRetry),
+		mailSubscriptions: make(map[string]*entity.MailSubscription),
 		lastOrderId:       0,
 	}
 }
@@ -70,6 +72,7 @@ func (db *MockDB) Reset() {
 	db.preauthorizations = make(map[string]*entity.Preauthorization)
 	db.preauthByTx = make(map[int]*entity.Preauthorization)
 	db.paymentRetries = make(map[int]*entity.PaymentRetry)
+	db.mailSubscriptions = make(map[string]*entity.MailSubscription)
 	db.lastOrderId = 0
 }
 
@@ -867,5 +870,63 @@ func (db *MockDB) DeletePaymentRetry(_ context.Context, transactionId int) error
 	db.mux.Lock()
 	defer db.mux.Unlock()
 	delete(db.paymentRetries, transactionId)
+	return nil
+}
+
+func (db *MockDB) ListMailSubscriptions(_ context.Context) ([]*entity.MailSubscription, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	subs := make([]*entity.MailSubscription, 0, len(db.mailSubscriptions))
+	for _, s := range db.mailSubscriptions {
+		subs = append(subs, s)
+	}
+	return subs, nil
+}
+
+func (db *MockDB) ListMailSubscriptionsByPeriod(_ context.Context, period string) ([]*entity.MailSubscription, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	var result []*entity.MailSubscription
+	for _, s := range db.mailSubscriptions {
+		if s.Period == period && s.Enabled {
+			result = append(result, s)
+		}
+	}
+	return result, nil
+}
+
+func (db *MockDB) GetMailSubscription(_ context.Context, id string) (*entity.MailSubscription, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	if s, ok := db.mailSubscriptions[id]; ok {
+		return s, nil
+	}
+	return nil, nil
+}
+
+func (db *MockDB) SaveMailSubscription(_ context.Context, sub *entity.MailSubscription) (*entity.MailSubscription, error) {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	now := time.Now().UTC()
+	sub.UpdatedAt = now
+	if sub.Id == "" {
+		sub.Id = fmt.Sprintf("mock-%d", now.UnixNano())
+		sub.CreatedAt = now
+	} else if existing, ok := db.mailSubscriptions[sub.Id]; ok {
+		sub.CreatedAt = existing.CreatedAt
+	} else {
+		return nil, fmt.Errorf("subscription not found")
+	}
+	db.mailSubscriptions[sub.Id] = sub
+	return sub, nil
+}
+
+func (db *MockDB) DeleteMailSubscription(_ context.Context, id string) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	if _, ok := db.mailSubscriptions[id]; !ok {
+		return fmt.Errorf("subscription not found")
+	}
+	delete(db.mailSubscriptions, id)
 	return nil
 }
