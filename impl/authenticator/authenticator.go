@@ -136,7 +136,7 @@ func (a *Authenticator) GenerateInvites(ctx context.Context, count int) ([]strin
 		}
 		err := a.database.AddInviteCode(ctx, invite)
 		if err != nil {
-			a.logger.Error("add invite code", err)
+			a.logger.Error("add invite code", sl.Err(err))
 			continue
 		}
 		invites = append(invites, inviteCode)
@@ -263,7 +263,7 @@ func (a *Authenticator) RegisterUser(ctx context.Context, user *entity.User) err
 	// delete used invite code
 	err = a.database.DeleteInviteCode(ctx, user.Token)
 	if err != nil {
-		a.logger.Error("deleting invite code", err)
+		a.logger.Error("deleting invite code", sl.Err(err))
 	}
 	return nil
 }

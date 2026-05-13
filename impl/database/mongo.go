@@ -62,7 +62,7 @@ func (m *MongoDB) updateOne(ctx context.Context, colName string, filter, update 
 		return err
 	}
 	if result.MatchedCount == 0 {
-		return fmt.Errorf(notFoundMsg)
+		return errors.New(notFoundMsg)
 	}
 	return nil
 }
@@ -73,7 +73,7 @@ func (m *MongoDB) deleteOne(ctx context.Context, colName string, filter interfac
 		return err
 	}
 	if result.DeletedCount == 0 {
-		return fmt.Errorf(notFoundMsg)
+		return errors.New(notFoundMsg)
 	}
 	return nil
 }

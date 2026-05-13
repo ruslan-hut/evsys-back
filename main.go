@@ -45,7 +45,7 @@ func main() {
 		).Info("connecting to mongo")
 		mongo, err = database.NewMongoClient(conf)
 		if err != nil {
-			log.Error("mongo client", err)
+			log.Error("mongo client", sl.Err(err))
 			return
 		}
 	} else {
@@ -72,7 +72,7 @@ func main() {
 		log.Info("firebase enabled")
 		fb, err = firebase.New(conf.FirebaseKey)
 		if err != nil {
-			log.Error("firebase client", err)
+			log.Error("firebase client", sl.Err(err))
 			return
 		}
 		auth.SetFirebase(fb)

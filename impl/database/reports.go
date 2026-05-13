@@ -155,16 +155,14 @@ func (m *MongoDB) TotalsByUsers(ctx context.Context, from, to time.Time, userGro
 		{{Key: "$match", Value: bson.D{
 			{Key: "user_info.group", Value: userGroup},
 		}}},
-		// Stage 6: Calculate consumed watts and group by user_id (not name, to avoid merging different users with same name)
+		// Stage 6: Calculate consumed watts and group by user name
 		{{Key: "$addFields", Value: bson.D{
 			{Key: "consumed_watts", Value: bson.D{
 				{Key: "$subtract", Value: bson.A{"$meter_stop", "$meter_start"}},
 			}},
 		}}},
 		{{Key: "$group", Value: bson.D{
-			{Key: "_id", Value: bson.D{
-				{Key: "user_id", Value: "$user_info.user_id"},
-			}},
+			{Key: "_id", Value: "$user_info.name"},
 			{Key: "user", Value: bson.D{{Key: "$first", Value: "$user_info.name"}}},
 			{Key: "totalConsumed", Value: bson.D{{Key: "$sum", Value: "$consumed_watts"}}},
 			{Key: "avgWatts", Value: bson.D{{Key: "$avg", Value: "$consumed_watts"}}},

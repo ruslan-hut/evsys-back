@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"evsys-back/entity"
+	"evsys-back/internal/lib/sl"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -12,7 +13,7 @@ import (
 func (a *Authenticator) generatePasswordHash(password string) string {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		a.logger.Error("generating password hash", err)
+		a.logger.Error("generating password hash", sl.Err(err))
 		return ""
 	}
 	return string(hash)
