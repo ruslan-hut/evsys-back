@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"evsys-back/entity"
 	"evsys-back/internal/lib/sl"
 )
 
@@ -21,10 +22,6 @@ const (
 	TransactionTypeCapture      = "2"
 	TransactionTypeRefund       = "3"
 	TransactionTypeCancel       = "9"
-
-	// Response codes
-	ResponseCodeOK       = "0000"
-	ResponseCodeRefundOK = "0900"
 )
 
 // Config holds the Redsys merchant configuration
@@ -398,11 +395,13 @@ func (c *Client) sendRequest(ctx context.Context, log *slog.Logger, params Merch
 		}, nil
 	}
 
-	return c.decodeResponse(log, respBody)
+	return c.decodeResponse(log, respBody, params.TransactionType)
 }
 
-// decodeResponse parses the Redsys REST API response body into a CaptureResponse.
-func (c *Client) decodeResponse(log *slog.Logger, body []byte) (*CaptureResponse, error) {
+// decodeResponse parses the Redsys REST API response body into a
+// CaptureResponse. transactionType is the operation type that was
+// requested; it determines which response code counts as approved.
+func (c *Client) decodeResponse(log *slog.Logger, body []byte, transactionType string) (*CaptureResponse, error) {
 	var apiResp Response
 	if err := json.Unmarshal(body, &apiResp); err != nil {
 		var errResp ErrorCodeResponse
@@ -445,9 +444,10 @@ func (c *Client) decodeResponse(log *slog.Logger, body []byte) (*CaptureResponse
 		return nil, fmt.Errorf("failed to unmarshal decoded parameters: %w", err)
 	}
 
-	success := decoded.ResponseCode == ResponseCodeOK || decoded.ResponseCode == ResponseCodeRefundOK
+	success := entity.IsRedsysApproved(transactionType, decoded.ResponseCode)
 
 	log.With(
+		slog.String("tx_type", transactionType),
 		slog.String("response_code", decoded.ResponseCode),
 		slog.Bool("success", success),
 	).Info("Redsys transaction completed")

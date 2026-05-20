@@ -1332,7 +1332,7 @@ func (c *Core) processPayAsync(parentCtx context.Context, req PayRequest, orderI
 		log.With(slog.String("error_code", resp.ErrorCode)).Warn("payment rejected by Redsys")
 		order, _ := c.repo.GetPaymentOrder(ctx, orderId)
 		if order != nil {
-			c.closeOrderOnError(ctx, order, resp.ResponseCode)
+			c.closeOrderOnError(ctx, order, resultCode(resp))
 		}
 		return
 	}
@@ -1363,7 +1363,7 @@ func (c *Core) processRefundAsync(parentCtx context.Context, req RefundRequest, 
 		log.With(slog.String("error_code", resp.ErrorCode)).Warn("refund rejected by Redsys")
 		order, _ := c.repo.GetPaymentOrder(ctx, orderId)
 		if order != nil {
-			c.closeOrderOnError(ctx, order, resp.ResponseCode)
+			c.closeOrderOnError(ctx, order, resultCode(resp))
 		}
 		return
 	}
@@ -1394,7 +1394,7 @@ func (c *Core) processNotifyResponseAsync(parentCtx context.Context, paymentResu
 
 	// Convert PaymentParameters to a CaptureResponse-like structure for processPaymentResponse
 	resp := &CaptureResponse{
-		Success:            paymentResult.Response == "0000" || paymentResult.Response == "0900",
+		Success:            paymentResult.IsApproved(),
 		ResponseCode:       paymentResult.Response,
 		AuthorizationCode:  paymentResult.AuthorisationCode,
 		MerchantIdentifier: paymentResult.MerchantIdentifier,
@@ -1518,8 +1518,29 @@ func (c *Core) processPaymentResponse(ctx context.Context, resp *CaptureResponse
 	}
 }
 
+// resultCode produces a non-empty, traceable result string for a failed
+// Redsys response. Gateway-level rejections (SISxxxx error codes, non-200
+// responses, empty merchant parameters) carry no Ds_Response code, so the
+// diagnostic lives in ErrorCode / ErrorMessage instead.
+func resultCode(resp *CaptureResponse) string {
+	switch {
+	case resp.ResponseCode != "":
+		return resp.ResponseCode
+	case resp.ErrorCode != "":
+		return resp.ErrorCode
+	case resp.ErrorMessage != "":
+		return resp.ErrorMessage
+	default:
+		return "unknown error"
+	}
+}
+
 // closeOrderOnError marks a payment order as failed and updates the related transaction.
 func (c *Core) closeOrderOnError(ctx context.Context, order *entity.PaymentOrder, result string) {
+	if result == "" {
+		result = "unknown error"
+	}
+
 	c.updatePaymentMethodFailCounter(ctx, order.Identifier, 1)
 
 	if !order.IsCompleted {
