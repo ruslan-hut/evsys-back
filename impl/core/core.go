@@ -176,6 +176,41 @@ func (c *Core) ListMailSubscriptions(ctx context.Context, author *entity.User) (
 	return c.repo.ListMailSubscriptions(ctx)
 }
 
+// GetPaymentRetryQueue returns all active payment retry records enriched with
+// transaction summary fields for the admin preview (admin only).
+func (c *Core) GetPaymentRetryQueue(ctx context.Context, author *entity.User) ([]*entity.PaymentRetryView, error) {
+	if err := c.requirePowerUser(author); err != nil {
+		return nil, err
+	}
+	retries, err := c.repo.GetAllPaymentRetries(ctx)
+	if err != nil {
+		return nil, err
+	}
+	views := make([]*entity.PaymentRetryView, 0, len(retries))
+	for _, r := range retries {
+		view := &entity.PaymentRetryView{
+			TransactionId: r.TransactionId,
+			Attempt:       r.Attempt,
+			MaxAttempts:   maxRetryAttempts,
+			NextRetryTime: r.NextRetryTime,
+			LastError:     r.LastError,
+			CreatedAt:     r.CreatedAt,
+			UpdatedAt:     r.UpdatedAt,
+		}
+		if tx, e := c.repo.GetTransaction(ctx, r.TransactionId); e == nil && tx != nil {
+			view.ChargePointId = tx.ChargePointId
+			view.Username = tx.Username
+			view.PaymentAmount = tx.PaymentAmount
+			if !tx.TimeStart.IsZero() {
+				ts := tx.TimeStart
+				view.TimeStart = &ts
+			}
+		}
+		views = append(views, view)
+	}
+	return views, nil
+}
+
 // SaveMailSubscription creates or updates a mail subscription (admin only).
 func (c *Core) SaveMailSubscription(ctx context.Context, author *entity.User, sub *entity.MailSubscription) (*entity.MailSubscription, error) {
 	if err := c.requirePowerUser(author); err != nil {

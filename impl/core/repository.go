@@ -49,6 +49,7 @@ type Repository interface {
 	SavePaymentRetry(ctx context.Context, retry *entity.PaymentRetry) error
 	GetPaymentRetry(ctx context.Context, transactionId int) (*entity.PaymentRetry, error)
 	GetPendingRetries(ctx context.Context, now time.Time) ([]*entity.PaymentRetry, error)
+	GetAllPaymentRetries(ctx context.Context) ([]*entity.PaymentRetry, error)
 	DeletePaymentRetry(ctx context.Context, transactionId int) error
 
 	// Preauthorization methods

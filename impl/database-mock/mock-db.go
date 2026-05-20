@@ -880,6 +880,16 @@ func (db *MockDB) GetPendingRetries(_ context.Context, now time.Time) ([]*entity
 	return result, nil
 }
 
+func (db *MockDB) GetAllPaymentRetries(_ context.Context) ([]*entity.PaymentRetry, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	result := make([]*entity.PaymentRetry, 0, len(db.paymentRetries))
+	for _, retry := range db.paymentRetries {
+		result = append(result, retry)
+	}
+	return result, nil
+}
+
 func (db *MockDB) DeletePaymentRetry(_ context.Context, transactionId int) error {
 	db.mux.Lock()
 	defer db.mux.Unlock()

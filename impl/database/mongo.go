@@ -1351,6 +1351,21 @@ func (m *MongoDB) GetPendingRetries(ctx context.Context, now time.Time) ([]*enti
 	return retries, nil
 }
 
+// GetAllPaymentRetries returns every payment retry record sorted by next retry time
+func (m *MongoDB) GetAllPaymentRetries(ctx context.Context) ([]*entity.PaymentRetry, error) {
+	collection := m.col(collectionPaymentRetries)
+	opts := options.Find().SetSort(bson.D{{Key: "next_retry_time", Value: 1}})
+	var retries []*entity.PaymentRetry
+	cursor, err := collection.Find(ctx, bson.M{}, opts)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	if err = cursor.All(ctx, &retries); err != nil {
+		return nil, err
+	}
+	return retries, nil
+}
+
 // DeletePaymentRetry removes a payment retry record by transaction_id
 func (m *MongoDB) DeletePaymentRetry(ctx context.Context, transactionId int) error {
 	collection := m.col(collectionPaymentRetries)
