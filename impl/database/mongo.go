@@ -624,6 +624,7 @@ func (m *MongoDB) UpdateTransactionPayment(ctx context.Context, transaction *ent
 			{Key: "payment_billed", Value: transaction.PaymentBilled},
 			{Key: "payment_error", Value: transaction.PaymentError},
 			{Key: "payment_orders", Value: transaction.PaymentOrders},
+			{Key: "payment_method", Value: transaction.PaymentMethod},
 		}},
 	}
 	if _, err := collection.UpdateOne(ctx, filter, update); err != nil {

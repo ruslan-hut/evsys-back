@@ -1141,6 +1141,12 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 		}
 	}
 
+	// Record which card is being charged on the transaction itself.
+	transaction.PaymentMethod = paymentMethod
+	if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
+		log.With(sl.Err(e)).Error("failed to persist payment method on transaction")
+	}
+
 	// Close any previous uncompleted order for this transaction
 	orderToClose, err := c.repo.GetPaymentOrderByTransaction(ctx, transactionId)
 	if err == nil && orderToClose != nil {
