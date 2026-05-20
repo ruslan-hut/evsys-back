@@ -201,6 +201,77 @@ func (s *Service) SendNow(ctx context.Context, sub *entity.MailSubscription) err
 	return s.sender.Send(ctx, sub.Email, subject, body)
 }
 
+// SendPaymentWarning emails a single payment-failure alert to one recipient.
+func (s *Service) SendPaymentWarning(ctx context.Context, to string, w entity.PaymentWarning) error {
+	return s.sender.Send(ctx, to, buildWarningSubject(w), renderPaymentWarning(w))
+}
+
+func buildWarningSubject(w entity.PaymentWarning) string {
+	state := "failed"
+	switch {
+	case w.Exhausted:
+		state = "failed — retries exhausted"
+	case w.Attempt > 0:
+		state = fmt.Sprintf("failed — attempt %d/%d", w.Attempt, w.MaxAttempts)
+	}
+	cp := w.ChargePointId
+	if cp == "" {
+		cp = "—"
+	}
+	return fmt.Sprintf("Payment %s — %s tx %d", state, cp, w.TransactionId)
+}
+
+func formatAmount(minor int, currency string) string {
+	v := fmt.Sprintf("%.2f", float64(minor)/100.0)
+	if currency != "" {
+		return v + " " + currency
+	}
+	return v
+}
+
+func renderPaymentWarning(w entity.PaymentWarning) string {
+	var b strings.Builder
+	b.WriteString(`<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#222;">`)
+	b.WriteString(`<h2 style="margin-bottom:4px;color:#b00020;">Payment failed</h2>`)
+	fmt.Fprintf(&b, `<p style="color:#666;margin-top:0;">%s UTC</p>`,
+		w.OccurredAt.UTC().Format("2006-01-02 15:04:05"))
+
+	b.WriteString(`<table cellpadding="6" cellspacing="0" border="0" style="border-collapse:collapse;min-width:380px;">`)
+	row := func(label, value string) {
+		fmt.Fprintf(&b,
+			`<tr><td style="border-bottom:1px solid #eee;color:#666;">%s</td>`+
+				`<td style="border-bottom:1px solid #eee;"><strong>%s</strong></td></tr>`,
+			html.EscapeString(label), html.EscapeString(value))
+	}
+	row("Transaction", fmt.Sprintf("%d", w.TransactionId))
+	row("Order", fmt.Sprintf("%d", w.OrderNumber))
+	if w.ChargePointId != "" {
+		row("Charge point", w.ChargePointId)
+	}
+	if w.CardHolder != "" {
+		row("Cardholder", w.CardHolder)
+	}
+	row("Amount", formatAmount(w.Amount, w.Currency))
+	row("Error", w.Result)
+	b.WriteString(`</table>`)
+
+	b.WriteString(`<p style="margin-top:16px;">`)
+	switch {
+	case w.Exhausted:
+		fmt.Fprintf(&b,
+			`<strong style="color:#b00020;">All %d retry attempts exhausted — payment permanently failed.</strong>`,
+			w.MaxAttempts)
+	case w.Attempt > 0:
+		fmt.Fprintf(&b, `Retry attempt %d of %d. The system will retry automatically.`,
+			w.Attempt, w.MaxAttempts)
+	default:
+		b.WriteString(`No automatic retry is scheduled for this operation.`)
+	}
+	b.WriteString(`</p>`)
+	b.WriteString(`</body></html>`)
+	return b.String()
+}
+
 // periodRange returns [from, to) covering the previous full period.
 // daily: yesterday 00:00 → today 00:00.
 // weekly: previous Mon 00:00 → this Mon 00:00.

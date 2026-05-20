@@ -24,16 +24,23 @@ type User struct {
 	UserId         string    `json:"user_id" bson:"user_id" validate:"omitempty"`
 	DateRegistered time.Time `json:"date_registered" bson:"date_registered" validate:"omitempty"`
 	LastSeen       time.Time `json:"last_seen" bson:"last_seen" validate:"omitempty"`
+
+	WarningEmailsEnabled bool   `json:"warning_emails_enabled" bson:"warning_emails_enabled" validate:"omitempty"`
+	WarningEmail         string `json:"warning_email" bson:"warning_email" validate:"omitempty,email_rfc"`
 }
 
 type UserInfo struct {
-	Username       string           `json:"username" bson:"username"`
-	Name           string           `json:"name" bson:"name"`
-	Role           string           `json:"role" bson:"role"`
-	AccessLevel    int              `json:"access_level" bson:"access_level"`
-	Email          string           `json:"email" bson:"email"`
-	DateRegistered time.Time        `json:"date_registered" bson:"date_registered"`
-	LastSeen       time.Time        `json:"last_seen" bson:"last_seen"`
+	Username       string    `json:"username" bson:"username"`
+	Name           string    `json:"name" bson:"name"`
+	Role           string    `json:"role" bson:"role"`
+	AccessLevel    int       `json:"access_level" bson:"access_level"`
+	Email          string    `json:"email" bson:"email"`
+	DateRegistered time.Time `json:"date_registered" bson:"date_registered"`
+	LastSeen       time.Time `json:"last_seen" bson:"last_seen"`
+
+	WarningEmailsEnabled bool   `json:"warning_emails_enabled" bson:"warning_emails_enabled"`
+	WarningEmail         string `json:"warning_email" bson:"warning_email"`
+
 	PaymentPlans   []*PaymentPlan   `json:"payment_plans" bson:"payment_plans"`
 	UserTags       []*UserTag       `json:"user_tags" bson:"user_tags"`
 	PaymentMethods []*PaymentMethod `json:"payment_methods" bson:"payment_methods"`
@@ -51,6 +58,9 @@ type UserUpdate struct {
 	Role        string `json:"role" validate:"omitempty,user_role"`
 	AccessLevel int    `json:"access_level" validate:"omitempty,min=0,max=10"`
 	PaymentPlan string `json:"payment_plan" validate:"omitempty"`
+
+	WarningEmailsEnabled bool   `json:"warning_emails_enabled" validate:"omitempty"`
+	WarningEmail         string `json:"warning_email" validate:"omitempty,email_rfc"`
 }
 
 func (u *UserUpdate) Bind(_ *http.Request) error {

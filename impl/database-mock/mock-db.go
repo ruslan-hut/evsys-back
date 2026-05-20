@@ -199,7 +199,21 @@ func (db *MockDB) UpdateUser(_ context.Context, user *entity.User) error {
 	existing.AccessLevel = user.AccessLevel
 	existing.PaymentPlan = user.PaymentPlan
 	existing.Password = user.Password
+	existing.WarningEmailsEnabled = user.WarningEmailsEnabled
+	existing.WarningEmail = user.WarningEmail
 	return nil
+}
+
+func (db *MockDB) GetWarningEmailRecipients(_ context.Context) ([]*entity.User, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	var users []*entity.User
+	for _, u := range db.users {
+		if u.WarningEmailsEnabled {
+			users = append(users, u)
+		}
+	}
+	return users, nil
 }
 
 func (db *MockDB) DeleteUser(_ context.Context, username string) error {

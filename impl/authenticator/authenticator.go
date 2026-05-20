@@ -408,6 +408,10 @@ func (a *Authenticator) UpdateUser(ctx context.Context, username string, updates
 	if updates.PaymentPlan != "" {
 		user.PaymentPlan = updates.PaymentPlan
 	}
+	// warning-email settings are always written so they can be toggled off
+	// and the address cleared
+	user.WarningEmailsEnabled = updates.WarningEmailsEnabled
+	user.WarningEmail = updates.WarningEmail
 
 	err = a.database.UpdateUser(ctx, user)
 	if err != nil {

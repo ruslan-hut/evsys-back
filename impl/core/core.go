@@ -46,6 +46,7 @@ type Core struct {
 type MailService interface {
 	SendNow(ctx context.Context, sub *entity.MailSubscription) error
 	SendTest(ctx context.Context, to string) error
+	SendPaymentWarning(ctx context.Context, to string, w entity.PaymentWarning) error
 }
 
 // RedsysClient interface for Redsys operations
@@ -1558,25 +1559,86 @@ func (c *Core) closeOrderOnError(ctx context.Context, order *entity.PaymentOrder
 		}
 	}
 
+	warning := entity.PaymentWarning{
+		TransactionId: order.TransactionId,
+		OrderNumber:   order.Order,
+		CardHolder:    order.UserName,
+		Amount:        order.Amount,
+		Currency:      order.Currency,
+		Result:        result,
+		MaxAttempts:   maxRetryAttempts,
+		OccurredAt:    time.Now(),
+	}
+
 	if order.TransactionId > 0 {
 		c.log.With(slog.Int("transaction_id", order.TransactionId)).Info("closing transaction on payment error")
 		transaction, e := c.repo.GetTransaction(ctx, order.TransactionId)
 		if e != nil {
 			c.log.With(sl.Err(e)).Error("failed to get transaction")
-			return
-		}
-		if transaction == nil {
-			return
-		}
-		transaction.PaymentBilled = transaction.PaymentAmount
-		transaction.PaymentOrder = order.Order
-		transaction.PaymentError = result
-		transaction.AddOrder(*order)
-		if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
-			c.log.With(sl.Err(e)).Error("failed to update transaction on error")
-		}
+		} else if transaction == nil {
+			c.log.With(slog.Int("transaction_id", order.TransactionId)).Warn("transaction not found on payment error")
+		} else {
+			transaction.PaymentBilled = transaction.PaymentAmount
+			transaction.PaymentOrder = order.Order
+			transaction.PaymentError = result
+			transaction.AddOrder(*order)
+			if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
+				c.log.With(sl.Err(e)).Error("failed to update transaction on error")
+			}
 
-		c.schedulePaymentRetry(ctx, order.TransactionId, result)
+			c.schedulePaymentRetry(ctx, order.TransactionId, result)
+
+			warning.ChargePointId = transaction.ChargePointId
+			if retry, _ := c.repo.GetPaymentRetry(ctx, order.TransactionId); retry != nil {
+				warning.Attempt = retry.Attempt
+			} else {
+				warning.Exhausted = true
+			}
+		}
+	}
+
+	go c.dispatchPaymentWarning(warning)
+}
+
+// dispatchPaymentWarning emails a payment-failure alert to every user who
+// opted in to warning emails. It runs in its own goroutine so email I/O never
+// blocks order/transaction persistence.
+func (c *Core) dispatchPaymentWarning(w entity.PaymentWarning) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.log.Error("panic in dispatchPaymentWarning", slog.Any("panic", r))
+		}
+	}()
+
+	if c.mail == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	recipients, err := c.repo.GetWarningEmailRecipients(ctx)
+	if err != nil {
+		c.log.With(sl.Err(err)).Error("failed to load warning email recipients")
+		return
+	}
+
+	for _, u := range recipients {
+		if u.WarningEmail == "" {
+			continue
+		}
+		if e := c.mail.SendPaymentWarning(ctx, u.WarningEmail, w); e != nil {
+			c.log.With(
+				sl.Err(e),
+				slog.String("to", u.WarningEmail),
+				slog.Int("transaction_id", w.TransactionId),
+			).Error("failed to send payment warning email")
+			continue
+		}
+		c.log.With(
+			slog.String("to", u.WarningEmail),
+			slog.Int("transaction_id", w.TransactionId),
+		).Info("payment warning email sent")
 	}
 }
 

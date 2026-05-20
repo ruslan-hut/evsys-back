@@ -271,6 +271,22 @@ func (m *MongoDB) GetUserById(ctx context.Context, userId string) (*entity.User,
 	return findOne[entity.User](m, ctx, collectionUsers, bson.D{{Key: "user_id", Value: userId}})
 }
 
+// GetWarningEmailRecipients returns users who opted in to payment warning emails.
+func (m *MongoDB) GetWarningEmailRecipients(ctx context.Context) ([]*entity.User, error) {
+	collection := m.col(collectionUsers)
+	filter := bson.D{{Key: "warning_emails_enabled", Value: true}}
+	projection := bson.M{"password": 0, "token": 0}
+	var users []*entity.User
+	cursor, err := collection.Find(ctx, filter, options.Find().SetProjection(projection))
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	if err = cursor.All(ctx, &users); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 func (m *MongoDB) GetUserTags(ctx context.Context, userId string) ([]entity.UserTag, error) {
 	collection := m.col(collectionUserTags)
 	filter := bson.M{"$and": []bson.M{{"user_id": userId}, {"is_enabled": true}}}
@@ -381,6 +397,8 @@ func (m *MongoDB) UpdateUser(ctx context.Context, user *entity.User) error {
 		{Key: "access_level", Value: user.AccessLevel},
 		{Key: "payment_plan", Value: user.PaymentPlan},
 		{Key: "password", Value: user.Password},
+		{Key: "warning_emails_enabled", Value: user.WarningEmailsEnabled},
+		{Key: "warning_email", Value: user.WarningEmail},
 	}}
 	return m.updateOne(ctx, collectionUsers, filter, update, "user not found")
 }

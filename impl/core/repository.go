@@ -11,6 +11,7 @@ type Repository interface {
 	ReadLog(ctx context.Context, name string) (interface{}, error)
 
 	GetUserInfo(ctx context.Context, accessLevel int, username string) (*entity.UserInfo, error)
+	GetWarningEmailRecipients(ctx context.Context) ([]*entity.User, error)
 
 	GetLocations(ctx context.Context) ([]*entity.Location, error)
 	GetChargePoints(ctx context.Context, level int, searchTerm string) ([]*entity.ChargePoint, error)
