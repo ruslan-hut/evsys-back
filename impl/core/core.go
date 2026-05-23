@@ -1943,7 +1943,7 @@ func (c *Core) payLog(ctx context.Context, level, category, format string, args 
 	text := fmt.Sprintf(format, args...)
 	now := time.Now().UTC()
 	msg := &entity.LogMessage{
-		Time:      now.Format(time.RFC3339Nano),
+		Time:      now.Format("02-01-2006 15:04:05"),
 		Level:     level,
 		Category:  category,
 		Text:      text,

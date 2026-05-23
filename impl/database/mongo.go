@@ -132,7 +132,6 @@ func (m *MongoDB) read(ctx context.Context, table, dataType string) (interface{}
 		logMessages = []entity.FeatureMessage{}
 	case entity.LogMessageType:
 		logMessages = []entity.LogMessage{}
-		timeFieldName = "time"
 	default:
 		return nil, fmt.Errorf("unknown data type: %s", dataType)
 	}
