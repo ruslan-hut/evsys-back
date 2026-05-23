@@ -992,6 +992,13 @@ func (m *MongoDB) SavePaymentResult(ctx context.Context, paymentParameters *enti
 	return err
 }
 
+// WritePaymentLog inserts a single payment activity log entry.
+func (m *MongoDB) WritePaymentLog(ctx context.Context, msg *entity.LogMessage) error {
+	collection := m.col(collectionPaymentLog)
+	_, err := collection.InsertOne(ctx, msg)
+	return err
+}
+
 // GetPaymentParameters get payment parameters by order id
 func (m *MongoDB) GetPaymentParameters(orderId string) (*entity.PaymentParameters, error) {
 	return findOne[entity.PaymentParameters](m, context.Background(), collectionPayment, bson.D{{Key: "order", Value: orderId}})

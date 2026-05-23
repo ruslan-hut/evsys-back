@@ -59,6 +59,9 @@ type Repository interface {
 	UpdatePreauthorization(ctx context.Context, preauth *entity.Preauthorization) error
 	GetLastPreauthorizationOrder(ctx context.Context) (*entity.Preauthorization, error)
 
+	// Payment activity log
+	WritePaymentLog(ctx context.Context, msg *entity.LogMessage) error
+
 	// Mail subscriptions
 	ListMailSubscriptions(ctx context.Context) ([]*entity.MailSubscription, error)
 	ListMailSubscriptionsByPeriod(ctx context.Context, period string) ([]*entity.MailSubscription, error)

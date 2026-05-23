@@ -567,7 +567,12 @@ func (c *Core) SavePaymentMethod(ctx context.Context, user *entity.User, pm *ent
 	}
 	pm.UserId = user.UserId
 	pm.UserName = user.Username
-	return c.repo.SavePaymentMethod(ctx, pm)
+	if err := c.repo.SavePaymentMethod(ctx, pm); err != nil {
+		c.payLog(ctx, "error", "method", "save payment method failed for user %s: %v", user.Username, err)
+		return err
+	}
+	c.payLog(ctx, "info", "method", "saved payment method for user %s (card %s)", user.Username, pm.Description)
+	return nil
 }
 
 func (c *Core) UpdatePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error {
@@ -579,7 +584,12 @@ func (c *Core) UpdatePaymentMethod(ctx context.Context, user *entity.User, pm *e
 	}
 	pm.UserId = user.UserId
 	pm.UserName = user.Username
-	return c.repo.UpdatePaymentMethod(ctx, pm)
+	if err := c.repo.UpdatePaymentMethod(ctx, pm); err != nil {
+		c.payLog(ctx, "error", "method", "update payment method failed for user %s: %v", user.Username, err)
+		return err
+	}
+	c.payLog(ctx, "info", "method", "updated payment method for user %s (card %s)", user.Username, pm.Description)
+	return nil
 }
 
 func (c *Core) DeletePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error {
@@ -591,7 +601,12 @@ func (c *Core) DeletePaymentMethod(ctx context.Context, user *entity.User, pm *e
 	}
 	// delete only methods, belonging to user that requested deletion
 	pm.UserId = user.UserId
-	return c.repo.DeletePaymentMethod(ctx, pm)
+	if err := c.repo.DeletePaymentMethod(ctx, pm); err != nil {
+		c.payLog(ctx, "error", "method", "delete payment method failed for user %s: %v", user.Username, err)
+		return err
+	}
+	c.payLog(ctx, "info", "method", "deleted payment method for user %s (card %s)", user.Username, pm.Description)
+	return nil
 }
 
 // WebOrderRequest carries the dynamic inputs for CreateWebOrder — the
@@ -1198,6 +1213,9 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 		if e := c.repo.DeletePaymentRetry(ctx, transactionId); e != nil {
 			log.With(sl.Err(e)).Error("failed to delete payment retry for expired card")
 		}
+		c.payLog(ctx, "error", "pay",
+			"transaction %d: payment method expired (user %s); retry queue cleared",
+			transactionId, tag.Username)
 		return fmt.Errorf("payment method expired for transaction %d", transactionId)
 	}
 
@@ -1262,6 +1280,10 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 		sl.Secret("cof_txnid", paymentMethod.CofTid),
 	).Info("sending payment request")
 
+	c.payLog(ctx, "info", "pay",
+		"transaction %d: charging %.2f on order %s (user %s, card %s)",
+		transactionId, float64(amount)/100, orderNumber, tag.Username, paymentMethod.Description)
+
 	// Process payment asynchronously
 	go c.processPayAsync(ctx, PayRequest{
 		OrderNumber: orderNumber,
@@ -1304,6 +1326,10 @@ func (c *Core) ReturnPayment(ctx context.Context, transactionId int) error {
 
 	orderNumber := fmt.Sprintf("%d", transaction.PaymentOrder)
 
+	c.payLog(ctx, "info", "refund",
+		"transaction %d: refund requested %.2f on order %s",
+		transactionId, float64(amount)/100, orderNumber)
+
 	go c.processRefundAsync(ctx, RefundRequest{
 		OrderNumber: orderNumber,
 		Amount:      amount,
@@ -1340,6 +1366,9 @@ func (c *Core) ReturnByOrder(ctx context.Context, orderId string, amount int) er
 	if order.Amount < amount {
 		return fmt.Errorf("order amount %d is less than return amount %d", order.Amount, amount)
 	}
+
+	c.payLog(ctx, "info", "refund",
+		"order %s: refund requested %.2f", orderId, float64(amount)/100)
 
 	go c.processRefundAsync(ctx, RefundRequest{
 		OrderNumber: orderId,
@@ -1527,6 +1556,9 @@ func (c *Core) processPaymentResponse(ctx context.Context, resp *CaptureResponse
 		if e := c.repo.SavePaymentOrder(ctx, order); e != nil {
 			log.With(sl.Err(e)).Error("failed to save refund order")
 		}
+		c.payLog(ctx, "info", "refund",
+			"order %d: refunded %.2f (user %s)",
+			order.Order, float64(amount)/100, order.UserName)
 		return
 	}
 
@@ -1554,6 +1586,10 @@ func (c *Core) processPaymentResponse(ctx context.Context, resp *CaptureResponse
 		if e := c.repo.DeletePaymentRetry(ctx, order.TransactionId); e != nil {
 			log.With(sl.Err(e)).Error("failed to delete payment retry record")
 		}
+
+		c.payLog(ctx, "info", "pay",
+			"transaction %d: payment captured %.2f on order %d (user %s)",
+			order.TransactionId, float64(order.Amount)/100, order.Order, order.UserName)
 	} else {
 		// No transaction linked — this is a card enrollment response; save payment method
 		pm := entity.PaymentMethod{
@@ -1569,8 +1605,12 @@ func (c *Core) processPaymentResponse(ctx context.Context, resp *CaptureResponse
 		if pm.Identifier != "" && pm.UserId != "" {
 			if e := c.repo.SavePaymentMethod(ctx, &pm); e != nil {
 				log.With(sl.Err(e)).Error("failed to save payment method from response")
+				c.payLog(ctx, "error", "method",
+					"enrollment: failed to save card for user %s: %v", pm.UserName, e)
 			} else {
 				log.With(sl.Secret("identifier", pm.Identifier)).Info("payment method saved")
+				c.payLog(ctx, "info", "method",
+					"enrollment: card saved for user %s (expiry %s)", pm.UserName, pm.ExpiryDate)
 			}
 		}
 
@@ -1650,8 +1690,15 @@ func (c *Core) closeOrderOnError(ctx context.Context, order *entity.PaymentOrder
 			warning.ChargePointId = transaction.ChargePointId
 			if retry, _ := c.repo.GetPaymentRetry(ctx, order.TransactionId); retry != nil {
 				warning.Attempt = retry.Attempt
+				c.payLog(ctx, "error", "pay",
+					"transaction %d: payment failed on order %d (%s); next retry attempt %d at %s",
+					order.TransactionId, order.Order, result, retry.Attempt,
+					retry.NextRetryTime.Format(time.RFC3339))
 			} else {
 				warning.Exhausted = true
+				c.payLog(ctx, "error", "pay",
+					"transaction %d: payment failed on order %d (%s); retries exhausted",
+					order.TransactionId, order.Order, result)
 			}
 		}
 	}
@@ -1885,6 +1932,28 @@ func (c *Core) pickFreshPaymentMethod(ctx context.Context, userId, skipIdentifie
 	return fallback
 }
 
+// payLog persists an entry into the payment activity log so admins can trace
+// every payment-related action (charges, retries, refunds, card changes) from
+// the Payment log page in the frontend. Failures are swallowed and logged via
+// slog — the log is observational and must not block the main payment flow.
+func (c *Core) payLog(ctx context.Context, level, category, format string, args ...any) {
+	if c.repo == nil {
+		return
+	}
+	text := fmt.Sprintf(format, args...)
+	now := time.Now().UTC()
+	msg := &entity.LogMessage{
+		Time:      now.Format(time.RFC3339Nano),
+		Level:     level,
+		Category:  category,
+		Text:      text,
+		Timestamp: now,
+	}
+	if err := c.repo.WritePaymentLog(ctx, msg); err != nil {
+		c.log.With(sl.Err(err)).Warn("failed to write payment log entry")
+	}
+}
+
 // parseCardExpiry parses a Redsys YYMM expiry string into the last instant of
 // the expiry month. ok=false when the value is empty or malformed.
 func parseCardExpiry(expiry string) (time.Time, bool) {
@@ -1950,6 +2019,8 @@ func (c *Core) retryOne(ctx context.Context, transactionId int, attempt int) err
 	}
 
 	log.Info("retrying payment")
+	c.payLog(ctx, "info", "retry",
+		"transaction %d: retry attempt %d starting", transactionId, attempt)
 	if e := c.PayTransaction(ctx, transactionId); e != nil {
 		log.With(sl.Err(e)).Warn("payment retry failed")
 		return e
@@ -1980,6 +2051,10 @@ func (c *Core) ForcePaymentRetry(ctx context.Context, author *entity.User, trans
 		slog.Int("transaction_id", transactionId),
 		slog.Int("attempt", attempt),
 	).Info("force payment retry requested")
+
+	c.payLog(ctx, "info", "retry",
+		"transaction %d: force retry requested by %s (last attempt %d)",
+		transactionId, author.Username, attempt)
 
 	return c.retryOne(ctx, transactionId, attempt)
 }

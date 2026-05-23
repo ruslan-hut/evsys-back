@@ -657,6 +657,10 @@ func (db *MockDB) SavePaymentResult(_ context.Context, paymentParameters *entity
 	return nil
 }
 
+func (db *MockDB) WritePaymentLog(_ context.Context, _ *entity.LogMessage) error {
+	return nil
+}
+
 func (db *MockDB) GetUserTag(_ context.Context, idTag string) (*entity.UserTag, error) {
 	db.mux.RLock()
 	defer db.mux.RUnlock()
