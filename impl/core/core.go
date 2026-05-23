@@ -692,6 +692,12 @@ func (c *Core) WsRequest(request *entity.UserRequest) error {
 
 	switch request.Command {
 	case entity.StartTransaction:
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := c.validateStartTransactionPaymentMethod(ctx, request)
+		cancel()
+		if err != nil {
+			return err
+		}
 		command = entity.NewCommandStartTransaction(request.ChargePointId, request.ConnectorId, request.Token)
 	case entity.StopTransaction:
 		command = entity.NewCommandStopTransaction(request.ChargePointId, request.ConnectorId, request.TransactionId)
@@ -1675,6 +1681,45 @@ func (c *Core) dispatchPaymentWarning(w entity.PaymentWarning) {
 			slog.Int("transaction_id", w.TransactionId),
 		).Info("payment warning email sent")
 	}
+}
+
+// validateStartTransactionPaymentMethod ensures the user has a usable payment
+// method (fail_count == 0) before a remote start is dispatched. If the request
+// names a specific PaymentMethodId, that method must belong to the user and be
+// usable; otherwise at least one usable method must exist.
+func (c *Core) validateStartTransactionPaymentMethod(ctx context.Context, request *entity.UserRequest) error {
+	tag, err := c.repo.GetUserTag(ctx, request.Token)
+	if err != nil {
+		return fmt.Errorf("resolve user tag: %w", err)
+	}
+	if tag.UserId == "" {
+		return fmt.Errorf("user tag %s has no user id", tag.IdTag)
+	}
+
+	methods, err := c.repo.GetPaymentMethods(ctx, tag.UserId)
+	if err != nil {
+		return fmt.Errorf("load payment methods: %w", err)
+	}
+
+	if request.PaymentMethodId != "" {
+		for _, pm := range methods {
+			if pm.Identifier != request.PaymentMethodId {
+				continue
+			}
+			if pm.FailCount > 0 {
+				return fmt.Errorf("selected payment method has failed previous transactions; choose a different card")
+			}
+			return nil
+		}
+		return fmt.Errorf("selected payment method not found for user")
+	}
+
+	for _, pm := range methods {
+		if pm.FailCount <= 0 {
+			return nil
+		}
+	}
+	return fmt.Errorf("no usable payment method; add a new card or contact support")
 }
 
 // updatePaymentMethodFailCounter updates the fail count for a payment method.

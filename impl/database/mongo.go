@@ -1115,22 +1115,29 @@ func (m *MongoDB) GetPaymentOrder(ctx context.Context, id int) (*entity.PaymentO
 	return findOne[entity.PaymentOrder](m, ctx, collectionPaymentOrders, bson.D{{Key: "order", Value: id}})
 }
 
-// GetDefaultPaymentMethod returns the default payment method for a user,
-// falling back to the method with the lowest fail count.
+// GetDefaultPaymentMethod returns the default usable payment method for a user.
+// Only methods with fail_count == 0 are considered. Prefers is_default == true,
+// falls back to any usable method.
 func (m *MongoDB) GetDefaultPaymentMethod(ctx context.Context, userId string) (*entity.PaymentMethod, error) {
 	collection := m.col(collectionPaymentMethods)
 
-	// Try to find default method with lowest fail count
-	filter := bson.D{{Key: "user_id", Value: userId}, {Key: "is_default", Value: true}}
-	opts := options.FindOne().SetSort(bson.D{{Key: "fail_count", Value: 1}})
+	// Prefer the default method, but only if usable.
+	filter := bson.D{
+		{Key: "user_id", Value: userId},
+		{Key: "is_default", Value: true},
+		{Key: "fail_count", Value: bson.D{{Key: "$lte", Value: 0}}},
+	}
 	var pm entity.PaymentMethod
-	if err := collection.FindOne(ctx, filter, opts).Decode(&pm); err == nil {
+	if err := collection.FindOne(ctx, filter).Decode(&pm); err == nil {
 		return &pm, nil
 	}
 
-	// Fallback: any method for this user, sorted by fail count ascending
-	filter = bson.D{{Key: "user_id", Value: userId}}
-	if err := collection.FindOne(ctx, filter, opts).Decode(&pm); err != nil {
+	// Fallback: any usable method for this user.
+	filter = bson.D{
+		{Key: "user_id", Value: userId},
+		{Key: "fail_count", Value: bson.D{{Key: "$lte", Value: 0}}},
+	}
+	if err := collection.FindOne(ctx, filter).Decode(&pm); err != nil {
 		return nil, m.findError(err)
 	}
 	return &pm, nil

@@ -16,11 +16,12 @@ const (
 )
 
 type UserRequest struct {
-	Token         string      `json:"token" validate:"required"`
-	ChargePointId string      `json:"charge_point_id" validate:"omitempty"`
-	ConnectorId   int         `json:"connector_id" validate:"min=0"`
-	TransactionId int         `json:"transaction_id" validate:"min=0"`
-	Command       CommandName `json:"command" validate:"required,ws_command"`
+	Token           string      `json:"token" validate:"required"`
+	ChargePointId   string      `json:"charge_point_id" validate:"omitempty"`
+	ConnectorId     int         `json:"connector_id" validate:"min=0"`
+	TransactionId   int         `json:"transaction_id" validate:"min=0"`
+	Command         CommandName `json:"command" validate:"required,ws_command"`
+	PaymentMethodId string      `json:"payment_method_id,omitempty" validate:"omitempty"`
 }
 
 // Validate validates the user request
