@@ -1174,12 +1174,13 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 			return fmt.Errorf("no payment method for user %s", tag.UserId)
 		}
 	}
-	// Try to get alternative if current has problems
+	// Try to get alternative if current has problems. Enumerate all of the user's
+	// methods so that a card added between attempts (fail_count == 0) is preferred
+	// over a previously-failed one, even when neither is flagged as default.
 	if paymentMethod.CofTid == "" || paymentMethod.FailCount > 0 || transaction.PaymentError != "" {
-		storedPM, _ := c.repo.GetDefaultPaymentMethod(ctx, tag.UserId)
-		if storedPM != nil && storedPM.Identifier != paymentMethod.Identifier {
-			paymentMethod = storedPM
-			log.With(sl.Secret("identifier", storedPM.Identifier)).Warn("switched to alternative payment method")
+		if alt := c.pickFreshPaymentMethod(ctx, tag.UserId, paymentMethod.Identifier); alt != nil {
+			paymentMethod = alt
+			log.With(sl.Secret("identifier", alt.Identifier)).Warn("switched to alternative payment method")
 		}
 	}
 
@@ -1831,6 +1832,32 @@ func (c *Core) processPaymentRetries(ctx context.Context) {
 	for _, retry := range retries {
 		_ = c.retryOne(ctx, retry.TransactionId, retry.Attempt)
 	}
+}
+
+// pickFreshPaymentMethod returns a usable payment method (CofTid set,
+// fail_count == 0) other than skipIdentifier. Prefers the user's default;
+// otherwise returns the first usable method found. Returns nil when none.
+func (c *Core) pickFreshPaymentMethod(ctx context.Context, userId, skipIdentifier string) *entity.PaymentMethod {
+	methods, err := c.repo.GetPaymentMethods(ctx, userId)
+	if err != nil || len(methods) == 0 {
+		return nil
+	}
+	var fallback *entity.PaymentMethod
+	for _, pm := range methods {
+		if pm == nil || pm.Identifier == skipIdentifier {
+			continue
+		}
+		if pm.FailCount > 0 || pm.CofTid == "" {
+			continue
+		}
+		if pm.IsDefault {
+			return pm
+		}
+		if fallback == nil {
+			fallback = pm
+		}
+	}
+	return fallback
 }
 
 // retryOne resets a transaction's payment state and re-invokes PayTransaction.
