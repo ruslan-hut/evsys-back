@@ -121,6 +121,7 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 				r.Post("/mail/test", mail.Test(log, core))
 
 				r.Get("/payment/retries", payments.RetryQueueList(log, core))
+				r.Post("/payment/retries/{transactionId}/force", payments.RetryQueueForce(log, core))
 			})
 
 			r.Post("/csc", centralsystem.Command(log, core))

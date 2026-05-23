@@ -1784,35 +1784,68 @@ func (c *Core) processPaymentRetries(ctx context.Context) {
 	}
 
 	for _, retry := range retries {
-		log := c.log.With(
-			slog.Int("transaction_id", retry.TransactionId),
-			slog.Int("attempt", retry.Attempt),
-		)
-
-		transaction, err := c.repo.GetTransaction(ctx, retry.TransactionId)
-		if err != nil {
-			log.With(sl.Err(err)).Error("failed to get transaction for retry")
-			continue
-		}
-		if transaction == nil {
-			log.Warn("transaction not found for retry, removing retry record")
-			_ = c.repo.DeletePaymentRetry(ctx, retry.TransactionId)
-			continue
-		}
-
-		// Reset PaymentBilled and PaymentError so PayTransaction can proceed
-		transaction.PaymentBilled = 0
-		transaction.PaymentError = ""
-		if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
-			log.With(sl.Err(e)).Error("failed to reset transaction for retry")
-			continue
-		}
-
-		log.Info("retrying payment")
-		if e := c.PayTransaction(ctx, retry.TransactionId); e != nil {
-			log.With(sl.Err(e)).Warn("payment retry failed")
-		}
+		_ = c.retryOne(ctx, retry.TransactionId, retry.Attempt)
 	}
+}
+
+// retryOne resets a transaction's payment state and re-invokes PayTransaction.
+// Shared by the background scheduler and the manual force-retry endpoint.
+func (c *Core) retryOne(ctx context.Context, transactionId int, attempt int) error {
+	log := c.log.With(
+		slog.Int("transaction_id", transactionId),
+		slog.Int("attempt", attempt),
+	)
+
+	transaction, err := c.repo.GetTransaction(ctx, transactionId)
+	if err != nil {
+		log.With(sl.Err(err)).Error("failed to get transaction for retry")
+		return err
+	}
+	if transaction == nil {
+		log.Warn("transaction not found for retry, removing retry record")
+		_ = c.repo.DeletePaymentRetry(ctx, transactionId)
+		return fmt.Errorf("transaction %d not found", transactionId)
+	}
+
+	transaction.PaymentBilled = 0
+	transaction.PaymentError = ""
+	if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
+		log.With(sl.Err(e)).Error("failed to reset transaction for retry")
+		return e
+	}
+
+	log.Info("retrying payment")
+	if e := c.PayTransaction(ctx, transactionId); e != nil {
+		log.With(sl.Err(e)).Warn("payment retry failed")
+		return e
+	}
+	return nil
+}
+
+// ForcePaymentRetry triggers an immediate retry of the payment for the given
+// transaction, bypassing the scheduled next_retry_time. Power user only.
+func (c *Core) ForcePaymentRetry(ctx context.Context, author *entity.User, transactionId int) error {
+	if err := c.requirePowerUser(author); err != nil {
+		return err
+	}
+	if c.redsys == nil {
+		return fmt.Errorf("payment provider not configured")
+	}
+
+	retry, err := c.repo.GetPaymentRetry(ctx, transactionId)
+	if err != nil {
+		return err
+	}
+	if retry == nil {
+		return fmt.Errorf("no retry record for transaction %d", transactionId)
+	}
+
+	c.log.With(
+		slog.String("user", author.Username),
+		slog.Int("transaction_id", transactionId),
+	).Info("force payment retry requested")
+
+	return c.retryOne(ctx, transactionId, retry.Attempt)
 }
 
 // schedulePaymentRetry creates or updates a retry record for a failed payment.
