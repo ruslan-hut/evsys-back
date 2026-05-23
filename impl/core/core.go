@@ -1177,11 +1177,28 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 	// Try to get alternative if current has problems. Enumerate all of the user's
 	// methods so that a card added between attempts (fail_count == 0) is preferred
 	// over a previously-failed one, even when neither is flagged as default.
-	if paymentMethod.CofTid == "" || paymentMethod.FailCount > 0 || transaction.PaymentError != "" {
+	now := time.Now()
+	if paymentMethod.CofTid == "" || paymentMethod.FailCount > 0 ||
+		transaction.PaymentError != "" || isCardExpired(paymentMethod.ExpiryDate, now) {
 		if alt := c.pickFreshPaymentMethod(ctx, tag.UserId, paymentMethod.Identifier); alt != nil {
 			paymentMethod = alt
 			log.With(sl.Secret("identifier", alt.Identifier)).Warn("switched to alternative payment method")
 		}
+	}
+
+	if isCardExpired(paymentMethod.ExpiryDate, now) {
+		log.With(sl.Secret("identifier", paymentMethod.Identifier)).
+			Warn("payment method expired; aborting payment")
+		transaction.PaymentError = "payment method expired"
+		if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
+			log.With(sl.Err(e)).Error("failed to update transaction on expired card")
+		}
+		// Drop the retry record — re-trying an expired card cannot succeed; the
+		// user has to add a new one.
+		if e := c.repo.DeletePaymentRetry(ctx, transactionId); e != nil {
+			log.With(sl.Err(e)).Error("failed to delete payment retry for expired card")
+		}
+		return fmt.Errorf("payment method expired for transaction %d", transactionId)
 	}
 
 	// Record which card is being charged on the transaction itself.
@@ -1702,6 +1719,7 @@ func (c *Core) validateStartTransactionPaymentMethod(ctx context.Context, reques
 		return fmt.Errorf("load payment methods: %w", err)
 	}
 
+	now := time.Now()
 	if request.PaymentMethodId != "" {
 		for _, pm := range methods {
 			if pm.Identifier != request.PaymentMethodId {
@@ -1710,13 +1728,16 @@ func (c *Core) validateStartTransactionPaymentMethod(ctx context.Context, reques
 			if pm.FailCount > 0 {
 				return fmt.Errorf("selected payment method has failed previous transactions; choose a different card")
 			}
+			if isCardExpiringSoon(pm.ExpiryDate, now) {
+				return fmt.Errorf("selected payment method expires within one month; add a new card")
+			}
 			return nil
 		}
 		return fmt.Errorf("selected payment method not found for user")
 	}
 
 	for _, pm := range methods {
-		if pm.FailCount <= 0 {
+		if pm.FailCount <= 0 && !isCardExpiringSoon(pm.ExpiryDate, now) {
 			return nil
 		}
 	}
@@ -1835,19 +1856,23 @@ func (c *Core) processPaymentRetries(ctx context.Context) {
 }
 
 // pickFreshPaymentMethod returns a usable payment method (CofTid set,
-// fail_count == 0) other than skipIdentifier. Prefers the user's default;
-// otherwise returns the first usable method found. Returns nil when none.
+// fail_count == 0, not expired) other than skipIdentifier. Prefers the user's
+// default; otherwise returns the first usable method found. Returns nil when none.
 func (c *Core) pickFreshPaymentMethod(ctx context.Context, userId, skipIdentifier string) *entity.PaymentMethod {
 	methods, err := c.repo.GetPaymentMethods(ctx, userId)
 	if err != nil || len(methods) == 0 {
 		return nil
 	}
+	now := time.Now()
 	var fallback *entity.PaymentMethod
 	for _, pm := range methods {
 		if pm == nil || pm.Identifier == skipIdentifier {
 			continue
 		}
 		if pm.FailCount > 0 || pm.CofTid == "" {
+			continue
+		}
+		if isCardExpired(pm.ExpiryDate, now) {
 			continue
 		}
 		if pm.IsDefault {
@@ -1858,6 +1883,44 @@ func (c *Core) pickFreshPaymentMethod(ctx context.Context, userId, skipIdentifie
 		}
 	}
 	return fallback
+}
+
+// parseCardExpiry parses a Redsys YYMM expiry string into the last instant of
+// the expiry month. ok=false when the value is empty or malformed.
+func parseCardExpiry(expiry string) (time.Time, bool) {
+	if len(expiry) != 4 {
+		return time.Time{}, false
+	}
+	yy, err := strconv.Atoi(expiry[:2])
+	if err != nil {
+		return time.Time{}, false
+	}
+	mm, err := strconv.Atoi(expiry[2:])
+	if err != nil || mm < 1 || mm > 12 {
+		return time.Time{}, false
+	}
+	return time.Date(2000+yy, time.Month(mm)+1, 1, 0, 0, 0, 0, time.UTC).Add(-time.Nanosecond), true
+}
+
+// isCardExpired reports whether the card's expiry month has already passed.
+// Cards with unparseable expiry are treated as not expired (legacy data).
+func isCardExpired(expiry string, now time.Time) bool {
+	end, ok := parseCardExpiry(expiry)
+	if !ok {
+		return false
+	}
+	return now.After(end)
+}
+
+// isCardExpiringSoon reports whether the card has less than one month left
+// before its expiry. Used at session start to refuse cards that won't survive
+// a typical charging+billing cycle.
+func isCardExpiringSoon(expiry string, now time.Time) bool {
+	end, ok := parseCardExpiry(expiry)
+	if !ok {
+		return false
+	}
+	return end.Sub(now) < 30*24*time.Hour
 }
 
 // retryOne resets a transaction's payment state and re-invokes PayTransaction.
@@ -1904,20 +1967,21 @@ func (c *Core) ForcePaymentRetry(ctx context.Context, author *entity.User, trans
 		return fmt.Errorf("payment provider not configured")
 	}
 
-	retry, err := c.repo.GetPaymentRetry(ctx, transactionId)
-	if err != nil {
-		return err
-	}
-	if retry == nil {
-		return fmt.Errorf("no retry record for transaction %d", transactionId)
+	// A retry record may not exist — e.g., when attempts were exhausted and the
+	// record was deleted, or the failure path bypassed scheduling (expired card).
+	// Allow force-retry in those cases too; retryOne handles a missing record.
+	attempt := 0
+	if retry, err := c.repo.GetPaymentRetry(ctx, transactionId); err == nil && retry != nil {
+		attempt = retry.Attempt
 	}
 
 	c.log.With(
 		slog.String("user", author.Username),
 		slog.Int("transaction_id", transactionId),
+		slog.Int("attempt", attempt),
 	).Info("force payment retry requested")
 
-	return c.retryOne(ctx, transactionId, retry.Attempt)
+	return c.retryOne(ctx, transactionId, attempt)
 }
 
 // schedulePaymentRetry creates or updates a retry record for a failed payment.
