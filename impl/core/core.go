@@ -277,6 +277,21 @@ func (c *Core) nextOrderNumber(ctx context.Context) int {
 	return 1200
 }
 
+// runAsync runs fn in a new goroutine with panic recovery and a fresh 30s
+// timeout context. name is used in the panic log message.
+func (c *Core) runAsync(name string, fn func(ctx context.Context)) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				c.log.Error("panic in "+name, slog.Any("panic", r))
+			}
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		fn(ctx)
+	}()
+}
+
 func (c *Core) requireAuth() error {
 	if c.auth == nil {
 		return fmt.Errorf("authenticator not set")
@@ -633,7 +648,7 @@ type WebOrderRequest struct {
 //
 // After the user completes card entry on Redsys, Redsys delivers the
 // permanent card token server-to-server to POST /payment/notify, which
-// the existing Notify → processNotifyResponseAsync → processPaymentResponse
+// the existing Notify → processNotifyResponse → processPaymentResponse
 // chain already handles: orders with no TransactionId are treated as
 // card enrollments and a fresh PaymentMethod is stored for the user.
 //
@@ -1285,12 +1300,15 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 		transactionId, float64(amount)/100, orderNumber, tag.Username, paymentMethod.Description)
 
 	// Process payment asynchronously
-	go c.processPayAsync(ctx, PayRequest{
+	req := PayRequest{
 		OrderNumber: orderNumber,
 		Amount:      amount,
 		CardToken:   paymentMethod.Identifier,
 		CofTid:      paymentMethod.CofTid,
-	}, paymentOrder.Order)
+	}
+	c.runAsync("processPay", func(ctx context.Context) {
+		c.processPay(ctx, req, paymentOrder.Order)
+	})
 
 	return nil
 }
@@ -1330,10 +1348,13 @@ func (c *Core) ReturnPayment(ctx context.Context, transactionId int) error {
 		"transaction %d: refund requested %.2f on order %s",
 		transactionId, float64(amount)/100, orderNumber)
 
-	go c.processRefundAsync(ctx, RefundRequest{
+	refund := RefundRequest{
 		OrderNumber: orderNumber,
 		Amount:      amount,
-	}, transaction.PaymentOrder)
+	}
+	c.runAsync("processRefund", func(ctx context.Context) {
+		c.processRefund(ctx, refund, transaction.PaymentOrder)
+	})
 
 	return nil
 }
@@ -1370,10 +1391,13 @@ func (c *Core) ReturnByOrder(ctx context.Context, orderId string, amount int) er
 	c.payLog(ctx, "info", "refund",
 		"order %s: refund requested %.2f", orderId, float64(amount)/100)
 
-	go c.processRefundAsync(ctx, RefundRequest{
+	refund := RefundRequest{
 		OrderNumber: orderId,
 		Amount:      amount,
-	}, id)
+	}
+	c.runAsync("processRefund", func(ctx context.Context) {
+		c.processRefund(ctx, refund, id)
+	})
 
 	return nil
 }
@@ -1396,21 +1420,14 @@ func (c *Core) Notify(ctx context.Context, data []byte) error {
 		return err
 	}
 
-	go c.processNotifyResponseAsync(ctx, paymentResult)
+	c.runAsync("processNotifyResponse", func(ctx context.Context) {
+		c.processNotifyResponse(ctx, paymentResult)
+	})
 	return nil
 }
 
-// processPayAsync sends a payment request to Redsys and processes the response.
-func (c *Core) processPayAsync(parentCtx context.Context, req PayRequest, orderId int) {
-	defer func() {
-		if r := recover(); r != nil {
-			c.log.Error("panic in processPayAsync", slog.Any("panic", r))
-		}
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
+// processPay sends a payment request to Redsys and processes the response.
+func (c *Core) processPay(ctx context.Context, req PayRequest, orderId int) {
 	log := c.log.With(slog.String("order", req.OrderNumber), slog.Int("amount", req.Amount))
 
 	resp, err := c.redsys.Pay(ctx, req)
@@ -1435,17 +1452,8 @@ func (c *Core) processPayAsync(parentCtx context.Context, req PayRequest, orderI
 	c.processPaymentResponse(ctx, resp, orderId)
 }
 
-// processRefundAsync sends a refund request to Redsys and processes the response.
-func (c *Core) processRefundAsync(parentCtx context.Context, req RefundRequest, orderId int) {
-	defer func() {
-		if r := recover(); r != nil {
-			c.log.Error("panic in processRefundAsync", slog.Any("panic", r))
-		}
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
+// processRefund sends a refund request to Redsys and processes the response.
+func (c *Core) processRefund(ctx context.Context, req RefundRequest, orderId int) {
 	log := c.log.With(slog.String("order", req.OrderNumber), slog.Int("amount", req.Amount))
 
 	resp, err := c.redsys.Refund(ctx, req)
@@ -1466,17 +1474,8 @@ func (c *Core) processRefundAsync(parentCtx context.Context, req RefundRequest, 
 	c.processPaymentResponse(ctx, resp, orderId)
 }
 
-// processNotifyResponseAsync handles async Redsys webhook notification.
-func (c *Core) processNotifyResponseAsync(parentCtx context.Context, paymentResult *entity.PaymentParameters) {
-	defer func() {
-		if r := recover(); r != nil {
-			c.log.Error("panic in processNotifyResponseAsync", slog.Any("panic", r))
-		}
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
+// processNotifyResponse handles a Redsys webhook notification.
+func (c *Core) processNotifyResponse(ctx context.Context, paymentResult *entity.PaymentParameters) {
 	if e := c.repo.SavePaymentResult(ctx, paymentResult); e != nil {
 		c.log.With(sl.Err(e)).Error("failed to save payment result")
 	}
@@ -1703,25 +1702,18 @@ func (c *Core) closeOrderOnError(ctx context.Context, order *entity.PaymentOrder
 		}
 	}
 
-	go c.dispatchPaymentWarning(warning)
+	c.runAsync("dispatchPaymentWarning", func(ctx context.Context) {
+		c.dispatchPaymentWarning(ctx, warning)
+	})
 }
 
 // dispatchPaymentWarning emails a payment-failure alert to every user who
 // opted in to warning emails. It runs in its own goroutine so email I/O never
 // blocks order/transaction persistence.
-func (c *Core) dispatchPaymentWarning(w entity.PaymentWarning) {
-	defer func() {
-		if r := recover(); r != nil {
-			c.log.Error("panic in dispatchPaymentWarning", slog.Any("panic", r))
-		}
-	}()
-
+func (c *Core) dispatchPaymentWarning(ctx context.Context, w entity.PaymentWarning) {
 	if c.mail == nil {
 		return
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
 	recipients, err := c.repo.GetWarningEmailRecipients(ctx)
 	if err != nil {

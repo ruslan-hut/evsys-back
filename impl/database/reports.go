@@ -11,12 +11,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// TotalsByMonth returns the total consumed watts, average watts, and count of transactions by month
-func (m *MongoDB) TotalsByMonth(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
-	collection := m.col(collectionTransactions)
-
-	pipeline := mongo.Pipeline{
-		// Filter transactions
+// transactionBasePipeline builds the shared aggregation prefix for transaction
+// reports: filter by time range and positive consumption, resolve the user via
+// id_tag -> user_tag -> user, filter by user group, and compute consumed_watts.
+func transactionBasePipeline(from, to time.Time, userGroup string) mongo.Pipeline {
+	return mongo.Pipeline{
+		// Filter transactions by time range and positive consumption
 		{{Key: "$match", Value: bson.D{
 			{Key: "time_stop", Value: bson.D{
 				{Key: "$gte", Value: from},
@@ -43,11 +43,9 @@ func (m *MongoDB) TotalsByMonth(ctx context.Context, from, to time.Time, userGro
 				}},
 			}},
 		}}},
-		// Unwind to de-nest user_tag_info array
-		//{{Key: "$unwind", Value: "$user_tag_info"}},
 		// Remove user_tag_info from the document
 		{{Key: "$unset", Value: "user_tag_info"}},
-		// Lookup users by `user_id` obtained from `user_tag_info`
+		// Lookup users by `user_id` obtained from user_tag_info
 		{{Key: "$lookup", Value: bson.D{
 			{Key: "from", Value: collectionUsers},
 			{Key: "localField", Value: "user_id"},
@@ -56,282 +54,7 @@ func (m *MongoDB) TotalsByMonth(ctx context.Context, from, to time.Time, userGro
 		}}},
 		// Unwind to de-nest user_info array
 		{{Key: "$unwind", Value: "$user_info"}},
-		// Stage 5: Filter transactions by a specific user group
-		{{Key: "$match", Value: bson.D{
-			{Key: "user_info.group", Value: userGroup},
-		}}},
-		// Calculate consumed watts and group by year and month
-		{{Key: "$addFields", Value: bson.D{
-			{Key: "consumed_watts", Value: bson.D{
-				{Key: "$subtract", Value: bson.A{"$meter_stop", "$meter_start"}},
-			}},
-		}}},
-		{{Key: "$group", Value: bson.D{
-			{Key: "_id", Value: bson.D{
-				{Key: "year", Value: bson.D{{Key: "$year", Value: "$time_stop"}}},
-				{Key: "month", Value: bson.D{{Key: "$month", Value: "$time_stop"}}},
-			}},
-			{Key: "totalConsumed", Value: bson.D{{Key: "$sum", Value: "$consumed_watts"}}},
-			{Key: "avgWatts", Value: bson.D{{Key: "$avg", Value: "$consumed_watts"}}},
-			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
-		}}},
-		// Sort by year and month
-		{{Key: "$sort", Value: bson.D{
-			{Key: "_id.year", Value: 1},
-			{Key: "_id.month", Value: 1},
-		}}},
-		// Reshape the output if needed
-		{{Key: "$project", Value: bson.D{
-			{Key: "_id", Value: 0},
-			{Key: "year", Value: "$_id.year"},
-			{Key: "month", Value: "$_id.month"},
-			{Key: "totalConsumed", Value: 1},
-			{Key: "avgWatts", Value: 1},
-			{Key: "count", Value: 1},
-		}}},
-	}
-
-	cursor, err := collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	var lines []*ReportLine
-	if err = cursor.All(ctx, &lines); err != nil {
-		return nil, err
-	}
-	result := make([]interface{}, len(lines))
-	for i, v := range lines {
-		result[i] = v
-	}
-	return result, err
-}
-
-// TotalsByUsers returns the total consumed watts, average watts, and count of transactions by user
-func (m *MongoDB) TotalsByUsers(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
-	collection := m.col(collectionTransactions)
-
-	pipeline := mongo.Pipeline{
-		// Stage 0: Filter transactions
-		{{Key: "$match", Value: bson.D{
-			{Key: "time_stop", Value: bson.D{
-				{Key: "$gte", Value: from},
-				{Key: "$lte", Value: to},
-			}},
-			{Key: "$expr", Value: bson.D{
-				{Key: "$gt", Value: bson.A{"$meter_stop", "$meter_start"}},
-			}},
-		}}},
-		// Stage 1: Lookup user tags by `id_tag`
-		{{Key: "$lookup", Value: bson.D{
-			{Key: "from", Value: collectionUserTags},
-			{Key: "localField", Value: "id_tag"},
-			{Key: "foreignField", Value: "id_tag"},
-			{Key: "as", Value: "user_tag_info"},
-		}}},
-		// Add user id to the document
-		{{Key: "$addFields", Value: bson.D{
-			{Key: "user_id", Value: bson.D{
-				{Key: "$cond", Value: bson.D{
-					{Key: "if", Value: bson.D{{Key: "$gt", Value: bson.A{bson.D{{Key: "$size", Value: "$user_tag_info"}}, 0}}}},
-					{Key: "then", Value: bson.D{{Key: "$arrayElemAt", Value: bson.A{"$user_tag_info.user_id", 0}}}},
-					{Key: "else", Value: ""},
-				}},
-			}},
-		}}},
-		// Stage 2: Unwind to de-nest user_tag_info array
-		//{{Key: "$unwind", Value: "$user_tag_info"}},
-		// Remove user_tag_info from the document
-		{{Key: "$unset", Value: "user_tag_info"}},
-		// Stage 3: Lookup users by `user_id` obtained from `user_tag_info`
-		{{Key: "$lookup", Value: bson.D{
-			{Key: "from", Value: collectionUsers},
-			{Key: "localField", Value: "user_id"},
-			{Key: "foreignField", Value: "user_id"},
-			{Key: "as", Value: "user_info"},
-		}}},
-		// Stage 4: Unwind to de-nest user_info array
-		{{Key: "$unwind", Value: "$user_info"}},
-		// Stage 5: Filter transactions by a specific user group
-		{{Key: "$match", Value: bson.D{
-			{Key: "user_info.group", Value: userGroup},
-		}}},
-		// Stage 6: Calculate consumed watts and group by user name
-		{{Key: "$addFields", Value: bson.D{
-			{Key: "consumed_watts", Value: bson.D{
-				{Key: "$subtract", Value: bson.A{"$meter_stop", "$meter_start"}},
-			}},
-		}}},
-		{{Key: "$group", Value: bson.D{
-			{Key: "_id", Value: "$user_info.name"},
-			{Key: "user", Value: bson.D{{Key: "$first", Value: "$user_info.name"}}},
-			{Key: "totalConsumed", Value: bson.D{{Key: "$sum", Value: "$consumed_watts"}}},
-			{Key: "avgWatts", Value: bson.D{{Key: "$avg", Value: "$consumed_watts"}}},
-			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
-		}}},
-		// Stage 7: Sort by user name
-		{{Key: "$sort", Value: bson.D{
-			{Key: "user", Value: 1},
-		}}},
-		// (Optional) Stage 8: Reshape the output if needed
-		{{Key: "$project", Value: bson.D{
-			{Key: "_id", Value: 0},
-			{Key: "user", Value: 1},
-			{Key: "totalConsumed", Value: 1},
-			{Key: "avgWatts", Value: 1},
-			{Key: "count", Value: 1},
-		}}},
-	}
-
-	cursor, err := collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	var lines []*ReportLine
-	if err = cursor.All(ctx, &lines); err != nil {
-		return nil, err
-	}
-	result := make([]interface{}, len(lines))
-	for i, v := range lines {
-		result[i] = v
-	}
-	return result, err
-}
-
-func (m *MongoDB) TotalsByCharger(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
-	collection := m.col(collectionTransactions)
-
-	pipeline := mongo.Pipeline{
-		// Stage 0: Filter transactions
-		{{Key: "$match", Value: bson.D{
-			{Key: "time_stop", Value: bson.D{
-				{Key: "$gte", Value: from},
-				{Key: "$lte", Value: to},
-			}},
-			{Key: "$expr", Value: bson.D{
-				{Key: "$gt", Value: bson.A{"$meter_stop", "$meter_start"}},
-			}},
-		}}},
-		// Stage 1: Lookup user tags by `id_tag`
-		{{Key: "$lookup", Value: bson.D{
-			{Key: "from", Value: collectionUserTags},
-			{Key: "localField", Value: "id_tag"},
-			{Key: "foreignField", Value: "id_tag"},
-			{Key: "as", Value: "user_tag_info"},
-		}}},
-		// Add user id to the document
-		{{Key: "$addFields", Value: bson.D{
-			{Key: "user_id", Value: bson.D{
-				{Key: "$cond", Value: bson.D{
-					{Key: "if", Value: bson.D{{Key: "$gt", Value: bson.A{bson.D{{Key: "$size", Value: "$user_tag_info"}}, 0}}}},
-					{Key: "then", Value: bson.D{{Key: "$arrayElemAt", Value: bson.A{"$user_tag_info.user_id", 0}}}},
-					{Key: "else", Value: ""},
-				}},
-			}},
-		}}},
-		// Stage 2: Unwind to de-nest user_tag_info array
-		//{{Key: "$unwind", Value: "$user_tag_info"}},
-		// Remove user_tag_info from the document
-		{{Key: "$unset", Value: "user_tag_info"}},
-		// Stage 3: Lookup users by `user_id` obtained from `user_tag_info`
-		{{Key: "$lookup", Value: bson.D{
-			{Key: "from", Value: collectionUsers},
-			{Key: "localField", Value: "user_id"},
-			{Key: "foreignField", Value: "user_id"},
-			{Key: "as", Value: "user_info"},
-		}}},
-		// Stage 4: Unwind to de-nest user_info array
-		{{Key: "$unwind", Value: "$user_info"}},
-		// Stage 5: Filter transactions by a specific user group
-		{{Key: "$match", Value: bson.D{
-			{Key: "user_info.group", Value: userGroup},
-		}}},
-		// Stage 6: Calculate consumed watts and group by year and month
-		{{Key: "$addFields", Value: bson.D{
-			{Key: "consumed_watts", Value: bson.D{
-				{Key: "$subtract", Value: bson.A{"$meter_stop", "$meter_start"}},
-			}},
-		}}},
-		{{Key: "$group", Value: bson.D{
-			{Key: "_id", Value: bson.D{
-				{Key: "charge_point", Value: "$charge_point_id"},
-			}},
-			{Key: "totalConsumed", Value: bson.D{{Key: "$sum", Value: "$consumed_watts"}}},
-			{Key: "avgWatts", Value: bson.D{{Key: "$avg", Value: "$consumed_watts"}}},
-			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
-		}}},
-		// Stage 7: Sort by charge point
-		{{Key: "$sort", Value: bson.D{
-			{Key: "_id.charge_point", Value: 1},
-		}}},
-		// Stage 8: Reshape the output (uses "user" field for compatibility with ReportLine struct)
-		{{Key: "$project", Value: bson.D{
-			{Key: "_id", Value: 0},
-			{Key: "user", Value: "$_id.charge_point"},
-			{Key: "totalConsumed", Value: 1},
-			{Key: "avgWatts", Value: 1},
-			{Key: "count", Value: 1},
-		}}},
-	}
-
-	cursor, err := collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	var lines []*ReportLine
-	if err = cursor.All(ctx, &lines); err != nil {
-		return nil, err
-	}
-	result := make([]interface{}, len(lines))
-	for i, v := range lines {
-		result[i] = v
-	}
-	return result, err
-}
-
-// TotalsByHour returns consumed energy grouped by date and hour (based on time_stop)
-func (m *MongoDB) TotalsByHour(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
-	collection := m.col(collectionTransactions)
-
-	pipeline := mongo.Pipeline{
-		// Filter transactions
-		{{Key: "$match", Value: bson.D{
-			{Key: "time_stop", Value: bson.D{
-				{Key: "$gte", Value: from},
-				{Key: "$lte", Value: to},
-			}},
-			{Key: "$expr", Value: bson.D{
-				{Key: "$gt", Value: bson.A{"$meter_stop", "$meter_start"}},
-			}},
-		}}},
-		// Lookup user tags by id_tag
-		{{Key: "$lookup", Value: bson.D{
-			{Key: "from", Value: collectionUserTags},
-			{Key: "localField", Value: "id_tag"},
-			{Key: "foreignField", Value: "id_tag"},
-			{Key: "as", Value: "user_tag_info"},
-		}}},
-		// Add user id to the document
-		{{Key: "$addFields", Value: bson.D{
-			{Key: "user_id", Value: bson.D{
-				{Key: "$cond", Value: bson.D{
-					{Key: "if", Value: bson.D{{Key: "$gt", Value: bson.A{bson.D{{Key: "$size", Value: "$user_tag_info"}}, 0}}}},
-					{Key: "then", Value: bson.D{{Key: "$arrayElemAt", Value: bson.A{"$user_tag_info.user_id", 0}}}},
-					{Key: "else", Value: ""},
-				}},
-			}},
-		}}},
-		// Remove user_tag_info from the document
-		{{Key: "$unset", Value: "user_tag_info"}},
-		// Lookup users by user_id
-		{{Key: "$lookup", Value: bson.D{
-			{Key: "from", Value: collectionUsers},
-			{Key: "localField", Value: "user_id"},
-			{Key: "foreignField", Value: "user_id"},
-			{Key: "as", Value: "user_info"},
-		}}},
-		// Unwind user_info
-		{{Key: "$unwind", Value: "$user_info"}},
-		// Filter by user group
+		// Filter transactions by a specific user group
 		{{Key: "$match", Value: bson.D{
 			{Key: "user_info.group", Value: userGroup},
 		}}},
@@ -341,8 +64,111 @@ func (m *MongoDB) TotalsByHour(ctx context.Context, from, to time.Time, userGrou
 				{Key: "$subtract", Value: bson.A{"$meter_stop", "$meter_start"}},
 			}},
 		}}},
+	}
+}
+
+// aggregateReportLines runs a transactions aggregation pipeline and returns the
+// decoded ReportLine documents as a generic slice.
+func (m *MongoDB) aggregateReportLines(ctx context.Context, pipeline mongo.Pipeline) ([]interface{}, error) {
+	cursor, err := m.col(collectionTransactions).Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	var lines []*ReportLine
+	if err = cursor.All(ctx, &lines); err != nil {
+		return nil, err
+	}
+	result := make([]interface{}, len(lines))
+	for i, v := range lines {
+		result[i] = v
+	}
+	return result, nil
+}
+
+// TotalsByMonth returns the total consumed watts, average watts, and count of transactions by month
+func (m *MongoDB) TotalsByMonth(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+	pipeline := append(transactionBasePipeline(from, to, userGroup),
+		bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{
+				{Key: "year", Value: bson.D{{Key: "$year", Value: "$time_stop"}}},
+				{Key: "month", Value: bson.D{{Key: "$month", Value: "$time_stop"}}},
+			}},
+			{Key: "totalConsumed", Value: bson.D{{Key: "$sum", Value: "$consumed_watts"}}},
+			{Key: "avgWatts", Value: bson.D{{Key: "$avg", Value: "$consumed_watts"}}},
+			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
+		}}},
+		bson.D{{Key: "$sort", Value: bson.D{
+			{Key: "_id.year", Value: 1},
+			{Key: "_id.month", Value: 1},
+		}}},
+		bson.D{{Key: "$project", Value: bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "year", Value: "$_id.year"},
+			{Key: "month", Value: "$_id.month"},
+			{Key: "totalConsumed", Value: 1},
+			{Key: "avgWatts", Value: 1},
+			{Key: "count", Value: 1},
+		}}},
+	)
+	return m.aggregateReportLines(ctx, pipeline)
+}
+
+// TotalsByUsers returns the total consumed watts, average watts, and count of transactions by user
+func (m *MongoDB) TotalsByUsers(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+	pipeline := append(transactionBasePipeline(from, to, userGroup),
+		bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: "$user_info.name"},
+			{Key: "user", Value: bson.D{{Key: "$first", Value: "$user_info.name"}}},
+			{Key: "totalConsumed", Value: bson.D{{Key: "$sum", Value: "$consumed_watts"}}},
+			{Key: "avgWatts", Value: bson.D{{Key: "$avg", Value: "$consumed_watts"}}},
+			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
+		}}},
+		bson.D{{Key: "$sort", Value: bson.D{
+			{Key: "user", Value: 1},
+		}}},
+		bson.D{{Key: "$project", Value: bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "user", Value: 1},
+			{Key: "totalConsumed", Value: 1},
+			{Key: "avgWatts", Value: 1},
+			{Key: "count", Value: 1},
+		}}},
+	)
+	return m.aggregateReportLines(ctx, pipeline)
+}
+
+func (m *MongoDB) TotalsByCharger(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+	pipeline := append(transactionBasePipeline(from, to, userGroup),
+		bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{
+				{Key: "charge_point", Value: "$charge_point_id"},
+			}},
+			{Key: "totalConsumed", Value: bson.D{{Key: "$sum", Value: "$consumed_watts"}}},
+			{Key: "avgWatts", Value: bson.D{{Key: "$avg", Value: "$consumed_watts"}}},
+			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
+		}}},
+		bson.D{{Key: "$sort", Value: bson.D{
+			{Key: "_id.charge_point", Value: 1},
+		}}},
+		// Reshape the output (uses "user" field for compatibility with ReportLine struct)
+		bson.D{{Key: "$project", Value: bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "user", Value: "$_id.charge_point"},
+			{Key: "totalConsumed", Value: 1},
+			{Key: "avgWatts", Value: 1},
+			{Key: "count", Value: 1},
+		}}},
+	)
+	return m.aggregateReportLines(ctx, pipeline)
+}
+
+// TotalsByHour returns consumed energy grouped by date and hour (based on time_stop)
+func (m *MongoDB) TotalsByHour(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+	collection := m.col(collectionTransactions)
+
+	pipeline := append(transactionBasePipeline(from, to, userGroup),
 		// Group by date and hour of time_stop
-		{{Key: "$group", Value: bson.D{
+		bson.D{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: bson.D{
 				{Key: "date", Value: bson.D{{Key: "$dateToString", Value: bson.D{
 					{Key: "format", Value: "%Y-%m-%d"},
@@ -353,18 +179,18 @@ func (m *MongoDB) TotalsByHour(ctx context.Context, from, to time.Time, userGrou
 			{Key: "consumed", Value: bson.D{{Key: "$sum", Value: "$consumed_watts"}}},
 		}}},
 		// Sort by date and hour
-		{{Key: "$sort", Value: bson.D{
+		bson.D{{Key: "$sort", Value: bson.D{
 			{Key: "_id.date", Value: 1},
 			{Key: "_id.hour", Value: 1},
 		}}},
 		// Reshape output
-		{{Key: "$project", Value: bson.D{
+		bson.D{{Key: "$project", Value: bson.D{
 			{Key: "_id", Value: 0},
 			{Key: "date", Value: "$_id.date"},
 			{Key: "hour", Value: "$_id.hour"},
 			{Key: "consumed", Value: 1},
 		}}},
-	}
+	)
 
 	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
