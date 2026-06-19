@@ -56,6 +56,32 @@ func findOne[T any](m *MongoDB, ctx context.Context, colName string, filter inte
 	return &data, nil
 }
 
+// findMany runs a Find and decodes all matching documents into a []T.
+func findMany[T any](m *MongoDB, ctx context.Context, colName string, filter interface{}, opts ...*options.FindOptions) ([]T, error) {
+	cursor, err := m.col(colName).Find(ctx, filter, opts...)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	var out []T
+	if err = cursor.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// aggregateMany runs an aggregation pipeline and decodes all documents into a []T.
+func aggregateMany[T any](m *MongoDB, ctx context.Context, colName string, pipeline interface{}) ([]T, error) {
+	cursor, err := m.col(colName).Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	var out []T
+	if err = cursor.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // updateOne updates a single document; resourceName is the noun used to build
 // a "<resource> not found" error wrapping entity.ErrNotFound when no document matches.
 func (m *MongoDB) updateOne(ctx context.Context, colName string, filter, update interface{}, resourceName string) error {
@@ -169,19 +195,13 @@ func (m *MongoDB) ReadLog(ctx context.Context, logName string) (interface{}, err
 
 // ReadLogAfter returns array of log messages in a normal , filtered by timeStart
 func (m *MongoDB) ReadLogAfter(ctx context.Context, timeStart time.Time) ([]*entity.FeatureMessage, error) {
-	collection := m.col(collectionSysLog)
 	var pipe []bson.M
 	pipe = append(pipe, bson.M{"$match": bson.M{"timestamp": bson.M{"$gt": timeStart}}})
 	pipe = append(pipe, bson.M{"$sort": bson.M{"timestamp": 1}})
 	pipe = append(pipe, bson.M{"$limit": m.logRecordsNumber})
-	cursor, err := collection.Aggregate(ctx, pipe)
+	result, err := aggregateMany[*entity.FeatureMessage](m, ctx, collectionSysLog, pipe)
 	if err != nil {
 		return nil, err
-	}
-	var result []*entity.FeatureMessage
-	err = cursor.All(ctx, &result)
-	if err != nil {
-		return nil, m.findError(err)
 	}
 	return result, nil
 }
@@ -254,18 +274,8 @@ func (m *MongoDB) GetUserInfo(ctx context.Context, _ int, username string) (*ent
 }
 
 func (m *MongoDB) GetUsers(ctx context.Context) ([]*entity.User, error) {
-	collection := m.col(collectionUsers)
-	filter := bson.D{}
 	projection := bson.M{"password": 0, "token": 0}
-	var users []*entity.User
-	cursor, err := collection.Find(ctx, filter, options.Find().SetProjection(projection))
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	if err = cursor.All(ctx, &users); err != nil {
-		return nil, err
-	}
-	return users, nil
+	return findMany[*entity.User](m, ctx, collectionUsers, bson.D{}, options.Find().SetProjection(projection))
 }
 
 func (m *MongoDB) GetUserById(ctx context.Context, userId string) (*entity.User, error) {
@@ -274,32 +284,14 @@ func (m *MongoDB) GetUserById(ctx context.Context, userId string) (*entity.User,
 
 // GetWarningEmailRecipients returns users who opted in to payment warning emails.
 func (m *MongoDB) GetWarningEmailRecipients(ctx context.Context) ([]*entity.User, error) {
-	collection := m.col(collectionUsers)
 	filter := bson.D{{Key: "warning_emails_enabled", Value: true}}
 	projection := bson.M{"password": 0, "token": 0}
-	var users []*entity.User
-	cursor, err := collection.Find(ctx, filter, options.Find().SetProjection(projection))
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	if err = cursor.All(ctx, &users); err != nil {
-		return nil, err
-	}
-	return users, nil
+	return findMany[*entity.User](m, ctx, collectionUsers, filter, options.Find().SetProjection(projection))
 }
 
 func (m *MongoDB) GetUserTags(ctx context.Context, userId string) ([]entity.UserTag, error) {
-	collection := m.col(collectionUserTags)
 	filter := bson.M{"$and": []bson.M{{"user_id": userId}, {"is_enabled": true}}}
-	var userTags []entity.UserTag
-	cursor, err := collection.Find(ctx, filter)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	if err = cursor.All(ctx, &userTags); err != nil {
-		return nil, err
-	}
-	return userTags, nil
+	return findMany[entity.UserTag](m, ctx, collectionUserTags, filter)
 }
 
 func (m *MongoDB) GetUserTag(ctx context.Context, idTag string) (*entity.UserTag, error) {
@@ -339,16 +331,7 @@ func (m *MongoDB) UpdateTagLastSeen(ctx context.Context, userTag *entity.UserTag
 }
 
 func (m *MongoDB) GetAllUserTags(ctx context.Context) ([]*entity.UserTag, error) {
-	collection := m.col(collectionUserTags)
-	var userTags []*entity.UserTag
-	cursor, err := collection.Find(ctx, bson.M{})
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	if err = cursor.All(ctx, &userTags); err != nil {
-		return nil, err
-	}
-	return userTags, nil
+	return findMany[*entity.UserTag](m, ctx, collectionUserTags, bson.M{})
 }
 
 func (m *MongoDB) GetUserTagByIdTag(ctx context.Context, idTag string) (*entity.UserTag, error) {
@@ -456,17 +439,7 @@ func (m *MongoDB) GetChargePoints(ctx context.Context, level int, searchTerm str
 		bson.D{{Key: "$sort", Value: bson.D{{Key: "charge_point_id", Value: 1}}}},
 	}
 
-	collection := m.col(collectionChargePoints)
-	var chargePoints []*entity.ChargePoint
-	cursor, err := collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	if err = cursor.All(ctx, &chargePoints); err != nil {
-		return nil, err
-	}
-
-	return chargePoints, nil
+	return aggregateMany[*entity.ChargePoint](m, ctx, collectionChargePoints, pipeline)
 }
 
 func (m *MongoDB) GetChargePoint(ctx context.Context, level int, id string) (*entity.ChargePoint, error) {
@@ -682,17 +655,12 @@ func (m *MongoDB) GetActiveTransactions(ctx context.Context, userId string) ([]*
 		return nil, nil
 	}
 
-	collection := m.col(collectionTransactions)
 	filter := bson.D{
 		{Key: "id_tag", Value: bson.D{{Key: "$in", Value: idTags}}},
 		{Key: "is_finished", Value: false},
 	}
-	var transactions []entity.Transaction
-	cursor, err := collection.Find(ctx, filter)
+	transactions, err := findMany[entity.Transaction](m, ctx, collectionTransactions, filter)
 	if err != nil {
-		return nil, m.findError(err)
-	}
-	if err = cursor.All(ctx, &transactions); err != nil {
 		return nil, err
 	}
 	if len(transactions) == 0 {
@@ -719,21 +687,12 @@ func (m *MongoDB) GetTransactionsToBill(ctx context.Context, userId string) ([]*
 		return nil, nil
 	}
 
-	collection := m.col(collectionTransactions)
 	filter := bson.D{
 		{Key: "id_tag", Value: bson.D{{Key: "$in", Value: idTags}}},
 		{Key: "is_finished", Value: true},
 		{Key: "$expr", Value: bson.D{{Key: "$lt", Value: bson.A{"$payment_billed", "$payment_amount"}}}},
 	}
-	var transactions []*entity.Transaction
-	cursor, err := collection.Find(ctx, filter)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	if err = cursor.All(ctx, &transactions); err != nil {
-		return nil, err
-	}
-	return transactions, nil
+	return findMany[*entity.Transaction](m, ctx, collectionTransactions, filter)
 }
 
 // GetTransactions gets list of a user's transactions; if period is empty, returns last 100 transactions
@@ -746,54 +705,39 @@ func (m *MongoDB) GetTransactions(ctx context.Context, userId string, period str
 		return nil, nil
 	}
 
-	collection := m.col(collectionTransactions)
-
-	var transactions []*entity.Transaction
-	var cursor *mongo.Cursor
+	var filter bson.D
+	var opts *options.FindOptions
 
 	time1, time2, err := parsePeriod(period)
 	if err != nil {
-		filter := bson.D{
+		filter = bson.D{
 			{Key: "id_tag", Value: bson.D{{Key: "$in", Value: idTags}}},
 			{Key: "is_finished", Value: true},
 		}
-		cursor, err = collection.Find(ctx, filter, options.Find().SetLimit(int64(100)).SetSkip(int64(0)).SetSort(bson.D{{Key: "time_start", Value: -1}}))
+		opts = options.Find().SetLimit(int64(100)).SetSkip(int64(0)).SetSort(bson.D{{Key: "time_start", Value: -1}})
 	} else {
-		filter := bson.D{
+		filter = bson.D{
 			{Key: "id_tag", Value: bson.D{{Key: "$in", Value: idTags}}},
 			{Key: "is_finished", Value: true},
 			{Key: "time_stop", Value: bson.D{{Key: "$gte", Value: time1}}},
 			{Key: "time_stop", Value: bson.D{{Key: "$lte", Value: time2}}},
 		}
-		cursor, err = collection.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "time_start", Value: -1}}))
+		opts = options.Find().SetSort(bson.D{{Key: "time_start", Value: -1}})
 	}
 
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	if err = cursor.All(ctx, &transactions); err != nil {
-		return nil, err
-	}
-	return transactions, nil
+	return findMany[*entity.Transaction](m, ctx, collectionTransactions, filter, opts)
 }
 
 // GetFilteredTransactions returns transactions filtered by the provided criteria
 func (m *MongoDB) GetFilteredTransactions(ctx context.Context, filter *entity.TransactionFilter) ([]*entity.Transaction, error) {
-	collection := m.col(collectionTransactions)
-
 	// Build dynamic filter
 	mongoFilter := bson.D{}
 
 	// Filter by username: lookup user's id_tags first
 	if filter.Username != "" {
-		tagsCollection := m.col(collectionUserTags)
 		tagFilter := bson.D{{Key: "username", Value: filter.Username}}
-		cursor, err := tagsCollection.Find(ctx, tagFilter)
+		userTags, err := findMany[*entity.UserTag](m, ctx, collectionUserTags, tagFilter)
 		if err != nil {
-			return nil, m.findError(err)
-		}
-		var userTags []*entity.UserTag
-		if err = cursor.All(ctx, &userTags); err != nil {
 			return nil, err
 		}
 		if len(userTags) == 0 {
@@ -836,17 +780,7 @@ func (m *MongoDB) GetFilteredTransactions(ctx context.Context, filter *entity.Tr
 	// Sort by time_start descending (newest first)
 	opts := options.Find().SetSort(bson.D{{Key: "time_start", Value: -1}})
 
-	cursor, err := collection.Find(ctx, mongoFilter, opts)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-
-	var transactions []*entity.Transaction
-	if err = cursor.All(ctx, &transactions); err != nil {
-		return nil, err
-	}
-
-	return transactions, nil
+	return findMany[*entity.Transaction](m, ctx, collectionTransactions, mongoFilter, opts)
 }
 
 func (m *MongoDB) GetTransactionByTag(ctx context.Context, idTag string, timeStart time.Time) (*entity.Transaction, error) {
@@ -881,17 +815,8 @@ func (m *MongoDB) GetMeterValues(ctx context.Context, transactionId int, from ti
 		{Key: "measurand", Value: "Energy.Active.Import.Register"},
 		{Key: "time", Value: bson.D{{Key: "$gte", Value: from}}},
 	}
-	collection := m.col(collectionMeterValues)
 	opts := options.Find().SetSort(bson.D{{Key: "time", Value: 1}})
-	cursor, err := collection.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, err
-	}
-	var meterValues []entity.TransactionMeter
-	if err = cursor.All(ctx, &meterValues); err != nil {
-		return nil, m.findError(err)
-	}
-	return meterValues, nil
+	return findMany[entity.TransactionMeter](m, ctx, collectionMeterValues, filter, opts)
 }
 
 func (m *MongoDB) GetRecentUserChargePoints(ctx context.Context, userId string) ([]*entity.ChargePoint, error) {
@@ -905,18 +830,13 @@ func (m *MongoDB) GetRecentUserChargePoints(ctx context.Context, userId string) 
 	}
 
 	// Get transactions
-	collection := m.col(collectionTransactions)
 	filter := bson.D{
 		{Key: "id_tag", Value: bson.D{{Key: "$in", Value: idTags}}},
 		{Key: "is_finished", Value: true},
 	}
 	opts := options.Find().SetSort(bson.D{{Key: "time_start", Value: -1}}).SetLimit(3)
-	cursor, err := collection.Find(ctx, filter, opts)
+	transactions, err := findMany[entity.Transaction](m, ctx, collectionTransactions, filter, opts)
 	if err != nil {
-		return nil, m.findError(err)
-	}
-	var transactions []entity.Transaction
-	if err = cursor.All(ctx, &transactions); err != nil {
 		return nil, err
 	}
 
@@ -941,17 +861,7 @@ func (m *MongoDB) GetRecentUserChargePoints(ctx context.Context, userId string) 
 		}}},
 	}
 
-	collection = m.col(collectionChargePoints)
-	var chargePoints []*entity.ChargePoint
-	cursor, err = collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	if err = cursor.All(ctx, &chargePoints); err != nil {
-		return nil, err
-	}
-
-	return chargePoints, nil
+	return aggregateMany[*entity.ChargePoint](m, ctx, collectionChargePoints, pipeline)
 }
 
 func (m *MongoDB) AddInviteCode(ctx context.Context, invite *entity.Invite) error {
@@ -1070,14 +980,9 @@ func (m *MongoDB) DeletePaymentMethod(ctx context.Context, paymentMethod *entity
 
 // GetPaymentMethods get payment methods by user id
 func (m *MongoDB) GetPaymentMethods(ctx context.Context, userId string) ([]*entity.PaymentMethod, error) {
-	collection := m.col(collectionPaymentMethods)
 	filter := bson.D{{Key: "user_id", Value: userId}}
-	var paymentMethods []*entity.PaymentMethod
-	cursor, err := collection.Find(ctx, filter)
+	paymentMethods, err := findMany[*entity.PaymentMethod](m, ctx, collectionPaymentMethods, filter)
 	if err != nil {
-		return nil, m.findError(err)
-	}
-	if err = cursor.All(ctx, &paymentMethods); err != nil {
 		return nil, err
 	}
 	if paymentMethods == nil {
@@ -1247,16 +1152,7 @@ func (m *MongoDB) GetLocations(ctx context.Context) ([]*entity.Location, error) 
 			},
 		},
 	}
-	collection := m.col(collectionLocations)
-	cursor, err := collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	var locations []*entity.Location
-	if err = cursor.All(ctx, &locations); err != nil {
-		return nil, err
-	}
-	return locations, nil
+	return aggregateMany[*entity.Location](m, ctx, collectionLocations, pipeline)
 }
 
 // SavePreauthorization saves a preauthorization record (insert or update)
@@ -1312,21 +1208,12 @@ func (m *MongoDB) GetLastPreauthorizationOrder(ctx context.Context) (*entity.Pre
 
 // GetUnbilledTransactions returns all finished transactions where payment_billed < payment_amount
 func (m *MongoDB) GetUnbilledTransactions(ctx context.Context) ([]*entity.Transaction, error) {
-	collection := m.col(collectionTransactions)
 	filter := bson.D{
 		{Key: "is_finished", Value: true},
 		{Key: "payment_amount", Value: bson.D{{Key: "$gt", Value: 0}}},
 		{Key: "$expr", Value: bson.D{{Key: "$lt", Value: bson.A{"$payment_billed", "$payment_amount"}}}},
 	}
-	var transactions []*entity.Transaction
-	cursor, err := collection.Find(ctx, filter)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	if err = cursor.All(ctx, &transactions); err != nil {
-		return nil, err
-	}
-	return transactions, nil
+	return findMany[*entity.Transaction](m, ctx, collectionTransactions, filter)
 }
 
 // SavePaymentRetry upserts a payment retry record by transaction_id
@@ -1345,33 +1232,15 @@ func (m *MongoDB) GetPaymentRetry(ctx context.Context, transactionId int) (*enti
 
 // GetPendingRetries returns all retry records where next_retry_time <= now
 func (m *MongoDB) GetPendingRetries(ctx context.Context, now time.Time) ([]*entity.PaymentRetry, error) {
-	collection := m.col(collectionPaymentRetries)
 	filter := bson.D{{Key: "next_retry_time", Value: bson.D{{Key: "$lte", Value: now}}}}
 	opts := options.Find().SetSort(bson.D{{Key: "next_retry_time", Value: 1}})
-	var retries []*entity.PaymentRetry
-	cursor, err := collection.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	if err = cursor.All(ctx, &retries); err != nil {
-		return nil, err
-	}
-	return retries, nil
+	return findMany[*entity.PaymentRetry](m, ctx, collectionPaymentRetries, filter, opts)
 }
 
 // GetAllPaymentRetries returns every payment retry record sorted by next retry time
 func (m *MongoDB) GetAllPaymentRetries(ctx context.Context) ([]*entity.PaymentRetry, error) {
-	collection := m.col(collectionPaymentRetries)
 	opts := options.Find().SetSort(bson.D{{Key: "next_retry_time", Value: 1}})
-	var retries []*entity.PaymentRetry
-	cursor, err := collection.Find(ctx, bson.M{}, opts)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	if err = cursor.All(ctx, &retries); err != nil {
-		return nil, err
-	}
-	return retries, nil
+	return findMany[*entity.PaymentRetry](m, ctx, collectionPaymentRetries, bson.M{}, opts)
 }
 
 // DeletePaymentRetry removes a payment retry record by transaction_id
@@ -1383,35 +1252,17 @@ func (m *MongoDB) DeletePaymentRetry(ctx context.Context, transactionId int) err
 
 // ListMailSubscriptions returns all subscriptions ordered by creation time.
 func (m *MongoDB) ListMailSubscriptions(ctx context.Context) ([]*entity.MailSubscription, error) {
-	collection := m.col(collectionMailSubscriptions)
 	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}})
-	cursor, err := collection.Find(ctx, bson.M{}, opts)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	var subs []*entity.MailSubscription
-	if err = cursor.All(ctx, &subs); err != nil {
-		return nil, err
-	}
-	return subs, nil
+	return findMany[*entity.MailSubscription](m, ctx, collectionMailSubscriptions, bson.M{}, opts)
 }
 
 // ListMailSubscriptionsByPeriod returns enabled subscriptions matching the period.
 func (m *MongoDB) ListMailSubscriptionsByPeriod(ctx context.Context, period string) ([]*entity.MailSubscription, error) {
-	collection := m.col(collectionMailSubscriptions)
 	filter := bson.D{
 		{Key: "period", Value: period},
 		{Key: "enabled", Value: true},
 	}
-	cursor, err := collection.Find(ctx, filter)
-	if err != nil {
-		return nil, m.findError(err)
-	}
-	var subs []*entity.MailSubscription
-	if err = cursor.All(ctx, &subs); err != nil {
-		return nil, err
-	}
-	return subs, nil
+	return findMany[*entity.MailSubscription](m, ctx, collectionMailSubscriptions, filter)
 }
 
 // GetMailSubscription returns one subscription by id.
