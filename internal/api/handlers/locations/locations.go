@@ -4,13 +4,11 @@ import (
 	"context"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
-	"evsys-back/internal/lib/api/response"
-	"evsys-back/internal/lib/sl"
+	"evsys-back/internal/lib/api/web"
 	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 )
 
@@ -25,22 +23,17 @@ func ListLocations(logger *slog.Logger, handler Locations) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		user := cont.GetUser(ctx)
-		log := logger.With(
-			sl.Module("handlers.locations"),
+		log := web.Log(ctx, logger, "handlers.locations",
 			slog.String("user", user.Username),
 			slog.Int("access_level", user.AccessLevel),
-			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		data, err := handler.GetLocations(ctx, user.AccessLevel)
 		if err != nil {
-			log.With(sl.Err(err)).Error("get locations")
-			response.RenderErr(w, r, 400, 2001, "Failed to get locations", err)
+			web.Fail(w, r, log, 400, "Failed to get locations", err)
 			return
 		}
-		log.Info("list locations")
-
-		render.JSON(w, r, data)
+		web.OK(w, r, log, "list locations", data)
 	}
 }
 
@@ -49,24 +42,18 @@ func ListChargePoints(logger *slog.Logger, handler Locations) http.HandlerFunc {
 		ctx := r.Context()
 		user := cont.GetUser(ctx)
 		search := chi.URLParam(r, "search")
-
-		log := logger.With(
-			sl.Module("handlers.locations"),
+		log := web.Log(ctx, logger, "handlers.locations",
 			slog.String("user", user.Username),
 			slog.Int("access_level", user.AccessLevel),
 			slog.String("search", search),
-			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		data, err := handler.GetChargePoints(ctx, user.AccessLevel, search)
 		if err != nil {
-			log.With(sl.Err(err)).Error("get charge points")
-			response.RenderErr(w, r, 400, 2001, "Failed to get charge points", err)
+			web.Fail(w, r, log, 400, "Failed to get charge points", err)
 			return
 		}
-		log.Info("list charge points")
-
-		render.JSON(w, r, data)
+		web.OK(w, r, log, "list charge points", data)
 	}
 }
 
@@ -75,24 +62,18 @@ func ChargePointRead(logger *slog.Logger, handler Locations) http.HandlerFunc {
 		ctx := r.Context()
 		user := cont.GetUser(ctx)
 		id := chi.URLParam(r, "id")
-
-		log := logger.With(
-			sl.Module("handlers.locations"),
+		log := web.Log(ctx, logger, "handlers.locations",
 			slog.String("user", user.Username),
 			slog.Int("access_level", user.AccessLevel),
 			slog.String("id", id),
-			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		data, err := handler.GetChargePoint(ctx, user.AccessLevel, id)
 		if err != nil {
-			log.With(sl.Err(err)).Error("get charge point")
-			response.RenderErr(w, r, 400, 2001, "Failed to get charge point", err)
+			web.Fail(w, r, log, 400, "Failed to get charge point", err)
 			return
 		}
-		log.Info("charge point info")
-
-		render.JSON(w, r, data)
+		web.OK(w, r, log, "charge point info", data)
 	}
 }
 
@@ -101,30 +82,22 @@ func ChargePointSave(logger *slog.Logger, handler Locations) http.HandlerFunc {
 		ctx := r.Context()
 		user := cont.GetUser(ctx)
 		id := chi.URLParam(r, "id")
-
-		log := logger.With(
-			sl.Module("handlers.locations"),
+		log := web.Log(ctx, logger, "handlers.locations",
 			slog.String("user", user.Username),
 			slog.Int("access_level", user.AccessLevel),
 			slog.String("id", id),
-			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		var chargePoint entity.ChargePoint
 		if err := render.Bind(r, &chargePoint); err != nil {
-			log.With(sl.Err(err)).Error("decode charge point")
-			response.RenderErr(w, r, 400, 2001, "Failed to decode charge point", err)
+			web.Fail(w, r, log, 400, "Failed to decode charge point", err)
 			return
 		}
 
-		err := handler.SaveChargePoint(ctx, user.AccessLevel, &chargePoint)
-		if err != nil {
-			log.With(sl.Err(err)).Error("save charge point")
-			response.RenderErr(w, r, 400, 2001, "Failed to save charge point", err)
+		if err := handler.SaveChargePoint(ctx, user.AccessLevel, &chargePoint); err != nil {
+			web.Fail(w, r, log, 400, "Failed to save charge point", err)
 			return
 		}
-		log.Info("charge point updated")
-
-		render.JSON(w, r, &chargePoint)
+		web.OK(w, r, log, "charge point updated", &chargePoint)
 	}
 }

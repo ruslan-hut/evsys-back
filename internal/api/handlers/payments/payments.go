@@ -5,12 +5,11 @@ import (
 	"evsys-back/entity"
 	"evsys-back/impl/core"
 	"evsys-back/internal/lib/api/cont"
-	"evsys-back/internal/lib/api/response"
+	"evsys-back/internal/lib/api/web"
 	"evsys-back/internal/lib/sl"
 	"log/slog"
 	"net/http"
 
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 )
 
@@ -27,23 +26,17 @@ func List(logger *slog.Logger, handler Payments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		user := cont.GetUser(ctx)
-
-		log := logger.With(
-			sl.Module("handlers.payments"),
+		log := web.Log(ctx, logger, "handlers.payments",
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
-			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		data, err := handler.GetPaymentMethods(ctx, user.UserId)
 		if err != nil {
-			log.With(sl.Err(err)).Error("payment methods list")
-			response.RenderErr(w, r, 400, 2001, "Failed to read payment methods", err)
+			web.Fail(w, r, log, 400, "Failed to read payment methods", err)
 			return
 		}
-		log.Info("payment methods list")
-
-		render.JSON(w, r, data)
+		web.OK(w, r, log, "payment methods list", data)
 	}
 }
 
@@ -51,18 +44,14 @@ func Save(logger *slog.Logger, handler Payments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		user := cont.GetUser(ctx)
-
-		log := logger.With(
-			sl.Module("handlers.payments"),
+		log := web.Log(ctx, logger, "handlers.payments",
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
-			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		var pm entity.PaymentMethod
 		if err := render.Bind(r, &pm); err != nil {
-			log.With(sl.Err(err)).Error("bind")
-			response.RenderErr(w, r, 400, 2001, "Failed to decode", err)
+			web.Fail(w, r, log, 400, "Failed to decode", err)
 			return
 		}
 		log = log.With(
@@ -72,8 +61,7 @@ func Save(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 		err := handler.SavePaymentMethod(ctx, user, &pm)
 		if err != nil {
-			log.With(sl.Err(err)).Error("payment method not saved")
-			response.RenderErr(w, r, 400, 2001, "Failed to save payment method", err)
+			web.Fail(w, r, log, 400, "Failed to save payment method", err)
 			return
 		}
 		log.Info("payment method saved")
@@ -103,18 +91,14 @@ func Update(logger *slog.Logger, handler Payments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		user := cont.GetUser(ctx)
-
-		log := logger.With(
-			sl.Module("handlers.payments"),
+		log := web.Log(ctx, logger, "handlers.payments",
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
-			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		var pm entity.PaymentMethod
 		if err := render.Bind(r, &pm); err != nil {
-			log.With(sl.Err(err)).Error("bind")
-			response.RenderErr(w, r, 400, 2001, "Failed to decode", err)
+			web.Fail(w, r, log, 400, "Failed to decode", err)
 			return
 		}
 		log = log.With(
@@ -124,13 +108,10 @@ func Update(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 		err := handler.UpdatePaymentMethod(ctx, user, &pm)
 		if err != nil {
-			log.With(sl.Err(err)).Error("payment method not updated")
-			response.RenderErr(w, r, 400, 2001, "Failed to update payment method", err)
+			web.Fail(w, r, log, 400, "Failed to update payment method", err)
 			return
 		}
-		log.Info("payment method updated")
-
-		render.JSON(w, r, &pm)
+		web.OK(w, r, log, "payment method updated", &pm)
 	}
 }
 
@@ -138,18 +119,14 @@ func Delete(logger *slog.Logger, handler Payments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		user := cont.GetUser(ctx)
-
-		log := logger.With(
-			sl.Module("handlers.payments"),
+		log := web.Log(ctx, logger, "handlers.payments",
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
-			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		var pm entity.PaymentMethod
 		if err := render.Bind(r, &pm); err != nil {
-			log.With(sl.Err(err)).Error("bind")
-			response.RenderErr(w, r, 400, 2001, "Failed to decode", err)
+			web.Fail(w, r, log, 400, "Failed to decode", err)
 			return
 		}
 		log = log.With(
@@ -159,13 +136,10 @@ func Delete(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 		err := handler.DeletePaymentMethod(ctx, user, &pm)
 		if err != nil {
-			log.With(sl.Err(err)).Error("payment method not deleted")
-			response.RenderErr(w, r, 400, 2001, "Failed to delete payment method", err)
+			web.Fail(w, r, log, 400, "Failed to delete payment method", err)
 			return
 		}
-		log.Info("payment method deleted")
-
-		render.JSON(w, r, &pm)
+		web.OK(w, r, log, "payment method deleted", &pm)
 	}
 }
 
@@ -173,18 +147,14 @@ func Order(logger *slog.Logger, handler Payments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		user := cont.GetUser(ctx)
-
-		log := logger.With(
-			sl.Module("handlers.payments"),
+		log := web.Log(ctx, logger, "handlers.payments",
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
-			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		var order entity.PaymentOrder
 		if err := render.Bind(r, &order); err != nil {
-			log.With(sl.Err(err)).Error("bind")
-			response.RenderErr(w, r, 400, 2001, "Failed to decode", err)
+			web.Fail(w, r, log, 400, "Failed to decode", err)
 			return
 		}
 		log = log.With(
@@ -206,14 +176,10 @@ func Order(logger *slog.Logger, handler Payments) http.HandlerFunc {
 				Language: order.Language,
 			})
 			if err != nil {
-				log.With(sl.Err(err)).Error("web order not set")
-				response.RenderErr(w, r, 400, 2001, "Failed to set order", err)
+				web.Fail(w, r, log, 400, "Failed to set order", err)
 				return
 			}
-			log.With(
-				slog.Int("order", updated.Order),
-			).Info("payment order set (web)")
-			render.JSON(w, r, &entity.WebOrderResponse{
+			web.OK(w, r, log.With(slog.Int("order", updated.Order)), "payment order set (web)", &entity.WebOrderResponse{
 				PaymentOrder:       updated,
 				FormUrl:            form.FormUrl,
 				SignatureVersion:   form.SignatureVersion,
@@ -225,14 +191,9 @@ func Order(logger *slog.Logger, handler Payments) http.HandlerFunc {
 
 		updated, err := handler.SetOrder(ctx, user, &order)
 		if err != nil {
-			log.With(sl.Err(err)).Error("order not set")
-			response.RenderErr(w, r, 400, 2001, "Failed to set order", err)
+			web.Fail(w, r, log, 400, "Failed to set order", err)
 			return
 		}
-		log.With(
-			slog.Int("order", updated.Order),
-		).Info("payment order set")
-
-		render.JSON(w, r, &updated)
+		web.OK(w, r, log.With(slog.Int("order", updated.Order)), "payment order set", &updated)
 	}
 }

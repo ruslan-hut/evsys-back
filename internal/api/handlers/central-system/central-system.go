@@ -3,12 +3,12 @@ package centralsystem
 import (
 	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
-	"evsys-back/internal/lib/api/response"
+	"evsys-back/internal/lib/api/web"
 	"evsys-back/internal/lib/sl"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
 	"log/slog"
 	"net/http"
+
+	"github.com/go-chi/render"
 )
 
 type CentralSystem interface {
@@ -17,21 +17,17 @@ type CentralSystem interface {
 
 func Command(logger *slog.Logger, handler CentralSystem) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
-		user := cont.GetUser(r.Context())
-
-		log := logger.With(
-			sl.Module("handlers.central_system"),
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
+		log := web.Log(ctx, logger, "handlers.central_system",
 			slog.String("user", user.Username),
 			slog.String("role", user.Role),
 			slog.Int("access_level", user.AccessLevel),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
 		var command entity.CentralSystemCommand
 		if err := render.Bind(r, &command); err != nil {
-			log.Error("bind failed", sl.Err(err))
-			response.RenderErr(w, r, 400, 2001, "Failed to decode", err)
+			web.Fail(w, r, log, 400, "Failed to decode", err)
 			return
 		}
 		log = log.With(
@@ -43,12 +39,9 @@ func Command(logger *slog.Logger, handler CentralSystem) http.HandlerFunc {
 
 		data, err := handler.SendCommand(&command, user)
 		if err != nil {
-			log.Error("send cs command failed", sl.Err(err))
-			response.RenderErr(w, r, 400, 2001, "Failed to send command", err)
+			web.Fail(w, r, log, 400, "Failed to send command", err)
 			return
 		}
-		log.Info("cs command success")
-
-		render.JSON(w, r, data)
+		web.OK(w, r, log, "cs command success", data)
 	}
 }

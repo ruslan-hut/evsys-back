@@ -4,7 +4,7 @@ import (
 	"context"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
-	"evsys-back/internal/lib/api/response"
+	"evsys-back/internal/lib/api/web"
 	"evsys-back/internal/lib/sl"
 	"log/slog"
 	"net/http"
@@ -12,8 +12,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
 )
 
 type Transactions interface {
@@ -28,23 +26,17 @@ func ListActive(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		user := cont.GetUser(ctx)
-
-		log := logger.With(
-			sl.Module("handlers.transactions"),
+		log := web.Log(ctx, logger, "handlers.transactions",
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
-			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		data, err := handler.GetActiveTransactions(ctx, user.UserId)
 		if err != nil {
-			log.With(sl.Err(err)).Error("active transactions")
-			response.RenderErr(w, r, 400, 2001, "Failed to read transactions", err)
+			web.Fail(w, r, log, 400, "Failed to read transactions", err)
 			return
 		}
-		log.Info("active transactions")
-
-		render.JSON(w, r, data)
+		web.OK(w, r, log, "active transactions", data)
 	}
 }
 
@@ -53,13 +45,10 @@ func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 		ctx := r.Context()
 		user := cont.GetUser(ctx)
 		period := chi.URLParam(r, "period")
-
-		log := logger.With(
-			sl.Module("handlers.transactions"),
+		log := web.Log(ctx, logger, "handlers.transactions",
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
 			slog.String("period", period),
-			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		// Check for query parameters (new filtering for power users)
@@ -67,31 +56,26 @@ func List(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 		if user.IsPowerUser() && filter.HasFilters() {
 			data, err := handler.GetFilteredTransactions(ctx, user, filter)
 			if err != nil {
-				log.With(sl.Err(err)).Error("filtered transactions list")
-				response.RenderErr(w, r, 400, 2001, "Failed to read transactions", err)
+				web.Fail(w, r, log, 400, "Failed to read transactions", err)
 				return
 			}
-			log.With(
+			web.OK(w, r, log.With(
 				slog.String("from", filter.From.String()),
 				slog.String("to", filter.To.String()),
 				slog.String("user", filter.Username),
 				slog.String("tag", filter.IdTag),
 				slog.String("charger", filter.ChargePointId),
-			).Info("filtered transactions list")
-			render.JSON(w, r, data)
+			), "filtered transactions list", data)
 			return
 		}
 
 		// Legacy behavior: get user's own transactions
 		data, err := handler.GetTransactions(ctx, user.UserId, period)
 		if err != nil {
-			log.With(sl.Err(err)).Error("transactions list")
-			response.RenderErr(w, r, 400, 2001, "Failed to read transactions", err)
+			web.Fail(w, r, log, 400, "Failed to read transactions", err)
 			return
 		}
-		log.Info("transactions list")
-
-		render.JSON(w, r, data)
+		web.OK(w, r, log, "transactions list", data)
 	}
 }
 
@@ -131,32 +115,25 @@ func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 		ctx := r.Context()
 		user := cont.GetUser(ctx)
 		id := chi.URLParam(r, "id")
-
-		log := logger.With(
-			sl.Module("handlers.transactions"),
+		log := web.Log(ctx, logger, "handlers.transactions",
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
 			slog.Int("access_level", user.AccessLevel),
 			slog.String("id", id),
-			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		transactionId, err := strconv.Atoi(id)
 		if err != nil {
-			log.With(sl.Err(err)).Error("transaction id")
-			response.RenderErr(w, r, 400, 2001, "Failed to parse transaction id", err)
+			web.Fail(w, r, log, 400, "Failed to parse transaction id", err)
 			return
 		}
 
 		data, err := handler.GetTransaction(ctx, user.UserId, user.AccessLevel, transactionId)
 		if err != nil {
-			log.With(sl.Err(err)).Error("transaction info")
-			response.RenderErr(w, r, 400, 2001, "Failed to read transaction info", err)
+			web.Fail(w, r, log, 400, "Failed to read transaction info", err)
 			return
 		}
-		log.Info("transaction info")
-
-		render.JSON(w, r, data)
+		web.OK(w, r, log, "transaction info", data)
 	}
 }
 
@@ -164,23 +141,17 @@ func RecentUserChargePoints(logger *slog.Logger, handler Transactions) http.Hand
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		user := cont.GetUser(ctx)
-
-		log := logger.With(
-			sl.Module("handlers.transactions"),
+		log := web.Log(ctx, logger, "handlers.transactions",
 			slog.String("user", user.Username),
 			sl.Secret("user_id", user.UserId),
 			slog.Int("access_level", user.AccessLevel),
-			slog.String("request_id", middleware.GetReqID(ctx)),
 		)
 
 		data, err := handler.GetRecentChargePoints(ctx, user.UserId)
 		if err != nil {
-			log.With(sl.Err(err)).Error("get recent charge points")
-			response.RenderErr(w, r, 400, 2001, "Failed to get recent charge points", err)
+			web.Fail(w, r, log, 400, "Failed to get recent charge points", err)
 			return
 		}
-		log.Info("list recent charge points")
-
-		render.JSON(w, r, data)
+		web.OK(w, r, log, "list recent charge points", data)
 	}
 }

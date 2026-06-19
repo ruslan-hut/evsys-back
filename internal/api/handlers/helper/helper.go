@@ -2,13 +2,12 @@ package helper
 
 import (
 	"context"
-	"evsys-back/internal/lib/api/response"
-	"evsys-back/internal/lib/sl"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
+	"evsys-back/internal/lib/api/web"
 	"log/slog"
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/render"
 )
 
 type Helper interface {
@@ -18,49 +17,31 @@ type Helper interface {
 
 func Config(logger *slog.Logger, handler Helper) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
 		ctx := r.Context()
 		name := chi.URLParam(r, "name")
-
-		log := logger.With(
-			sl.Module("handlers.helper"),
-			slog.String("name", name),
-			slog.String("request_id", middleware.GetReqID(ctx)),
-		)
+		log := web.Log(ctx, logger, "handlers.helper", slog.String("name", name))
 
 		data, err := handler.GetConfig(ctx, name)
 		if err != nil {
-			log.With(sl.Err(err)).Error("get config failed")
-			response.RenderErr(w, r, 400, 2001, "Failed to get config", err)
+			web.Fail(w, r, log, 400, "Failed to get config", err)
 			return
 		}
-		log.Info("get config success")
-
-		render.JSON(w, r, data)
+		web.OK(w, r, log, "get config success", data)
 	}
 }
 
 func Log(logger *slog.Logger, handler Helper) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
 		ctx := r.Context()
 		name := chi.URLParam(r, "name")
-
-		log := logger.With(
-			sl.Module("handlers.helper"),
-			slog.String("name", name),
-			slog.String("request_id", middleware.GetReqID(ctx)),
-		)
+		log := web.Log(ctx, logger, "handlers.helper", slog.String("name", name))
 
 		data, err := handler.GetLog(ctx, name)
 		if err != nil {
-			log.With(sl.Err(err)).Error("get log failed")
-			response.RenderErr(w, r, 400, 2001, "Failed to get log", err)
+			web.Fail(w, r, log, 400, "Failed to get log", err)
 			return
 		}
-		log.Info("get log")
-
-		render.JSON(w, r, data)
+		web.OK(w, r, log, "get log", data)
 	}
 }
 

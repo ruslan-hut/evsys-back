@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"evsys-back/internal/lib/api/response"
+	"evsys-back/internal/lib/api/web"
 	"evsys-back/internal/lib/sl"
 	"io"
 	"log/slog"
@@ -11,7 +12,6 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 type DirectPayments interface {
@@ -25,11 +25,7 @@ type DirectPayments interface {
 func Pay(logger *slog.Logger, handler DirectPayments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-
-		log := logger.With(
-			sl.Module("handlers.payments.pay"),
-			slog.String("request_id", middleware.GetReqID(ctx)),
-		)
+		log := web.Log(ctx, logger, "handlers.payments.pay")
 
 		txIdStr := chi.URLParam(r, "transactionId")
 		txId, err := strconv.Atoi(txIdStr)
@@ -41,8 +37,7 @@ func Pay(logger *slog.Logger, handler DirectPayments) http.HandlerFunc {
 		log = log.With(slog.Int("transaction_id", txId))
 
 		if err := handler.PayTransaction(ctx, txId); err != nil {
-			log.With(sl.Err(err)).Error("pay transaction failed")
-			response.RenderErr(w, r, 500, 3002, "Payment failed", err)
+			web.FailCode(w, r, log, 500, 3002, "Payment failed", err)
 			return
 		}
 
@@ -55,11 +50,7 @@ func Pay(logger *slog.Logger, handler DirectPayments) http.HandlerFunc {
 func Return(logger *slog.Logger, handler DirectPayments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-
-		log := logger.With(
-			sl.Module("handlers.payments.return"),
-			slog.String("request_id", middleware.GetReqID(ctx)),
-		)
+		log := web.Log(ctx, logger, "handlers.payments.return")
 
 		txIdStr := chi.URLParam(r, "transactionId")
 		txId, err := strconv.Atoi(txIdStr)
@@ -71,8 +62,7 @@ func Return(logger *slog.Logger, handler DirectPayments) http.HandlerFunc {
 		log = log.With(slog.Int("transaction_id", txId))
 
 		if err := handler.ReturnPayment(ctx, txId); err != nil {
-			log.With(sl.Err(err)).Error("return payment failed")
-			response.RenderErr(w, r, 500, 3003, "Refund failed", err)
+			web.FailCode(w, r, log, 500, 3003, "Refund failed", err)
 			return
 		}
 
@@ -86,11 +76,7 @@ func Return(logger *slog.Logger, handler DirectPayments) http.HandlerFunc {
 func ReturnByOrder(logger *slog.Logger, handler DirectPayments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-
-		log := logger.With(
-			sl.Module("handlers.payments.return_by_order"),
-			slog.String("request_id", middleware.GetReqID(ctx)),
-		)
+		log := web.Log(ctx, logger, "handlers.payments.return_by_order")
 
 		orderId := chi.URLParam(r, "orderId")
 		if orderId == "" {
@@ -101,8 +87,7 @@ func ReturnByOrder(logger *slog.Logger, handler DirectPayments) http.HandlerFunc
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			log.With(sl.Err(err)).Error("read body")
-			response.RenderErr(w, r, 400, 3001, "Failed to read request body", err)
+			web.FailCode(w, r, log, 400, 3001, "Failed to read request body", err)
 			return
 		}
 
@@ -110,14 +95,12 @@ func ReturnByOrder(logger *slog.Logger, handler DirectPayments) http.HandlerFunc
 			Amount int `json:"amount"`
 		}
 		if err := json.Unmarshal(body, &req); err != nil {
-			log.With(sl.Err(err)).Error("decode body")
-			response.RenderErr(w, r, 400, 3001, "Failed to decode request", err)
+			web.FailCode(w, r, log, 400, 3001, "Failed to decode request", err)
 			return
 		}
 
 		if err := handler.ReturnByOrder(ctx, orderId, req.Amount); err != nil {
-			log.With(sl.Err(err)).Error("return by order failed")
-			response.RenderErr(w, r, 500, 3004, "Refund failed", err)
+			web.FailCode(w, r, log, 500, 3004, "Refund failed", err)
 			return
 		}
 
@@ -131,11 +114,7 @@ func ReturnByOrder(logger *slog.Logger, handler DirectPayments) http.HandlerFunc
 func Notify(logger *slog.Logger, handler DirectPayments) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-
-		log := logger.With(
-			sl.Module("handlers.payments.notify"),
-			slog.String("request_id", middleware.GetReqID(ctx)),
-		)
+		log := web.Log(ctx, logger, "handlers.payments.notify")
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
