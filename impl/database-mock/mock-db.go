@@ -119,7 +119,7 @@ func (db *MockDB) GetUser(_ context.Context, username string) (*entity.User, err
 	defer db.mux.RUnlock()
 	user, ok := db.users[username]
 	if !ok {
-		return nil, fmt.Errorf("user not found")
+		return nil, fmt.Errorf("user %w", entity.ErrNotFound)
 	}
 	return user, nil
 }
@@ -179,7 +179,7 @@ func (db *MockDB) UpdateUser(_ context.Context, user *entity.User) error {
 	defer db.mux.Unlock()
 	existing, ok := db.users[user.Username]
 	if !ok {
-		return fmt.Errorf("user not found")
+		return fmt.Errorf("user %w", entity.ErrNotFound)
 	}
 	// Update existing user fields
 	existing.Name = user.Name
@@ -210,7 +210,7 @@ func (db *MockDB) DeleteUser(_ context.Context, username string) error {
 	defer db.mux.Unlock()
 	user, ok := db.users[username]
 	if !ok {
-		return fmt.Errorf("user not found")
+		return fmt.Errorf("user %w", entity.ErrNotFound)
 	}
 	// Remove from all maps
 	delete(db.users, username)
@@ -307,7 +307,7 @@ func (db *MockDB) GetUserTagByIdTag(_ context.Context, idTag string) (*entity.Us
 			}
 		}
 	}
-	return nil, fmt.Errorf("tag not found")
+	return nil, fmt.Errorf("tag %w", entity.ErrNotFound)
 }
 
 func (db *MockDB) UpdateUserTag(_ context.Context, userTag *entity.UserTag) error {
@@ -330,7 +330,7 @@ func (db *MockDB) UpdateUserTag(_ context.Context, userTag *entity.UserTag) erro
 			}
 		}
 	}
-	return fmt.Errorf("tag not found")
+	return fmt.Errorf("tag %w", entity.ErrNotFound)
 }
 
 func (db *MockDB) DeleteUserTag(_ context.Context, idTag string) error {
@@ -345,7 +345,7 @@ func (db *MockDB) DeleteUserTag(_ context.Context, idTag string) error {
 			}
 		}
 	}
-	return fmt.Errorf("tag not found")
+	return fmt.Errorf("tag %w", entity.ErrNotFound)
 }
 
 // --- Invite Codes ---
@@ -660,7 +660,7 @@ func (db *MockDB) GetUserTag(_ context.Context, idTag string) (*entity.UserTag, 
 			}
 		}
 	}
-	return nil, fmt.Errorf("tag not found")
+	return nil, fmt.Errorf("tag %w", entity.ErrNotFound)
 }
 
 func (db *MockDB) GetDefaultPaymentMethod(_ context.Context, userId string) (*entity.PaymentMethod, error) {
@@ -688,7 +688,7 @@ func (db *MockDB) GetPaymentMethodByIdentifier(_ context.Context, identifier str
 			}
 		}
 	}
-	return nil, fmt.Errorf("payment method not found")
+	return nil, fmt.Errorf("payment method %w", entity.ErrNotFound)
 }
 
 func (db *MockDB) UpdatePaymentMethodFailCount(_ context.Context, identifier string, count int) error {
@@ -806,7 +806,7 @@ func (db *MockDB) UpdatePreauthorization(_ context.Context, preauth *entity.Prea
 	defer db.mux.Unlock()
 	existing, ok := db.preauthorizations[preauth.OrderNumber]
 	if !ok {
-		return fmt.Errorf("preauthorization not found")
+		return fmt.Errorf("preauthorization %w", entity.ErrNotFound)
 	}
 	existing.AuthorizationCode = preauth.AuthorizationCode
 	existing.CapturedAmount = preauth.CapturedAmount
@@ -932,7 +932,7 @@ func (db *MockDB) SaveMailSubscription(_ context.Context, sub *entity.MailSubscr
 	} else if existing, ok := db.mailSubscriptions[sub.Id]; ok {
 		sub.CreatedAt = existing.CreatedAt
 	} else {
-		return nil, fmt.Errorf("subscription not found")
+		return nil, fmt.Errorf("subscription %w", entity.ErrNotFound)
 	}
 	db.mailSubscriptions[sub.Id] = sub
 	return sub, nil
@@ -942,7 +942,7 @@ func (db *MockDB) DeleteMailSubscription(_ context.Context, id string) error {
 	db.mux.Lock()
 	defer db.mux.Unlock()
 	if _, ok := db.mailSubscriptions[id]; !ok {
-		return fmt.Errorf("subscription not found")
+		return fmt.Errorf("subscription %w", entity.ErrNotFound)
 	}
 	delete(db.mailSubscriptions, id)
 	return nil

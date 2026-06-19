@@ -2,6 +2,7 @@ package mail
 
 import (
 	"context"
+	"errors"
 	"encoding/json"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
@@ -97,7 +98,7 @@ func Update(logger *slog.Logger, h Handler) http.HandlerFunc {
 		if err != nil {
 			log.Error("update subscription", sl.Err(err))
 			status := 400
-			if err.Error() == "subscription not found" {
+			if errors.Is(err, entity.ErrNotFound) {
 				status = 404
 			}
 			response.RenderErr(w, r, status, 2001, "Failed to update subscription", err)
@@ -118,7 +119,7 @@ func Delete(logger *slog.Logger, h Handler) http.HandlerFunc {
 		if err := h.DeleteMailSubscription(ctx, author, id); err != nil {
 			log.Error("delete subscription", sl.Err(err))
 			status := 400
-			if err.Error() == "subscription not found" {
+			if errors.Is(err, entity.ErrNotFound) {
 				status = 404
 			}
 			response.RenderErr(w, r, status, 2001, "Failed to delete subscription", err)
@@ -161,7 +162,7 @@ func SendNow(logger *slog.Logger, h Handler) http.HandlerFunc {
 		if err := h.SendMailSubscriptionNow(ctx, author, id); err != nil {
 			log.Error("send mail now", sl.Err(err))
 			status := 400
-			if err.Error() == "subscription not found" {
+			if errors.Is(err, entity.ErrNotFound) {
 				status = 404
 			}
 			response.RenderErr(w, r, status, 2001, "Failed to send report mail", err)

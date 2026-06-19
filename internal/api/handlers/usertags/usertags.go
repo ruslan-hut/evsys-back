@@ -2,6 +2,7 @@ package usertags
 
 import (
 	"context"
+	"errors"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
@@ -68,7 +69,7 @@ func Info(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 		if err != nil {
 			log.Error("get user tag", sl.Err(err))
 			status := 400
-			if err.Error() == "tag not found" {
+			if errors.Is(err, entity.ErrNotFound) {
 				status = 404
 			}
 			response.RenderErr(w, r, status, 2001, "Failed to get user tag", err)
@@ -106,7 +107,7 @@ func Create(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 		if err != nil {
 			log.Error("create user tag", sl.Err(err))
 			status := 400
-			if err.Error() == "user not found" {
+			if errors.Is(err, entity.ErrNotFound) {
 				status = 404
 			}
 			response.RenderErr(w, r, status, 2001, "Failed to create user tag", err)
@@ -146,7 +147,7 @@ func Update(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 		if err != nil {
 			log.Error("update user tag", sl.Err(err))
 			status := 400
-			if err.Error() == "tag not found" || err.Error() == "user not found" {
+			if errors.Is(err, entity.ErrNotFound) {
 				status = 404
 			}
 			response.RenderErr(w, r, status, 2001, "Failed to update user tag", err)
@@ -178,7 +179,7 @@ func Delete(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 		if err != nil {
 			log.Error("delete user tag", sl.Err(err))
 			status := 400
-			if err.Error() == "tag not found" {
+			if errors.Is(err, entity.ErrNotFound) {
 				status = 404
 			}
 			response.RenderErr(w, r, status, 2001, "Failed to delete user tag", err)

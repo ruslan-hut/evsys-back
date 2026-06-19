@@ -56,24 +56,26 @@ func findOne[T any](m *MongoDB, ctx context.Context, colName string, filter inte
 	return &data, nil
 }
 
-func (m *MongoDB) updateOne(ctx context.Context, colName string, filter, update interface{}, notFoundMsg string) error {
+// updateOne updates a single document; resourceName is the noun used to build
+// a "<resource> not found" error wrapping entity.ErrNotFound when no document matches.
+func (m *MongoDB) updateOne(ctx context.Context, colName string, filter, update interface{}, resourceName string) error {
 	result, err := m.col(colName).UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
 	}
 	if result.MatchedCount == 0 {
-		return errors.New(notFoundMsg)
+		return fmt.Errorf("%s %w", resourceName, entity.ErrNotFound)
 	}
 	return nil
 }
 
-func (m *MongoDB) deleteOne(ctx context.Context, colName string, filter interface{}, notFoundMsg string) error {
+func (m *MongoDB) deleteOne(ctx context.Context, colName string, filter interface{}, resourceName string) error {
 	result, err := m.col(colName).DeleteOne(ctx, filter)
 	if err != nil {
 		return err
 	}
 	if result.DeletedCount == 0 {
-		return errors.New(notFoundMsg)
+		return fmt.Errorf("%s %w", resourceName, entity.ErrNotFound)
 	}
 	return nil
 }
@@ -363,11 +365,11 @@ func (m *MongoDB) UpdateUserTag(ctx context.Context, userTag *entity.UserTag) er
 		{Key: "local", Value: userTag.Local},
 		{Key: "note", Value: userTag.Note},
 	}}
-	return m.updateOne(ctx, collectionUserTags, filter, update, "tag not found")
+	return m.updateOne(ctx, collectionUserTags, filter, update, "tag")
 }
 
 func (m *MongoDB) DeleteUserTag(ctx context.Context, idTag string) error {
-	return m.deleteOne(ctx, collectionUserTags, bson.D{{Key: "id_tag", Value: idTag}}, "tag not found")
+	return m.deleteOne(ctx, collectionUserTags, bson.D{{Key: "id_tag", Value: idTag}}, "tag")
 }
 
 func (m *MongoDB) UpdateLastSeen(ctx context.Context, user *entity.User) error {
@@ -399,11 +401,11 @@ func (m *MongoDB) UpdateUser(ctx context.Context, user *entity.User) error {
 		{Key: "warning_emails_enabled", Value: user.WarningEmailsEnabled},
 		{Key: "warning_email", Value: user.WarningEmail},
 	}}
-	return m.updateOne(ctx, collectionUsers, filter, update, "user not found")
+	return m.updateOne(ctx, collectionUsers, filter, update, "user")
 }
 
 func (m *MongoDB) DeleteUser(ctx context.Context, username string) error {
-	return m.deleteOne(ctx, collectionUsers, bson.D{{Key: "username", Value: username}}, "user not found")
+	return m.deleteOne(ctx, collectionUsers, bson.D{{Key: "username", Value: username}}, "user")
 }
 
 // CheckUsername check unique username
@@ -545,7 +547,7 @@ func (m *MongoDB) getTransactionState(ctx context.Context, userId string, level 
 		return nil, fmt.Errorf("get charge point: %v", err)
 	}
 	if chargePoint == nil {
-		return nil, fmt.Errorf("charge point not found")
+		return nil, fmt.Errorf("charge point %w", entity.ErrNotFound)
 	}
 	connector, err := chargePoint.GetConnector(transaction.ConnectorId)
 	if err != nil {
@@ -669,7 +671,7 @@ func (m *MongoDB) GetActiveTransactions(ctx context.Context, userId string) ([]*
 		return nil, fmt.Errorf("get user: %v", err)
 	}
 	if user == nil {
-		return nil, fmt.Errorf("user not found")
+		return nil, fmt.Errorf("user %w", entity.ErrNotFound)
 	}
 
 	idTags, err := m.userIdTags(ctx, userId)
@@ -1047,7 +1049,7 @@ func (m *MongoDB) DeletePaymentMethod(ctx context.Context, paymentMethod *entity
 		return err
 	}
 	if result.DeletedCount == 0 {
-		return fmt.Errorf("payment method not found")
+		return fmt.Errorf("payment method %w", entity.ErrNotFound)
 	}
 
 	// if we deleted default method, then set first method to default
@@ -1294,7 +1296,7 @@ func (m *MongoDB) UpdatePreauthorization(ctx context.Context, preauth *entity.Pr
 		{Key: "merchant_data", Value: preauth.MerchantData},
 		{Key: "updated_at", Value: preauth.UpdatedAt},
 	}}
-	return m.updateOne(ctx, collectionPreauthorizations, filter, update, "preauthorization not found")
+	return m.updateOne(ctx, collectionPreauthorizations, filter, update, "preauthorization")
 }
 
 // GetLastPreauthorizationOrder retrieves the most recent preauthorization order
@@ -1437,7 +1439,7 @@ func (m *MongoDB) SaveMailSubscription(ctx context.Context, sub *entity.MailSubs
 		"enabled":    sub.Enabled,
 		"updated_at": sub.UpdatedAt,
 	}}
-	if err := m.updateOne(ctx, collectionMailSubscriptions, bson.D{{Key: "_id", Value: sub.Id}}, update, "subscription not found"); err != nil {
+	if err := m.updateOne(ctx, collectionMailSubscriptions, bson.D{{Key: "_id", Value: sub.Id}}, update, "subscription"); err != nil {
 		return nil, err
 	}
 	return sub, nil
@@ -1445,5 +1447,5 @@ func (m *MongoDB) SaveMailSubscription(ctx context.Context, sub *entity.MailSubs
 
 // DeleteMailSubscription removes a subscription by id.
 func (m *MongoDB) DeleteMailSubscription(ctx context.Context, id string) error {
-	return m.deleteOne(ctx, collectionMailSubscriptions, bson.D{{Key: "_id", Value: id}}, "subscription not found")
+	return m.deleteOne(ctx, collectionMailSubscriptions, bson.D{{Key: "_id", Value: id}}, "subscription")
 }

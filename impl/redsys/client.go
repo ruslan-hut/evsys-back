@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"evsys-back/entity"
+	"evsys-back/impl/core"
 	"evsys-back/internal/lib/sl"
 )
 
@@ -118,96 +119,29 @@ type DecodedResponse struct {
 	Hour               string `json:"Ds_Hour,omitempty"`
 }
 
-// CaptureRequest represents a capture request
-type CaptureRequest struct {
-	OrderNumber       string
-	Amount            int
-	AuthorizationCode string
-}
-
-// CaptureResponse represents a capture response
-type CaptureResponse struct {
-	Success           bool
-	ResponseCode      string
-	AuthorizationCode string
-	ErrorCode         string
-	ErrorMessage      string
-	// Extended fields from decoded Redsys response
-	MerchantIdentifier string
-	CofTxnid           string
-	CardBrand          string
-	CardCountry        string
-	ExpiryDate         string
-	Order              string
-	Amount             string
-	Currency           string
-	TransactionType    string
-	Date               string
-	Hour               string
-}
-
-// PreauthorizeRequest represents a preauthorization request
-type PreauthorizeRequest struct {
-	OrderNumber string
-	Amount      int
-	CardToken   string // DS_MERCHANT_IDENTIFIER (card reference from Redsys)
-	CofTid      string // DS_MERCHANT_COF_TXNID (network transaction ID from initial auth)
-}
-
-// PayRequest represents a direct MIT payment request (transaction type "0")
-type PayRequest struct {
-	OrderNumber string
-	Amount      int
-	CardToken   string
-	CofTid      string
-}
-
-// EntryFormRequest describes the inputs needed to build a signed
-// Redsys TPV Virtual "realizarPago" form POST payload for the web
-// "add card" tokenization flow. No HTTP call is made here — the
-// merchant server only signs the payload; the browser then submits a
-// form to `FormUrl` with the three Ds_* hidden fields.
-type EntryFormRequest struct {
-	OrderNumber string // 12-digit normalized order number
-	Amount      int    // typically 0 for zero-auth tokenization
-	Description string // optional DS_MERCHANT_PRODUCTDESCRIPTION
-	UrlOk       string // browser return on success (from the frontend)
-	UrlKo       string // browser return on failure (from the frontend)
-	Language    string // Redsys numeric language code, e.g. "001" ES, "002" EN
-}
-
-// EntryFormResponse is what the frontend needs to auto-submit a form
-// to the Redsys entry URL.
-type EntryFormResponse struct {
-	FormUrl            string // sis.redsys.es/sis/realizarPago (or sandbox)
-	SignatureVersion   string // HMAC_SHA256_V1
-	MerchantParameters string // base64-encoded JSON
-	Signature          string // base64-encoded HMAC-SHA256
-}
-
-// RefundRequest represents a refund request (transaction type "3")
-type RefundRequest struct {
-	OrderNumber string
-	Amount      int
-}
+// The request/response types for these operations (core.CaptureRequest,
+// core.CaptureResponse, core.PreauthorizeRequest, core.PayRequest, core.RefundRequest,
+// core.EntryFormRequest, core.EntryFormResponse) are defined in the core package;
+// Client uses them directly so it satisfies core.RedsysClient without an
+// adapter.
 
 // Capture performs a capture operation on a preauthorized amount
-func (c *Client) Capture(ctx context.Context, req CaptureRequest) (*CaptureResponse, error) {
+func (c *Client) Capture(ctx context.Context, req core.CaptureRequest) (*core.CaptureResponse, error) {
 	return c.performCaptureTransaction(ctx, req, TransactionTypeCapture)
 }
 
 // Cancel performs a cancellation of a preauthorization
-func (c *Client) Cancel(ctx context.Context, req CaptureRequest) (*CaptureResponse, error) {
+func (c *Client) Cancel(ctx context.Context, req core.CaptureRequest) (*core.CaptureResponse, error) {
 	return c.performCaptureTransaction(ctx, req, TransactionTypeCancel)
 }
 
 // Preauthorize performs a MIT preauthorization with a saved card token
-func (c *Client) Preauthorize(ctx context.Context, req PreauthorizeRequest) (*CaptureResponse, error) {
+func (c *Client) Preauthorize(ctx context.Context, req core.PreauthorizeRequest) (*core.CaptureResponse, error) {
 	return c.performMITTransaction(ctx, req.OrderNumber, req.Amount, req.CardToken, req.CofTid, TransactionTypePreauthorize)
 }
 
 // Pay performs a direct MIT payment with a saved card token (transaction type "0")
-func (c *Client) Pay(ctx context.Context, req PayRequest) (*CaptureResponse, error) {
+func (c *Client) Pay(ctx context.Context, req core.PayRequest) (*core.CaptureResponse, error) {
 	return c.performMITTransaction(ctx, req.OrderNumber, req.Amount, req.CardToken, req.CofTid, TransactionTypePay)
 }
 
@@ -226,7 +160,7 @@ func (c *Client) Pay(ctx context.Context, req PayRequest) (*CaptureResponse, err
 // so the user sees an outcome page in our app.
 //
 // No HTTP call is made here; signing only.
-func (c *Client) BuildEntryForm(req EntryFormRequest) (*EntryFormResponse, error) {
+func (c *Client) BuildEntryForm(req core.EntryFormRequest) (*core.EntryFormResponse, error) {
 	if c.config.FormUrl == "" {
 		return nil, fmt.Errorf("redsys form url not configured")
 	}
@@ -275,7 +209,7 @@ func (c *Client) BuildEntryForm(req EntryFormRequest) (*EntryFormResponse, error
 		return nil, fmt.Errorf("generate signature: %w", err)
 	}
 
-	return &EntryFormResponse{
+	return &core.EntryFormResponse{
 		FormUrl:            c.config.FormUrl,
 		SignatureVersion:   "HMAC_SHA256_V1",
 		MerchantParameters: merchantParams,
@@ -284,13 +218,13 @@ func (c *Client) BuildEntryForm(req EntryFormRequest) (*EntryFormResponse, error
 }
 
 // Refund performs a refund for a given order (transaction type "3")
-func (c *Client) Refund(ctx context.Context, req RefundRequest) (*CaptureResponse, error) {
+func (c *Client) Refund(ctx context.Context, req core.RefundRequest) (*core.CaptureResponse, error) {
 	return c.performSimpleTransaction(ctx, req.OrderNumber, req.Amount, TransactionTypeRefund)
 }
 
 // performMITTransaction executes a Merchant Initiated Transaction with stored credentials.
 // Used by both Preauthorize (type "1") and Pay (type "0").
-func (c *Client) performMITTransaction(ctx context.Context, orderNumber string, amount int, cardToken, cofTid, txType string) (*CaptureResponse, error) {
+func (c *Client) performMITTransaction(ctx context.Context, orderNumber string, amount int, cardToken, cofTid, txType string) (*core.CaptureResponse, error) {
 	log := c.log.With(
 		slog.String("order", orderNumber),
 		slog.Int("amount", amount),
@@ -316,7 +250,7 @@ func (c *Client) performMITTransaction(ctx context.Context, orderNumber string, 
 }
 
 // performSimpleTransaction executes a transaction without MIT/COF fields (capture, cancel, refund).
-func (c *Client) performSimpleTransaction(ctx context.Context, orderNumber string, amount int, txType string) (*CaptureResponse, error) {
+func (c *Client) performSimpleTransaction(ctx context.Context, orderNumber string, amount int, txType string) (*core.CaptureResponse, error) {
 	log := c.log.With(
 		slog.String("order", orderNumber),
 		slog.Int("amount", amount),
@@ -336,7 +270,7 @@ func (c *Client) performSimpleTransaction(ctx context.Context, orderNumber strin
 }
 
 // sendRequest marshals parameters, signs, sends HTTP request, and decodes the response.
-func (c *Client) sendRequest(ctx context.Context, log *slog.Logger, params MerchantParameters, orderNumber string) (*CaptureResponse, error) {
+func (c *Client) sendRequest(ctx context.Context, log *slog.Logger, params MerchantParameters, orderNumber string) (*core.CaptureResponse, error) {
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal parameters: %w", err)
@@ -388,7 +322,7 @@ func (c *Client) sendRequest(ctx context.Context, log *slog.Logger, params Merch
 			slog.Int("status_code", resp.StatusCode),
 			slog.String("body", string(respBody)),
 		).Error("Redsys API returned non-OK status")
-		return &CaptureResponse{
+		return &core.CaptureResponse{
 			Success:      false,
 			ErrorCode:    fmt.Sprintf("%d", resp.StatusCode),
 			ErrorMessage: string(respBody),
@@ -399,15 +333,15 @@ func (c *Client) sendRequest(ctx context.Context, log *slog.Logger, params Merch
 }
 
 // decodeResponse parses the Redsys REST API response body into a
-// CaptureResponse. transactionType is the operation type that was
+// core.CaptureResponse. transactionType is the operation type that was
 // requested; it determines which response code counts as approved.
-func (c *Client) decodeResponse(log *slog.Logger, body []byte, transactionType string) (*CaptureResponse, error) {
+func (c *Client) decodeResponse(log *slog.Logger, body []byte, transactionType string) (*core.CaptureResponse, error) {
 	var apiResp Response
 	if err := json.Unmarshal(body, &apiResp); err != nil {
 		var errResp ErrorCodeResponse
 		if errErr := json.Unmarshal(body, &errResp); errErr == nil && errResp.Code != "" {
 			log.With(slog.String("error_code", errResp.Code)).Warn("Redsys returned error code")
-			return &CaptureResponse{
+			return &core.CaptureResponse{
 				Success:      false,
 				ErrorCode:    errResp.Code,
 				ErrorMessage: fmt.Sprintf("Redsys error: %s", errResp.Code),
@@ -420,14 +354,14 @@ func (c *Client) decodeResponse(log *slog.Logger, body []byte, transactionType s
 		var errResp ErrorCodeResponse
 		if err := json.Unmarshal(body, &errResp); err == nil && errResp.Code != "" {
 			log.With(slog.String("error_code", errResp.Code)).Warn("Redsys returned error code")
-			return &CaptureResponse{
+			return &core.CaptureResponse{
 				Success:      false,
 				ErrorCode:    errResp.Code,
 				ErrorMessage: fmt.Sprintf("Redsys error: %s", errResp.Code),
 			}, nil
 		}
 		log.With(slog.String("body", string(body))).Warn("Redsys returned empty merchant parameters")
-		return &CaptureResponse{
+		return &core.CaptureResponse{
 			Success:      false,
 			ErrorCode:    "EMPTY_RESPONSE",
 			ErrorMessage: "Redsys returned empty merchant parameters",
@@ -452,7 +386,7 @@ func (c *Client) decodeResponse(log *slog.Logger, body []byte, transactionType s
 		slog.Bool("success", success),
 	).Info("Redsys transaction completed")
 
-	return &CaptureResponse{
+	return &core.CaptureResponse{
 		Success:            success,
 		ResponseCode:       decoded.ResponseCode,
 		AuthorizationCode:  decoded.AuthorisationCode,
@@ -472,7 +406,7 @@ func (c *Client) decodeResponse(log *slog.Logger, body []byte, transactionType s
 }
 
 // performCaptureTransaction executes a capture/cancel transaction with authorization code.
-func (c *Client) performCaptureTransaction(ctx context.Context, req CaptureRequest, txType string) (*CaptureResponse, error) {
+func (c *Client) performCaptureTransaction(ctx context.Context, req core.CaptureRequest, txType string) (*core.CaptureResponse, error) {
 	log := c.log.With(
 		slog.String("order", req.OrderNumber),
 		slog.Int("amount", req.Amount),

@@ -110,7 +110,7 @@ func main() {
 			NotifyUrl:    conf.Redsys.NotifyUrl,
 			Currency:     conf.Redsys.Currency,
 		}, log)
-		coreHandler.SetRedsys(redsys.NewAdapter(redsysClient))
+		coreHandler.SetRedsys(redsysClient)
 		coreHandler.SetCurrency(conf.Redsys.Currency)
 		if conf.Redsys.DisablePayment {
 			log.Warn("payment processing disabled (test mode)")

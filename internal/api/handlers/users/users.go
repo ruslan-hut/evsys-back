@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"errors"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/response"
@@ -205,7 +206,7 @@ func Update(logger *slog.Logger, handler Users) http.HandlerFunc {
 		if err != nil {
 			log.Error("update user", sl.Err(err))
 			status := 400
-			if err.Error() == "user not found" {
+			if errors.Is(err, entity.ErrNotFound) {
 				status = 404
 			}
 			response.RenderErr(w, r, status, 2001, "Failed to update user", err)
@@ -238,7 +239,7 @@ func Delete(logger *slog.Logger, handler Users) http.HandlerFunc {
 		if err != nil {
 			log.Error("delete user", sl.Err(err))
 			status := 400
-			if err.Error() == "user not found" {
+			if errors.Is(err, entity.ErrNotFound) {
 				status = 404
 			}
 			response.RenderErr(w, r, status, 2001, "Failed to delete user", err)

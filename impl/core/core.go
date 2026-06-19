@@ -255,7 +255,7 @@ func (c *Core) SendMailSubscriptionNow(ctx context.Context, author *entity.User,
 		return err
 	}
 	if sub == nil {
-		return fmt.Errorf("subscription not found")
+		return fmt.Errorf("subscription %w", entity.ErrNotFound)
 	}
 	return c.mail.SendNow(ctx, sub)
 }
@@ -958,7 +958,7 @@ func (c *Core) SavePreauthorization(ctx context.Context, user *entity.User, req 
 		return fmt.Errorf("failed to get preauthorization: %w", err)
 	}
 	if preauth == nil {
-		return fmt.Errorf("preauthorization not found")
+		return fmt.Errorf("preauthorization %w", entity.ErrNotFound)
 	}
 
 	// Verify user owns this preauthorization
@@ -1028,7 +1028,7 @@ func (c *Core) CapturePreauthorization(ctx context.Context, user *entity.User, r
 		return nil, fmt.Errorf("failed to get preauthorization: %w", err)
 	}
 	if preauth == nil {
-		return nil, fmt.Errorf("preauthorization not found")
+		return nil, fmt.Errorf("preauthorization %w", entity.ErrNotFound)
 	}
 
 	// Verify preauthorization is in correct state
@@ -1109,7 +1109,7 @@ func (c *Core) UpdatePreauthorization(ctx context.Context, user *entity.User, re
 		return fmt.Errorf("failed to get preauthorization: %w", err)
 	}
 	if preauth == nil {
-		return fmt.Errorf("preauthorization not found")
+		return fmt.Errorf("preauthorization %w", entity.ErrNotFound)
 	}
 
 	// Verify user owns this preauthorization or is admin
@@ -1168,7 +1168,7 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 		return err
 	}
 	if transaction == nil {
-		return fmt.Errorf("transaction %d not found", transactionId)
+		return fmt.Errorf("transaction %d %w", transactionId, entity.ErrNotFound)
 	}
 	if !transaction.IsFinished {
 		return fmt.Errorf("transaction %d is not finished", transactionId)
@@ -1330,7 +1330,7 @@ func (c *Core) ReturnPayment(ctx context.Context, transactionId int) error {
 		return err
 	}
 	if transaction == nil {
-		return fmt.Errorf("transaction %d not found", transactionId)
+		return fmt.Errorf("transaction %d %w", transactionId, entity.ErrNotFound)
 	}
 	if !transaction.IsFinished {
 		return fmt.Errorf("transaction %d is not finished", transactionId)
@@ -1382,7 +1382,7 @@ func (c *Core) ReturnByOrder(ctx context.Context, orderId string, amount int) er
 		return fmt.Errorf("get payment order: %w", err)
 	}
 	if order == nil {
-		return fmt.Errorf("payment order %d not found", id)
+		return fmt.Errorf("payment order %d %w", id, entity.ErrNotFound)
 	}
 	if order.Amount < amount {
 		return fmt.Errorf("order amount %d is less than return amount %d", order.Amount, amount)
@@ -2000,7 +2000,7 @@ func (c *Core) retryOne(ctx context.Context, transactionId int, attempt int) err
 	if transaction == nil {
 		log.Warn("transaction not found for retry, removing retry record")
 		_ = c.repo.DeletePaymentRetry(ctx, transactionId)
-		return fmt.Errorf("transaction %d not found", transactionId)
+		return fmt.Errorf("transaction %d %w", transactionId, entity.ErrNotFound)
 	}
 
 	transaction.PaymentBilled = 0
