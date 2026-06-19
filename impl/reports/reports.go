@@ -24,7 +24,7 @@ func New(repo Repository, log *slog.Logger) *Reports {
 	}
 }
 
-func (r *Reports) TotalsByMonth(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (r *Reports) TotalsByMonth(ctx context.Context, from, to time.Time, userGroup string) ([]any, error) {
 	log := r.log.With(
 		slog.Time("from", from),
 		slog.Time("to", to),
@@ -33,11 +33,11 @@ func (r *Reports) TotalsByMonth(ctx context.Context, from, to time.Time, userGro
 	data, err := r.repo.TotalsByMonth(ctx, from, to, userGroup)
 	if err != nil {
 		log.Error("totals by month failed", sl.Err(err))
-		return []interface{}{}, nil
+		return []any{}, nil
 	}
 	if data == nil {
 		log.Debug("totals by month: no data")
-		return []interface{}{}, nil
+		return []any{}, nil
 	}
 	log.With(
 		slog.Int("count", len(data)),
@@ -45,7 +45,7 @@ func (r *Reports) TotalsByMonth(ctx context.Context, from, to time.Time, userGro
 	return data, nil
 }
 
-func (r *Reports) TotalsByUsers(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (r *Reports) TotalsByUsers(ctx context.Context, from, to time.Time, userGroup string) ([]any, error) {
 	log := r.log.With(
 		slog.Time("from", from),
 		slog.Time("to", to),
@@ -54,11 +54,11 @@ func (r *Reports) TotalsByUsers(ctx context.Context, from, to time.Time, userGro
 	data, err := r.repo.TotalsByUsers(ctx, from, to, userGroup)
 	if err != nil {
 		log.Error("totals by users failed", sl.Err(err))
-		return []interface{}{}, nil
+		return []any{}, nil
 	}
 	if data == nil {
 		log.Debug("totals by users: no data")
-		return []interface{}{}, nil
+		return []any{}, nil
 	}
 	log.With(
 		slog.Int("count", len(data)),
@@ -66,7 +66,7 @@ func (r *Reports) TotalsByUsers(ctx context.Context, from, to time.Time, userGro
 	return data, nil
 }
 
-func (r *Reports) TotalsByCharger(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (r *Reports) TotalsByCharger(ctx context.Context, from, to time.Time, userGroup string) ([]any, error) {
 	log := r.log.With(
 		slog.Time("from", from),
 		slog.Time("to", to),
@@ -75,11 +75,11 @@ func (r *Reports) TotalsByCharger(ctx context.Context, from, to time.Time, userG
 	data, err := r.repo.TotalsByCharger(ctx, from, to, userGroup)
 	if err != nil {
 		log.Error("totals by charger failed", sl.Err(err))
-		return []interface{}{}, nil
+		return []any{}, nil
 	}
 	if data == nil {
 		log.Debug("totals by charger: no data")
-		return []interface{}{}, nil
+		return []any{}, nil
 	}
 	log.With(
 		slog.Int("count", len(data)),
@@ -87,7 +87,7 @@ func (r *Reports) TotalsByCharger(ctx context.Context, from, to time.Time, userG
 	return data, nil
 }
 
-func (r *Reports) TotalsByHour(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (r *Reports) TotalsByHour(ctx context.Context, from, to time.Time, userGroup string) ([]any, error) {
 	log := r.log.With(
 		slog.Time("from", from),
 		slog.Time("to", to),
@@ -96,11 +96,11 @@ func (r *Reports) TotalsByHour(ctx context.Context, from, to time.Time, userGrou
 	data, err := r.repo.TotalsByHour(ctx, from, to, userGroup)
 	if err != nil {
 		log.Error("totals by hour failed", sl.Err(err))
-		return []interface{}{}, nil
+		return []any{}, nil
 	}
 	if data == nil {
 		log.Debug("totals by hour: no data")
-		return []interface{}{}, nil
+		return []any{}, nil
 	}
 	log.With(
 		slog.Int("count", len(data)),

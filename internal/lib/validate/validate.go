@@ -109,7 +109,7 @@ func validateWsCommand(fl validator.FieldLevel) bool {
 }
 
 // Struct validates a single struct object
-func Struct(s interface{}) error {
+func Struct(s any) error {
 	if s == nil {
 		return fmt.Errorf("is nil")
 	}
@@ -143,7 +143,7 @@ func Struct(s interface{}) error {
 	}
 }
 
-func isStruct(s interface{}) bool {
+func isStruct(s any) bool {
 	r := reflect.TypeOf(s)
 	if r.Kind() == reflect.Ptr {
 		r = r.Elem()

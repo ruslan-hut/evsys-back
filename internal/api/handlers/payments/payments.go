@@ -14,7 +14,7 @@ import (
 )
 
 type Payments interface {
-	GetPaymentMethods(ctx context.Context, userId string) (interface{}, error)
+	GetPaymentMethods(ctx context.Context, userId string) (any, error)
 	SavePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error
 	UpdatePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error
 	DeletePaymentMethod(ctx context.Context, user *entity.User, pm *entity.PaymentMethod) error
@@ -76,7 +76,7 @@ func Save(logger *slog.Logger, handler Payments) http.HandlerFunc {
 				render.JSON(w, r, &pm)
 				return
 			}
-			render.JSON(w, r, map[string]interface{}{
+			render.JSON(w, r, map[string]any{
 				"saved":   &pm,
 				"methods": methods,
 			})

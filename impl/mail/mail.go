@@ -20,7 +20,7 @@ type Repository interface {
 
 // ReportSource produces aggregated session totals grouped by charger.
 type ReportSource interface {
-	TotalsByCharger(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error)
+	TotalsByCharger(ctx context.Context, from, to time.Time, userGroup string) ([]any, error)
 }
 
 // Sender delivers a single transactional email.
@@ -304,9 +304,9 @@ type chargerLine struct {
 }
 
 // parseChargerLines defensively converts the report payload (typed as
-// []interface{} at the source) into a typed slice via JSON round-trip,
+// []any at the source) into a typed slice via JSON round-trip,
 // avoiding cross-package coupling with the database layer.
-func parseChargerLines(raw []interface{}) []chargerLine {
+func parseChargerLines(raw []any) []chargerLine {
 	if len(raw) == 0 {
 		return nil
 	}

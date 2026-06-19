@@ -48,7 +48,7 @@ func (m *MongoDB) col(name string) *mongo.Collection {
 	return m.client.Database(m.database).Collection(name)
 }
 
-func findOne[T any](m *MongoDB, ctx context.Context, colName string, filter interface{}) (*T, error) {
+func findOne[T any](m *MongoDB, ctx context.Context, colName string, filter any) (*T, error) {
 	var data T
 	if err := m.col(colName).FindOne(ctx, filter).Decode(&data); err != nil {
 		return nil, m.findError(err)
@@ -57,7 +57,7 @@ func findOne[T any](m *MongoDB, ctx context.Context, colName string, filter inte
 }
 
 // findMany runs a Find and decodes all matching documents into a []T.
-func findMany[T any](m *MongoDB, ctx context.Context, colName string, filter interface{}, opts ...*options.FindOptions) ([]T, error) {
+func findMany[T any](m *MongoDB, ctx context.Context, colName string, filter any, opts ...*options.FindOptions) ([]T, error) {
 	cursor, err := m.col(colName).Find(ctx, filter, opts...)
 	if err != nil {
 		return nil, m.findError(err)
@@ -70,7 +70,7 @@ func findMany[T any](m *MongoDB, ctx context.Context, colName string, filter int
 }
 
 // aggregateMany runs an aggregation pipeline and decodes all documents into a []T.
-func aggregateMany[T any](m *MongoDB, ctx context.Context, colName string, pipeline interface{}) ([]T, error) {
+func aggregateMany[T any](m *MongoDB, ctx context.Context, colName string, pipeline any) ([]T, error) {
 	cursor, err := m.col(colName).Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, m.findError(err)
@@ -84,7 +84,7 @@ func aggregateMany[T any](m *MongoDB, ctx context.Context, colName string, pipel
 
 // updateOne updates a single document; resourceName is the noun used to build
 // a "<resource> not found" error wrapping entity.ErrNotFound when no document matches.
-func (m *MongoDB) updateOne(ctx context.Context, colName string, filter, update interface{}, resourceName string) error {
+func (m *MongoDB) updateOne(ctx context.Context, colName string, filter, update any, resourceName string) error {
 	result, err := m.col(colName).UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
@@ -95,7 +95,7 @@ func (m *MongoDB) updateOne(ctx context.Context, colName string, filter, update 
 	return nil
 }
 
-func (m *MongoDB) deleteOne(ctx context.Context, colName string, filter interface{}, resourceName string) error {
+func (m *MongoDB) deleteOne(ctx context.Context, colName string, filter any, resourceName string) error {
 	result, err := m.col(colName).DeleteOne(ctx, filter)
 	if err != nil {
 		return err
@@ -151,8 +151,8 @@ func (m *MongoDB) Close() error {
 	return nil
 }
 
-func (m *MongoDB) read(ctx context.Context, table, dataType string) (interface{}, error) {
-	var logMessages interface{}
+func (m *MongoDB) read(ctx context.Context, table, dataType string) (any, error) {
+	var logMessages any
 	timeFieldName := "timestamp"
 
 	switch dataType {
@@ -180,7 +180,7 @@ func (m *MongoDB) read(ctx context.Context, table, dataType string) (interface{}
 	return logMessages, nil
 }
 
-func (m *MongoDB) ReadLog(ctx context.Context, logName string) (interface{}, error) {
+func (m *MongoDB) ReadLog(ctx context.Context, logName string) (any, error) {
 	switch logName {
 	case "sys":
 		return m.read(ctx, collectionSysLog, entity.FeatureMessageType)
@@ -206,10 +206,10 @@ func (m *MongoDB) ReadLogAfter(ctx context.Context, timeStart time.Time) ([]*ent
 	return result, nil
 }
 
-func (m *MongoDB) GetConfig(ctx context.Context, name string) (interface{}, error) {
+func (m *MongoDB) GetConfig(ctx context.Context, name string) (any, error) {
 	collection := m.col(collectionConfig)
 	filter := bson.D{{Key: "name", Value: name}}
-	var configData interface{}
+	var configData any
 	err := collection.FindOne(ctx, filter).Decode(&configData)
 	if err != nil {
 		return nil, m.findError(err)

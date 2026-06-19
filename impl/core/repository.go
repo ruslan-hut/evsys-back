@@ -7,8 +7,8 @@ import (
 )
 
 type Repository interface {
-	GetConfig(ctx context.Context, name string) (interface{}, error)
-	ReadLog(ctx context.Context, name string) (interface{}, error)
+	GetConfig(ctx context.Context, name string) (any, error)
+	ReadLog(ctx context.Context, name string) (any, error)
 
 	GetUserInfo(ctx context.Context, accessLevel int, username string) (*entity.UserInfo, error)
 	GetWarningEmailRecipients(ctx context.Context) ([]*entity.User, error)

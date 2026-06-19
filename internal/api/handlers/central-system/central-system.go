@@ -12,7 +12,7 @@ import (
 )
 
 type CentralSystem interface {
-	SendCommand(command *entity.CentralSystemCommand, user *entity.User) (interface{}, error)
+	SendCommand(command *entity.CentralSystemCommand, user *entity.User) (any, error)
 }
 
 func Command(logger *slog.Logger, handler CentralSystem) http.HandlerFunc {

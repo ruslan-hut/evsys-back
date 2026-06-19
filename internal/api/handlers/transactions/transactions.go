@@ -15,11 +15,11 @@ import (
 )
 
 type Transactions interface {
-	GetActiveTransactions(ctx context.Context, userId string) (interface{}, error)
-	GetTransactions(ctx context.Context, userId, period string) (interface{}, error)
-	GetFilteredTransactions(ctx context.Context, user *entity.User, filter *entity.TransactionFilter) (interface{}, error)
-	GetTransaction(ctx context.Context, userId string, accessLevel, id int) (interface{}, error)
-	GetRecentChargePoints(ctx context.Context, userId string) (interface{}, error)
+	GetActiveTransactions(ctx context.Context, userId string) (any, error)
+	GetTransactions(ctx context.Context, userId, period string) (any, error)
+	GetFilteredTransactions(ctx context.Context, user *entity.User, filter *entity.TransactionFilter) (any, error)
+	GetTransaction(ctx context.Context, userId string, accessLevel, id int) (any, error)
+	GetRecentChargePoints(ctx context.Context, userId string) (any, error)
 }
 
 func ListActive(logger *slog.Logger, handler Transactions) http.HandlerFunc {

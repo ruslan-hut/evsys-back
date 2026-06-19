@@ -69,7 +69,7 @@ func transactionBasePipeline(from, to time.Time, userGroup string) mongo.Pipelin
 
 // aggregateReportLines runs a transactions aggregation pipeline and returns the
 // decoded ReportLine documents as a generic slice.
-func (m *MongoDB) aggregateReportLines(ctx context.Context, pipeline mongo.Pipeline) ([]interface{}, error) {
+func (m *MongoDB) aggregateReportLines(ctx context.Context, pipeline mongo.Pipeline) ([]any, error) {
 	cursor, err := m.col(collectionTransactions).Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, m.findError(err)
@@ -78,7 +78,7 @@ func (m *MongoDB) aggregateReportLines(ctx context.Context, pipeline mongo.Pipel
 	if err = cursor.All(ctx, &lines); err != nil {
 		return nil, err
 	}
-	result := make([]interface{}, len(lines))
+	result := make([]any, len(lines))
 	for i, v := range lines {
 		result[i] = v
 	}
@@ -86,7 +86,7 @@ func (m *MongoDB) aggregateReportLines(ctx context.Context, pipeline mongo.Pipel
 }
 
 // TotalsByMonth returns the total consumed watts, average watts, and count of transactions by month
-func (m *MongoDB) TotalsByMonth(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (m *MongoDB) TotalsByMonth(ctx context.Context, from, to time.Time, userGroup string) ([]any, error) {
 	pipeline := append(transactionBasePipeline(from, to, userGroup),
 		bson.D{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: bson.D{
@@ -114,7 +114,7 @@ func (m *MongoDB) TotalsByMonth(ctx context.Context, from, to time.Time, userGro
 }
 
 // TotalsByUsers returns the total consumed watts, average watts, and count of transactions by user
-func (m *MongoDB) TotalsByUsers(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (m *MongoDB) TotalsByUsers(ctx context.Context, from, to time.Time, userGroup string) ([]any, error) {
 	pipeline := append(transactionBasePipeline(from, to, userGroup),
 		bson.D{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: "$user_info.name"},
@@ -137,7 +137,7 @@ func (m *MongoDB) TotalsByUsers(ctx context.Context, from, to time.Time, userGro
 	return m.aggregateReportLines(ctx, pipeline)
 }
 
-func (m *MongoDB) TotalsByCharger(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (m *MongoDB) TotalsByCharger(ctx context.Context, from, to time.Time, userGroup string) ([]any, error) {
 	pipeline := append(transactionBasePipeline(from, to, userGroup),
 		bson.D{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: bson.D{
@@ -163,7 +163,7 @@ func (m *MongoDB) TotalsByCharger(ctx context.Context, from, to time.Time, userG
 }
 
 // TotalsByHour returns consumed energy grouped by date and hour (based on time_stop)
-func (m *MongoDB) TotalsByHour(ctx context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (m *MongoDB) TotalsByHour(ctx context.Context, from, to time.Time, userGroup string) ([]any, error) {
 	collection := m.col(collectionTransactions)
 
 	pipeline := append(transactionBasePipeline(from, to, userGroup),
@@ -241,7 +241,7 @@ func (m *MongoDB) TotalsByHour(ctx context.Context, from, to time.Time, userGrou
 	}
 	sort.Strings(dates)
 
-	var result []interface{}
+	var result []any
 	for _, date := range dates {
 		hours := hourlyData[date]
 		for h := 0; h < 24; h++ {

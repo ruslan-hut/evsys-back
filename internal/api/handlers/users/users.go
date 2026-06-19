@@ -35,7 +35,7 @@ func Authenticate(logger *slog.Logger, handler Users) http.HandlerFunc {
 		}
 		log = log.With(slog.String("username", user.Username))
 
-		var data interface{}
+		var data any
 		var err error
 		if user.Username == "" {
 			data, err = handler.AuthenticateByToken(ctx, user.Password)
@@ -181,7 +181,7 @@ func Delete(logger *slog.Logger, handler Users) http.HandlerFunc {
 			web.Fail(w, r, log, 0, "Failed to delete user", err)
 			return
 		}
-		web.OK(w, r, log, "user deleted", map[string]interface{}{
+		web.OK(w, r, log, "user deleted", map[string]any{
 			"success": true,
 			"message": "User deleted successfully",
 		})

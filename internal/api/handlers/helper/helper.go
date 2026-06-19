@@ -11,8 +11,8 @@ import (
 )
 
 type Helper interface {
-	GetConfig(ctx context.Context, name string) (interface{}, error)
-	GetLog(ctx context.Context, name string) (interface{}, error)
+	GetConfig(ctx context.Context, name string) (any, error)
+	GetLog(ctx context.Context, name string) (any, error)
 }
 
 func Config(logger *slog.Logger, handler Helper) http.HandlerFunc {

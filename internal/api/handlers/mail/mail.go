@@ -103,7 +103,7 @@ func Delete(logger *slog.Logger, h Handler) http.HandlerFunc {
 			web.Fail(w, r, log, 0, "Failed to delete subscription", err)
 			return
 		}
-		web.OK(w, r, log.With(slog.String("id", id)), "mail subscription deleted", map[string]interface{}{"success": true})
+		web.OK(w, r, log.With(slog.String("id", id)), "mail subscription deleted", map[string]any{"success": true})
 	}
 }
 
@@ -122,7 +122,7 @@ func Test(logger *slog.Logger, h Handler) http.HandlerFunc {
 			web.Fail(w, r, log, 400, "Failed to send test mail", err)
 			return
 		}
-		web.OK(w, r, log.With(slog.String("to", req.Email)), "test mail sent", map[string]interface{}{"success": true})
+		web.OK(w, r, log.With(slog.String("to", req.Email)), "test mail sent", map[string]any{"success": true})
 	}
 }
 
@@ -137,6 +137,6 @@ func SendNow(logger *slog.Logger, h Handler) http.HandlerFunc {
 			web.Fail(w, r, log, 0, "Failed to send report mail", err)
 			return
 		}
-		web.OK(w, r, log.With(slog.String("id", id)), "mail subscription sent now", map[string]interface{}{"success": true})
+		web.OK(w, r, log.With(slog.String("id", id)), "mail subscription sent now", map[string]any{"success": true})
 	}
 }

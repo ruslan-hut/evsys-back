@@ -13,9 +13,9 @@ import (
 )
 
 type Locations interface {
-	GetLocations(ctx context.Context, accessLevel int) (interface{}, error)
-	GetChargePoints(ctx context.Context, accessLevel int, search string) (interface{}, error)
-	GetChargePoint(ctx context.Context, accessLevel int, id string) (interface{}, error)
+	GetLocations(ctx context.Context, accessLevel int) (any, error)
+	GetChargePoints(ctx context.Context, accessLevel int, search string) (any, error)
+	GetChargePoint(ctx context.Context, accessLevel int, id string) (any, error)
 	SaveChargePoint(ctx context.Context, accessLevel int, chargePoint *entity.ChargePoint) error
 }
 

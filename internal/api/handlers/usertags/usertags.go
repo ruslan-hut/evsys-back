@@ -125,7 +125,7 @@ func Delete(logger *slog.Logger, handler UserTags) http.HandlerFunc {
 			web.Fail(w, r, log, 0, "Failed to delete user tag", err)
 			return
 		}
-		web.OK(w, r, log, "user tag deleted", map[string]interface{}{
+		web.OK(w, r, log, "user tag deleted", map[string]any{
 			"success": true,
 			"message": "Tag deleted successfully",
 		})

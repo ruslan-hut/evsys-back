@@ -711,7 +711,7 @@ func (db *MockDB) GetPaymentParameters(orderId string) (*entity.PaymentParameter
 
 // --- Locations and Charge Points ---
 
-func (db *MockDB) ReadLog(_ context.Context, logName string) (interface{}, error) {
+func (db *MockDB) ReadLog(_ context.Context, logName string) (any, error) {
 	return nil, nil
 }
 
@@ -719,7 +719,7 @@ func (db *MockDB) ReadLogAfter(_ context.Context, timeStart time.Time) ([]*entit
 	return nil, nil
 }
 
-func (db *MockDB) GetConfig(_ context.Context, name string) (interface{}, error) {
+func (db *MockDB) GetConfig(_ context.Context, name string) (any, error) {
 	return nil, nil
 }
 
@@ -745,19 +745,19 @@ func (db *MockDB) GetRecentUserChargePoints(_ context.Context, userId string) ([
 
 // --- Reports ---
 
-func (db *MockDB) TotalsByMonth(_ context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (db *MockDB) TotalsByMonth(_ context.Context, from, to time.Time, userGroup string) ([]any, error) {
 	return nil, nil
 }
 
-func (db *MockDB) TotalsByUsers(_ context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (db *MockDB) TotalsByUsers(_ context.Context, from, to time.Time, userGroup string) ([]any, error) {
 	return nil, nil
 }
 
-func (db *MockDB) TotalsByCharger(_ context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (db *MockDB) TotalsByCharger(_ context.Context, from, to time.Time, userGroup string) ([]any, error) {
 	return nil, nil
 }
 
-func (db *MockDB) TotalsByHour(_ context.Context, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (db *MockDB) TotalsByHour(_ context.Context, from, to time.Time, userGroup string) ([]any, error) {
 	return nil, nil
 }
 

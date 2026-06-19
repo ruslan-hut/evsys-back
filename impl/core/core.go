@@ -316,11 +316,11 @@ func clearPassword(user *entity.User) *entity.User {
 	return user
 }
 
-func (c *Core) GetConfig(ctx context.Context, name string) (interface{}, error) {
+func (c *Core) GetConfig(ctx context.Context, name string) (any, error) {
 	return c.repo.GetConfig(ctx, name)
 }
 
-func (c *Core) GetLog(ctx context.Context, name string) (interface{}, error) {
+func (c *Core) GetLog(ctx context.Context, name string) (any, error) {
 	return c.repo.ReadLog(ctx, name)
 }
 
@@ -445,14 +445,14 @@ func (c *Core) DeleteUserTag(ctx context.Context, author *entity.User, idTag str
 	return c.auth.DeleteUserTag(ctx, idTag)
 }
 
-func (c *Core) GetLocations(ctx context.Context, accessLevel int) (interface{}, error) {
+func (c *Core) GetLocations(ctx context.Context, accessLevel int) (any, error) {
 	if accessLevel < MaxAccessLevel {
 		return nil, fmt.Errorf("access denied")
 	}
 	return c.repo.GetLocations(ctx)
 }
 
-func (c *Core) GetChargePoints(ctx context.Context, accessLevel int, search string) (interface{}, error) {
+func (c *Core) GetChargePoints(ctx context.Context, accessLevel int, search string) (any, error) {
 	list, err := c.repo.GetChargePoints(ctx, accessLevel, search)
 	if err != nil {
 		return nil, err
@@ -470,7 +470,7 @@ func (c *Core) GetChargePoints(ctx context.Context, accessLevel int, search stri
 	return list, nil
 }
 
-func (c *Core) GetChargePoint(ctx context.Context, accessLevel int, id string) (interface{}, error) {
+func (c *Core) GetChargePoint(ctx context.Context, accessLevel int, id string) (any, error) {
 	cp, err := c.repo.GetChargePoint(ctx, accessLevel, id)
 	if err != nil {
 		return nil, err
@@ -499,7 +499,7 @@ func (c *Core) SaveChargePoint(ctx context.Context, accessLevel int, chargePoint
 	return c.repo.UpdateChargePoint(ctx, accessLevel, chargePoint)
 }
 
-func (c *Core) SendCommand(command *entity.CentralSystemCommand, user *entity.User) (interface{}, error) {
+func (c *Core) SendCommand(command *entity.CentralSystemCommand, user *entity.User) (any, error) {
 	if c.cs == nil {
 		return nil, fmt.Errorf("central system not set")
 	}
@@ -513,7 +513,7 @@ func (c *Core) SendCommand(command *entity.CentralSystemCommand, user *entity.Us
 	return c.cs.SendCommand(command), nil
 }
 
-func (c *Core) GetActiveTransactions(ctx context.Context, userId string) (interface{}, error) {
+func (c *Core) GetActiveTransactions(ctx context.Context, userId string) (any, error) {
 	transactions, err := c.repo.GetActiveTransactions(ctx, userId)
 	if err != nil {
 		return nil, err
@@ -529,7 +529,7 @@ func (c *Core) GetActiveTransactions(ctx context.Context, userId string) (interf
 	return transactions, nil
 }
 
-func (c *Core) GetTransactions(ctx context.Context, userId, period string) (interface{}, error) {
+func (c *Core) GetTransactions(ctx context.Context, userId, period string) (any, error) {
 	transactions, err := c.repo.GetTransactions(ctx, userId, period)
 	if err != nil {
 		return nil, err
@@ -544,7 +544,7 @@ func (c *Core) GetTransactions(ctx context.Context, userId, period string) (inte
 	return transactions, nil
 }
 
-func (c *Core) GetFilteredTransactions(ctx context.Context, user *entity.User, filter *entity.TransactionFilter) (interface{}, error) {
+func (c *Core) GetFilteredTransactions(ctx context.Context, user *entity.User, filter *entity.TransactionFilter) (any, error) {
 	if !user.IsPowerUser() {
 		return nil, fmt.Errorf("access denied: insufficient permissions")
 	}
@@ -562,7 +562,7 @@ func (c *Core) GetFilteredTransactions(ctx context.Context, user *entity.User, f
 	return transactions, nil
 }
 
-func (c *Core) GetTransaction(ctx context.Context, userId string, accessLevel, id int) (interface{}, error) {
+func (c *Core) GetTransaction(ctx context.Context, userId string, accessLevel, id int) (any, error) {
 	state, err := c.repo.GetTransactionState(ctx, userId, accessLevel, id)
 	if err != nil {
 		return nil, err
@@ -575,11 +575,11 @@ func (c *Core) GetTransaction(ctx context.Context, userId string, accessLevel, i
 	return state, nil
 }
 
-func (c *Core) GetRecentChargePoints(ctx context.Context, userId string) (interface{}, error) {
+func (c *Core) GetRecentChargePoints(ctx context.Context, userId string) (any, error) {
 	return c.repo.GetRecentUserChargePoints(ctx, userId)
 }
 
-func (c *Core) GetPaymentMethods(ctx context.Context, userId string) (interface{}, error) {
+func (c *Core) GetPaymentMethods(ctx context.Context, userId string) (any, error) {
 	return c.repo.GetPaymentMethods(ctx, userId)
 }
 
@@ -760,7 +760,7 @@ func (c *Core) WsRequest(request *entity.UserRequest) error {
 	return nil
 }
 
-func (c *Core) MonthlyStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (c *Core) MonthlyStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]any, error) {
 	err := c.checkSubsystemAccess(user, subSystemReports)
 	if err != nil {
 		return nil, err
@@ -768,7 +768,7 @@ func (c *Core) MonthlyStats(ctx context.Context, user *entity.User, from, to tim
 	return c.reports.TotalsByMonth(ctx, from, to, userGroup)
 }
 
-func (c *Core) UsersStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (c *Core) UsersStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]any, error) {
 	err := c.checkSubsystemAccess(user, subSystemReports)
 	if err != nil {
 		return nil, err
@@ -776,7 +776,7 @@ func (c *Core) UsersStats(ctx context.Context, user *entity.User, from, to time.
 	return c.reports.TotalsByUsers(ctx, from, to, userGroup)
 }
 
-func (c *Core) ChargerStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (c *Core) ChargerStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]any, error) {
 	err := c.checkSubsystemAccess(user, subSystemReports)
 	if err != nil {
 		return nil, err
@@ -784,7 +784,7 @@ func (c *Core) ChargerStats(ctx context.Context, user *entity.User, from, to tim
 	return c.reports.TotalsByCharger(ctx, from, to, userGroup)
 }
 
-func (c *Core) ExportStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error) {
+func (c *Core) ExportStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]any, error) {
 	err := c.checkSubsystemAccess(user, subSystemReports)
 	if err != nil {
 		return nil, err

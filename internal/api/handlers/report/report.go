@@ -13,10 +13,10 @@ import (
 )
 
 type Reports interface {
-	MonthlyStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
-	UsersStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
-	ChargerStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
-	ExportStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]interface{}, error)
+	MonthlyStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]any, error)
+	UsersStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]any, error)
+	ChargerStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]any, error)
+	ExportStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]any, error)
 	StationUptimeReport(ctx context.Context, user *entity.User, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error)
 	StationStatusReport(ctx context.Context, user *entity.User, chargePointId string) ([]*entity.StationStatus, error)
 }

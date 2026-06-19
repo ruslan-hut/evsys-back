@@ -9,13 +9,13 @@ import (
 )
 
 type Response struct {
-	Data          interface{} `json:"data,omitempty"`
-	StatusCode    int         `json:"status_code" validate:"required,min=1000,max=3003"`
-	StatusMessage string      `json:"status_message"`
-	Timestamp     string      `json:"timestamp"`
+	Data          any    `json:"data,omitempty"`
+	StatusCode    int    `json:"status_code" validate:"required,min=1000,max=3003"`
+	StatusMessage string `json:"status_message"`
+	Timestamp     string `json:"timestamp"`
 }
 
-func Ok(data interface{}) Response {
+func Ok(data any) Response {
 	return Response{
 		Data:          data,
 		StatusCode:    1000,
