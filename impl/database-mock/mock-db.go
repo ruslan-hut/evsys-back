@@ -32,31 +32,13 @@ type MockDB struct {
 
 // NewMockDB creates a new MockDB with initialized maps
 func NewMockDB() *MockDB {
-	return &MockDB{
-		users:             make(map[string]*entity.User),
-		usersById:         make(map[string]*entity.User),
-		tokens:            make(map[string]*entity.User),
-		userTags:          make(map[string][]entity.UserTag),
-		allTags:           make(map[string]bool),
-		invites:           make(map[string]*entity.Invite),
-		transactions:      make(map[int]*entity.Transaction),
-		chargeStates:      make(map[int]*entity.ChargeState),
-		meterValues:       make(map[int][]entity.TransactionMeter),
-		paymentMethods:    make(map[string][]*entity.PaymentMethod),
-		paymentOrders:     make(map[int]*entity.PaymentOrder),
-		ordersByTx:        make(map[int]*entity.PaymentOrder),
-		preauthorizations: make(map[string]*entity.Preauthorization),
-		preauthByTx:       make(map[int]*entity.Preauthorization),
-		paymentRetries:    make(map[int]*entity.PaymentRetry),
-		mailSubscriptions: make(map[string]*entity.MailSubscription),
-		lastOrderId:       0,
-	}
+	db := &MockDB{}
+	db.clear()
+	return db
 }
 
-// Reset clears all data from the mock database
-func (db *MockDB) Reset() {
-	db.mux.Lock()
-	defer db.mux.Unlock()
+// clear (re)initializes all data maps. It does not touch the mutex.
+func (db *MockDB) clear() {
 	db.users = make(map[string]*entity.User)
 	db.usersById = make(map[string]*entity.User)
 	db.tokens = make(map[string]*entity.User)
@@ -74,6 +56,13 @@ func (db *MockDB) Reset() {
 	db.paymentRetries = make(map[int]*entity.PaymentRetry)
 	db.mailSubscriptions = make(map[string]*entity.MailSubscription)
 	db.lastOrderId = 0
+}
+
+// Reset clears all data from the mock database
+func (db *MockDB) Reset() {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	db.clear()
 }
 
 // SeedUser adds a test user to the mock database

@@ -267,6 +267,16 @@ func normalizeOrderNumber(orderNumber string) string {
 	return fmt.Sprintf("%012d", orderNum)
 }
 
+// nextOrderNumber returns the order number to assign to a new payment order:
+// one past the last stored order, or 1200 when there is none.
+func (c *Core) nextOrderNumber(ctx context.Context) int {
+	lastOrder, _ := c.repo.GetLastOrder(ctx)
+	if lastOrder != nil {
+		return lastOrder.Order + 1
+	}
+	return 1200
+}
+
 func (c *Core) requireAuth() error {
 	if c.auth == nil {
 		return fmt.Errorf("authenticator not set")
@@ -678,12 +688,7 @@ func (c *Core) SetOrder(ctx context.Context, user *entity.User, order *entity.Pa
 			}
 		}
 
-		lastOrder, _ := c.repo.GetLastOrder(ctx)
-		if lastOrder != nil {
-			order.Order = lastOrder.Order + 1
-		} else {
-			order.Order = 1200
-		}
+		order.Order = c.nextOrderNumber(ctx)
 		order.TimeOpened = time.Now()
 	}
 
@@ -1261,12 +1266,7 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 		TimeOpened:    time.Now(),
 	}
 
-	lastOrder, _ := c.repo.GetLastOrder(ctx)
-	if lastOrder != nil {
-		paymentOrder.Order = lastOrder.Order + 1
-	} else {
-		paymentOrder.Order = 1200
-	}
+	paymentOrder.Order = c.nextOrderNumber(ctx)
 
 	if e := c.repo.SavePaymentOrder(ctx, &paymentOrder); e != nil {
 		log.With(sl.Err(e)).Error("failed to save payment order")

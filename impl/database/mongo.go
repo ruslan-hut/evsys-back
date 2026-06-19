@@ -650,6 +650,19 @@ func (m *MongoDB) UpdateTransactionPayment(ctx context.Context, transaction *ent
 	return nil
 }
 
+// userIdTags returns the user's uppercased id_tags. Returns (nil, nil) when the user has no tags.
+func (m *MongoDB) userIdTags(ctx context.Context, userId string) ([]string, error) {
+	tags, err := m.GetUserTags(ctx, userId)
+	if err != nil {
+		return nil, err
+	}
+	idTags := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		idTags = append(idTags, strings.ToUpper(tag.IdTag))
+	}
+	return idTags, nil
+}
+
 func (m *MongoDB) GetActiveTransactions(ctx context.Context, userId string) ([]*entity.ChargeState, error) {
 	user, err := m.GetUserById(ctx, userId)
 	if err != nil {
@@ -659,17 +672,12 @@ func (m *MongoDB) GetActiveTransactions(ctx context.Context, userId string) ([]*
 		return nil, fmt.Errorf("user not found")
 	}
 
-	tags, err := m.GetUserTags(ctx, userId)
+	idTags, err := m.userIdTags(ctx, userId)
 	if err != nil {
 		return nil, fmt.Errorf("get user tags: %v", err)
 	}
-	if len(tags) == 0 {
+	if len(idTags) == 0 {
 		return nil, nil
-	}
-
-	var idTags []string
-	for _, tag := range tags {
-		idTags = append(idTags, strings.ToUpper(tag.IdTag))
 	}
 
 	collection := m.col(collectionTransactions)
@@ -701,17 +709,12 @@ func (m *MongoDB) GetActiveTransactions(ctx context.Context, userId string) ([]*
 
 // GetTransactionsToBill get list of transactions to bill
 func (m *MongoDB) GetTransactionsToBill(ctx context.Context, userId string) ([]*entity.Transaction, error) {
-	tags, err := m.GetUserTags(ctx, userId)
+	idTags, err := m.userIdTags(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
-	if len(tags) == 0 {
+	if len(idTags) == 0 {
 		return nil, nil
-	}
-
-	var idTags []string
-	for _, tag := range tags {
-		idTags = append(idTags, strings.ToUpper(tag.IdTag))
 	}
 
 	collection := m.col(collectionTransactions)
@@ -733,17 +736,12 @@ func (m *MongoDB) GetTransactionsToBill(ctx context.Context, userId string) ([]*
 
 // GetTransactions gets list of a user's transactions; if period is empty, returns last 100 transactions
 func (m *MongoDB) GetTransactions(ctx context.Context, userId string, period string) ([]*entity.Transaction, error) {
-	tags, err := m.GetUserTags(ctx, userId)
+	idTags, err := m.userIdTags(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
-	if len(tags) == 0 {
+	if len(idTags) == 0 {
 		return nil, nil
-	}
-
-	var idTags []string
-	for _, tag := range tags {
-		idTags = append(idTags, strings.ToUpper(tag.IdTag))
 	}
 
 	collection := m.col(collectionTransactions)
@@ -896,17 +894,12 @@ func (m *MongoDB) GetMeterValues(ctx context.Context, transactionId int, from ti
 
 func (m *MongoDB) GetRecentUserChargePoints(ctx context.Context, userId string) ([]*entity.ChargePoint, error) {
 	// Get last 3 transactions for user's tags
-	tags, err := m.GetUserTags(ctx, userId)
+	idTags, err := m.userIdTags(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
-	if len(tags) == 0 {
+	if len(idTags) == 0 {
 		return nil, nil
-	}
-
-	var idTags []string
-	for _, tag := range tags {
-		idTags = append(idTags, strings.ToUpper(tag.IdTag))
 	}
 
 	// Get transactions
