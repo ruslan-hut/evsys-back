@@ -33,6 +33,16 @@ func (s *Service) SendTransaction(ctx context.Context, to string, t entity.Trans
 	return s.sender.Send(ctx, to, buildTransactionSubject(t.Transaction), renderTransaction(t))
 }
 
+// RenderTransaction returns the standalone HTML document for a charging
+// session. It is the same markup the email carries, exported so the printable
+// receipt cannot drift from it. Callers need no mail provider.
+func RenderTransaction(t entity.TransactionMail) string {
+	if t.Transaction == nil {
+		return ""
+	}
+	return renderTransaction(t)
+}
+
 func buildTransactionSubject(tx *entity.Transaction) string {
 	return fmt.Sprintf("Charging session #%d — %s", tx.TransactionId, tx.ChargePointId)
 }

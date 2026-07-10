@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"evsys-back/entity"
+	"evsys-back/impl/mail"
 	"evsys-back/internal/lib/sl"
 	"evsys-back/internal/lib/validate"
 	"fmt"
@@ -244,14 +245,42 @@ func (c *Core) SendTestMail(ctx context.Context, author *entity.User, to string)
 	return c.mail.SendTest(ctx, to)
 }
 
-// SendTransactionMail emails the full data of a single charging session to an
-// arbitrary address.
+// transactionReceiptData loads a transaction and the charge point descriptors
+// that decorate it, enforcing ownership along the way.
 //
 // Unlike GetTransaction, which only gates on the charge point's access level,
-// this enforces ownership: a regular user may only mail a session started with
+// this enforces ownership: a regular user may only reach a session started with
 // one of their own tags. Without that check any authenticated user could
 // exfiltrate another user's session — including their username and card
-// details — to an address of their choosing.
+// details — by mailing or downloading it.
+func (c *Core) transactionReceiptData(ctx context.Context, author *entity.User, transactionId int) (entity.TransactionMail, error) {
+	transaction, err := c.repo.GetTransaction(ctx, transactionId)
+	if err != nil {
+		return entity.TransactionMail{}, err
+	}
+	if transaction == nil {
+		return entity.TransactionMail{}, fmt.Errorf("transaction %w", entity.ErrNotFound)
+	}
+
+	if !author.IsPowerUser() {
+		if transaction.UserTag == nil || transaction.UserTag.UserId != author.UserId {
+			return entity.TransactionMail{}, fmt.Errorf("access denied: insufficient permissions")
+		}
+	}
+
+	data := entity.TransactionMail{Transaction: transaction}
+	// The charge point lookup is decorative: a missing or out-of-level station
+	// must not block the receipt, so failures degrade to an id-only document.
+	chargePoint, err := c.repo.GetChargePoint(ctx, author.AccessLevel, transaction.ChargePointId)
+	if err == nil && chargePoint != nil {
+		data.ChargePointTitle = chargePoint.Title
+		data.ChargePointAddress = chargePoint.Address
+	}
+	return data, nil
+}
+
+// SendTransactionMail emails the full data of a single charging session to an
+// arbitrary address.
 func (c *Core) SendTransactionMail(ctx context.Context, author *entity.User, transactionId int, to string) error {
 	if c.mail == nil {
 		return fmt.Errorf("mail service not configured")
@@ -260,30 +289,22 @@ func (c *Core) SendTransactionMail(ctx context.Context, author *entity.User, tra
 		return fmt.Errorf("valid recipient email is required")
 	}
 
-	transaction, err := c.repo.GetTransaction(ctx, transactionId)
+	data, err := c.transactionReceiptData(ctx, author, transactionId)
 	if err != nil {
 		return err
 	}
-	if transaction == nil {
-		return fmt.Errorf("transaction %w", entity.ErrNotFound)
-	}
-
-	if !author.IsPowerUser() {
-		if transaction.UserTag == nil || transaction.UserTag.UserId != author.UserId {
-			return fmt.Errorf("access denied: insufficient permissions")
-		}
-	}
-
-	data := entity.TransactionMail{Transaction: transaction}
-	// The charge point lookup is decorative: a missing or out-of-level station
-	// must not block the receipt, so failures degrade to an id-only email.
-	chargePoint, err := c.repo.GetChargePoint(ctx, author.AccessLevel, transaction.ChargePointId)
-	if err == nil && chargePoint != nil {
-		data.ChargePointTitle = chargePoint.Title
-		data.ChargePointAddress = chargePoint.Address
-	}
-
 	return c.mail.SendTransaction(ctx, to, data)
+}
+
+// GetTransactionReceipt renders the printable receipt for a single charging
+// session. It shares the mail template so the printed document and the emailed
+// one cannot drift, and does not require a configured mail provider.
+func (c *Core) GetTransactionReceipt(ctx context.Context, author *entity.User, transactionId int) (string, error) {
+	data, err := c.transactionReceiptData(ctx, author, transactionId)
+	if err != nil {
+		return "", err
+	}
+	return mail.RenderTransaction(data), nil
 }
 
 // SendMailSubscriptionNow triggers an immediate report email for a subscription.

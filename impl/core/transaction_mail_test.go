@@ -125,6 +125,43 @@ func TestSendTransactionMail(t *testing.T) {
 		assert.Contains(t, err.Error(), "mail service not configured")
 	})
 
+	t.Run("receipt enforces the same ownership rule", func(t *testing.T) {
+		c, _ := newMailCore(t)
+
+		doc, err := c.GetTransactionReceipt(ctx, owner, ownedTxId)
+		require.NoError(t, err)
+		assert.Contains(t, doc, "Charging session #4207")
+
+		_, err = c.GetTransactionReceipt(ctx, owner, unownedTxId)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "access denied")
+
+		doc, err = c.GetTransactionReceipt(ctx, admin, unownedTxId)
+		require.NoError(t, err)
+		assert.Contains(t, doc, "Charging session #4208")
+	})
+
+	t.Run("receipt works without a configured mail provider", func(t *testing.T) {
+		db := database_mock.NewMockDB()
+		db.SeedTransaction(&entity.Transaction{
+			TransactionId: ownedTxId,
+			ChargePointId: "PE00003",
+			UserTag:       &entity.UserTag{UserId: ownerId},
+		})
+		c := New(newTestLogger(), db) // no SetMailService
+
+		doc, err := c.GetTransactionReceipt(ctx, owner, ownedTxId)
+		require.NoError(t, err, "printing must not depend on Brevo being configured")
+		assert.Contains(t, doc, "<!DOCTYPE html>")
+	})
+
+	t.Run("receipt reports not found", func(t *testing.T) {
+		c, _ := newMailCore(t)
+		_, err := c.GetTransactionReceipt(ctx, admin, 123456)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, entity.ErrNotFound))
+	})
+
 	t.Run("propagates sender failure", func(t *testing.T) {
 		c, m := newMailCore(t)
 		m.err = errors.New("brevo down")
