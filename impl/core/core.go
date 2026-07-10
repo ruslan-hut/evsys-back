@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/sl"
+	"evsys-back/internal/lib/validate"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -47,6 +48,7 @@ type MailService interface {
 	SendNow(ctx context.Context, sub *entity.MailSubscription) error
 	SendTest(ctx context.Context, to string) error
 	SendPaymentWarning(ctx context.Context, to string, w entity.PaymentWarning) error
+	SendTransaction(ctx context.Context, to string, t entity.TransactionMail) error
 }
 
 // RedsysClient interface for Redsys operations
@@ -240,6 +242,48 @@ func (c *Core) SendTestMail(ctx context.Context, author *entity.User, to string)
 		return fmt.Errorf("recipient email is required")
 	}
 	return c.mail.SendTest(ctx, to)
+}
+
+// SendTransactionMail emails the full data of a single charging session to an
+// arbitrary address.
+//
+// Unlike GetTransaction, which only gates on the charge point's access level,
+// this enforces ownership: a regular user may only mail a session started with
+// one of their own tags. Without that check any authenticated user could
+// exfiltrate another user's session — including their username and card
+// details — to an address of their choosing.
+func (c *Core) SendTransactionMail(ctx context.Context, author *entity.User, transactionId int, to string) error {
+	if c.mail == nil {
+		return fmt.Errorf("mail service not configured")
+	}
+	if !validate.Email(to) {
+		return fmt.Errorf("valid recipient email is required")
+	}
+
+	transaction, err := c.repo.GetTransaction(ctx, transactionId)
+	if err != nil {
+		return err
+	}
+	if transaction == nil {
+		return fmt.Errorf("transaction %w", entity.ErrNotFound)
+	}
+
+	if !author.IsPowerUser() {
+		if transaction.UserTag == nil || transaction.UserTag.UserId != author.UserId {
+			return fmt.Errorf("access denied: insufficient permissions")
+		}
+	}
+
+	data := entity.TransactionMail{Transaction: transaction}
+	// The charge point lookup is decorative: a missing or out-of-level station
+	// must not block the receipt, so failures degrade to an id-only email.
+	chargePoint, err := c.repo.GetChargePoint(ctx, author.AccessLevel, transaction.ChargePointId)
+	if err == nil && chargePoint != nil {
+		data.ChargePointTitle = chargePoint.Title
+		data.ChargePointAddress = chargePoint.Address
+	}
+
+	return c.mail.SendTransaction(ctx, to, data)
 }
 
 // SendMailSubscriptionNow triggers an immediate report email for a subscription.

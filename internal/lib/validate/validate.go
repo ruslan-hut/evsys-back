@@ -108,6 +108,13 @@ func validateWsCommand(fl validator.FieldLevel) bool {
 	return validWsCommands[fl.Field().String()]
 }
 
+// Email reports whether s is a non-empty, well-formed address. It applies the
+// same pattern as the `email_rfc` struct tag, for callers validating a bare
+// string rather than a struct field.
+func Email(s string) bool {
+	return s != "" && emailRegex.MatchString(s)
+}
+
 // Struct validates a single struct object
 func Struct(s any) error {
 	if s == nil {

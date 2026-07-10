@@ -2,6 +2,7 @@ package transactions
 
 import (
 	"context"
+	"encoding/json"
 	"evsys-back/entity"
 	"evsys-back/internal/lib/api/cont"
 	"evsys-back/internal/lib/api/web"
@@ -20,6 +21,11 @@ type Transactions interface {
 	GetFilteredTransactions(ctx context.Context, user *entity.User, filter *entity.TransactionFilter) (any, error)
 	GetTransaction(ctx context.Context, userId string, accessLevel, id int) (any, error)
 	GetRecentChargePoints(ctx context.Context, userId string) (any, error)
+	SendTransactionMail(ctx context.Context, author *entity.User, transactionId int, to string) error
+}
+
+type sendMailRequest struct {
+	Email string `json:"email"`
 }
 
 func ListActive(logger *slog.Logger, handler Transactions) http.HandlerFunc {
@@ -134,6 +140,40 @@ func Get(logger *slog.Logger, handler Transactions) http.HandlerFunc {
 			return
 		}
 		web.OK(w, r, log, "transaction info", data)
+	}
+}
+
+// SendMail emails the full transaction data to the address in the request body.
+func SendMail(logger *slog.Logger, handler Transactions) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
+		id := chi.URLParam(r, "id")
+		log := web.Log(ctx, logger, "handlers.transactions",
+			slog.String("user", user.Username),
+			sl.Secret("user_id", user.UserId),
+			slog.Int("access_level", user.AccessLevel),
+			slog.String("id", id),
+		)
+
+		transactionId, err := strconv.Atoi(id)
+		if err != nil {
+			web.Fail(w, r, log, 400, "Failed to parse transaction id", err)
+			return
+		}
+
+		var req sendMailRequest
+		if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+			web.Fail(w, r, log, 400, "Failed to decode request", err)
+			return
+		}
+
+		if err = handler.SendTransactionMail(ctx, user, transactionId, req.Email); err != nil {
+			web.Fail(w, r, log, 0, "Failed to send transaction mail", err)
+			return
+		}
+		web.OK(w, r, log.With(sl.Secret("to", req.Email)), "transaction mail sent",
+			map[string]any{"success": true})
 	}
 }
 

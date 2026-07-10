@@ -131,6 +131,7 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 			r.Get("/transactions/recent", transactions.RecentUserChargePoints(log, core))
 			r.Get("/transactions/list/{period}", transactions.List(log, core))
 			r.Get("/transactions/info/{id}", transactions.Get(log, core))
+			r.Post("/transactions/info/{id}/email", transactions.SendMail(log, core))
 			//router.Get("/transactions/bill", s.transactionBill)
 
 			r.Get("/payment/methods", payments.List(log, core))
