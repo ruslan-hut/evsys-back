@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"evsys-back/entity"
+	"fmt"
 	"sort"
 	"time"
 
@@ -258,6 +259,359 @@ func (m *MongoDB) TotalsByHour(ctx context.Context, from, to time.Time, userGrou
 	}
 
 	return result, nil
+}
+
+// reportTimezone is the zone the power timeline buckets hours and days in.
+// TotalsByHour buckets in UTC implicitly; this keeps that behaviour but names
+// it, so switching the fleet to local time is a one-line, deliberate change.
+// It must stay an IANA name -- a fixed offset would break across DST.
+const reportTimezone = "UTC"
+
+// toDouble and toLong pin the numeric type of an aggregation result. The meter
+// fields are Go ints and so land in BSON as int32; a $sum of them widens to
+// int64 only once it overflows, which would otherwise make the decoded type
+// depend on the size of the data.
+func toDouble(expr any) bson.D {
+	return bson.D{{Key: "$toDouble", Value: expr}}
+}
+
+func toLong(expr any) bson.D {
+	return bson.D{{Key: "$toLong", Value: expr}}
+}
+
+// powerBasePipeline builds the shared prefix for the power report: finished
+// sessions that consumed energy in the range, optionally narrowed to a single
+// charge point and a single user group.
+//
+// Unlike transactionBasePipeline it joins users only when a group filter is
+// actually requested. That join $unwinds user_info and so drops any session
+// whose id_tag has no matching user, which would silently understate fleet
+// production.
+func powerBasePipeline(from, to time.Time, chargePointId, userGroup string) mongo.Pipeline {
+	match := bson.D{
+		{Key: "is_finished", Value: true},
+		{Key: "time_stop", Value: bson.D{
+			{Key: "$gte", Value: from},
+			{Key: "$lte", Value: to},
+		}},
+		{Key: "$expr", Value: bson.D{
+			{Key: "$gt", Value: bson.A{"$meter_stop", "$meter_start"}},
+		}},
+	}
+	if chargePointId != "" {
+		match = append(match, bson.E{Key: "charge_point_id", Value: chargePointId})
+	}
+
+	pipeline := mongo.Pipeline{{{Key: "$match", Value: match}}}
+	if userGroup == "" {
+		return pipeline
+	}
+
+	return append(pipeline,
+		bson.D{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: collectionUserTags},
+			{Key: "localField", Value: "id_tag"},
+			{Key: "foreignField", Value: "id_tag"},
+			{Key: "as", Value: "user_tag_info"},
+		}}},
+		bson.D{{Key: "$addFields", Value: bson.D{
+			{Key: "user_id", Value: bson.D{
+				{Key: "$arrayElemAt", Value: bson.A{"$user_tag_info.user_id", 0}},
+			}},
+		}}},
+		bson.D{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: collectionUsers},
+			{Key: "localField", Value: "user_id"},
+			{Key: "foreignField", Value: "user_id"},
+			{Key: "as", Value: "user_info"},
+		}}},
+		bson.D{{Key: "$unwind", Value: "$user_info"}},
+		bson.D{{Key: "$match", Value: bson.D{
+			{Key: "user_info.group", Value: userGroup},
+		}}},
+		bson.D{{Key: "$unset", Value: bson.A{"user_tag_info", "user_info"}}},
+	)
+}
+
+// powerSessionStages derives per-session power figures from the embedded
+// meter_values array. Samples drawing no power are dropped up front so that
+// idle time inside a session does not deflate the charging average; it is
+// still reflected in avg_session_power, which divides by elapsed time.
+//
+// Two stages are needed because charging_samples cannot be referenced from the
+// same $addFields that creates it.
+func powerSessionStages() []bson.D {
+	return []bson.D{
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "consumed_watts", Value: bson.D{
+				{Key: "$subtract", Value: bson.A{"$meter_stop", "$meter_start"}},
+			}},
+			{Key: "duration_seconds", Value: bson.D{
+				{Key: "$dateDiff", Value: bson.D{
+					{Key: "startDate", Value: "$time_start"},
+					{Key: "endDate", Value: "$time_stop"},
+					{Key: "unit", Value: "second"},
+				}},
+			}},
+			{Key: "charging_samples", Value: bson.D{
+				{Key: "$filter", Value: bson.D{
+					{Key: "input", Value: bson.D{
+						{Key: "$ifNull", Value: bson.A{"$meter_values", bson.A{}}},
+					}},
+					{Key: "as", Value: "mv"},
+					{Key: "cond", Value: bson.D{
+						{Key: "$gt", Value: bson.A{"$$mv.power_rate", 0}},
+					}},
+				}},
+			}},
+		}}},
+		// $max over an empty array yields null, which would poison the $max
+		// accumulator downstream, so coalesce it to 0 here.
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "session_max_power", Value: bson.D{
+				{Key: "$ifNull", Value: bson.A{
+					bson.D{{Key: "$max", Value: "$charging_samples.power_rate"}},
+					0,
+				}},
+			}},
+			{Key: "power_sum", Value: bson.D{
+				{Key: "$sum", Value: "$charging_samples.power_rate"},
+			}},
+			{Key: "power_count", Value: bson.D{
+				{Key: "$size", Value: "$charging_samples"},
+			}},
+		}}},
+	}
+}
+
+// avgSessionPowerExpr converts summed energy and elapsed time into average
+// watts: Wh * 3600 / seconds.
+//
+// The guard is load-bearing, not defensive: $divide by zero aborts the whole
+// aggregation rather than yielding null, and sessions that start and stop
+// within the same second do occur. Dividing before multiplying keeps the
+// arithmetic in double and out of int64 overflow range.
+func avgSessionPowerExpr(consumed, seconds string) bson.D {
+	return bson.D{{Key: "$cond", Value: bson.D{
+		{Key: "if", Value: bson.D{{Key: "$gt", Value: bson.A{seconds, 0}}}},
+		{Key: "then", Value: bson.D{{Key: "$multiply", Value: bson.A{
+			bson.D{{Key: "$divide", Value: bson.A{toDouble(consumed), seconds}}},
+			3600,
+		}}}},
+		{Key: "else", Value: float64(0)},
+	}}}
+}
+
+// safeDivideExpr guards against dividing by a zero count, which happens for
+// sessions that recorded no charging samples at all. The else branch is
+// explicitly a float so the field decodes into a float64 either way.
+func safeDivideExpr(sum, count string) bson.D {
+	return bson.D{{Key: "$cond", Value: bson.D{
+		{Key: "if", Value: bson.D{{Key: "$gt", Value: bson.A{count, 0}}}},
+		{Key: "then", Value: bson.D{{Key: "$divide", Value: bson.A{toDouble(sum), count}}}},
+		{Key: "else", Value: float64(0)},
+	}}}
+}
+
+// powerByChargerPipeline aggregates sessions into one row per charge point.
+// The charging average is sample-weighted: per-session sums and counts are
+// added up and divided once at the end, so a long session counts for more than
+// a short one instead of every session's mean carrying equal weight.
+func powerByChargerPipeline(from, to time.Time, chargePointId, userGroup string) mongo.Pipeline {
+	pipeline := append(powerBasePipeline(from, to, chargePointId, userGroup), powerSessionStages()...)
+	return append(pipeline,
+		bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: "$charge_point_id"},
+			{Key: "sessions", Value: bson.D{{Key: "$sum", Value: 1}}},
+			{Key: "total_consumed", Value: bson.D{{Key: "$sum", Value: "$consumed_watts"}}},
+			{Key: "duration_seconds", Value: bson.D{{Key: "$sum", Value: "$duration_seconds"}}},
+			{Key: "max_power", Value: bson.D{{Key: "$max", Value: "$session_max_power"}}},
+			{Key: "power_sum", Value: bson.D{{Key: "$sum", Value: "$power_sum"}}},
+			{Key: "samples", Value: bson.D{{Key: "$sum", Value: "$power_count"}}},
+		}}},
+		bson.D{{Key: "$project", Value: bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "charge_point_id", Value: "$_id"},
+			{Key: "sessions", Value: toLong("$sessions")},
+			{Key: "total_consumed", Value: toDouble("$total_consumed")},
+			{Key: "duration_seconds", Value: toLong("$duration_seconds")},
+			{Key: "max_power", Value: toDouble("$max_power")},
+			{Key: "samples", Value: toLong("$samples")},
+			{Key: "avg_charging_power", Value: safeDivideExpr("$power_sum", "$samples")},
+			{Key: "avg_session_power", Value: avgSessionPowerExpr("$total_consumed", "$duration_seconds")},
+		}}},
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "charge_point_id", Value: 1}}}},
+	)
+}
+
+// powerBySessionPipeline emits one row per charging session. No $group is
+// needed: each transaction document is already the unit of aggregation.
+func powerBySessionPipeline(from, to time.Time, chargePointId, userGroup string) mongo.Pipeline {
+	pipeline := append(powerBasePipeline(from, to, chargePointId, userGroup), powerSessionStages()...)
+	return append(pipeline,
+		bson.D{{Key: "$project", Value: bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "transaction_id", Value: 1},
+			{Key: "charge_point_id", Value: 1},
+			{Key: "sessions", Value: bson.D{{Key: "$literal", Value: int64(1)}}},
+			{Key: "total_consumed", Value: toDouble("$consumed_watts")},
+			{Key: "duration_seconds", Value: toLong("$duration_seconds")},
+			{Key: "max_power", Value: toDouble("$session_max_power")},
+			{Key: "samples", Value: toLong("$power_count")},
+			{Key: "avg_charging_power", Value: safeDivideExpr("$power_sum", "$power_count")},
+			{Key: "avg_session_power", Value: avgSessionPowerExpr("$consumed_watts", "$duration_seconds")},
+		}}},
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "max_power", Value: -1}}}},
+	)
+}
+
+// powerTimelinePipeline measures fleet output over time.
+//
+// Power at an instant is the *sum* of every session drawing at that instant, so
+// samples are collapsed per minute and then summed across sessions to
+// reconstruct the concurrent fleet draw. Only then is that per-minute series
+// bucketed, which is what makes max_power a true peak load rather than the best
+// any single charger managed. Energy is integrated from the same series and so
+// is credited to the bucket it was delivered in, rather than to the hour the
+// session happened to stop the way TotalsByHour does it.
+func powerTimelinePipeline(from, to time.Time, chargePointId, userGroup string, unit string) mongo.Pipeline {
+	pipeline := append(powerBasePipeline(from, to, chargePointId, userGroup),
+		// Drop the payment orders, tariffs and unused meter fields before the
+		// array explodes; this is the cheapest win in the whole pipeline.
+		bson.D{{Key: "$project", Value: bson.D{
+			{Key: "transaction_id", Value: 1},
+			{Key: "meter_values.power_rate", Value: 1},
+			{Key: "meter_values.time", Value: 1},
+		}}},
+		bson.D{{Key: "$unwind", Value: "$meter_values"}},
+		// Samples can predate `from` when a session started before the window,
+		// so bucket on sample time to keep the series inside the range. The
+		// $type guard matters: $dateTrunc on a non-date aborts the aggregation.
+		bson.D{{Key: "$match", Value: bson.D{
+			{Key: "meter_values.power_rate", Value: bson.D{{Key: "$gt", Value: 0}}},
+			{Key: "meter_values.time", Value: bson.D{
+				{Key: "$type", Value: "date"},
+				{Key: "$gte", Value: from},
+				{Key: "$lte", Value: to},
+			}},
+		}}},
+		// One row per session-minute. Without this, a session that reports more
+		// than one sample in a minute (a second measurand, or a sub-minute
+		// sample interval) would be counted repeatedly and inflate fleet power.
+		bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{
+				{Key: "txn", Value: "$transaction_id"},
+				{Key: "minute", Value: bson.D{{Key: "$dateTrunc", Value: bson.D{
+					{Key: "date", Value: "$meter_values.time"},
+					{Key: "unit", Value: "minute"},
+				}}}},
+			}},
+			{Key: "power", Value: bson.D{{Key: "$max", Value: "$meter_values.power_rate"}}},
+		}}},
+		// Concurrent fleet draw per minute.
+		bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: "$_id.minute"},
+			{Key: "fleet_power", Value: bson.D{{Key: "$sum", Value: "$power"}}},
+			{Key: "transactions", Value: bson.D{{Key: "$addToSet", Value: "$_id.txn"}}},
+		}}},
+		bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{{Key: "$dateTrunc", Value: bson.D{
+				{Key: "date", Value: "$_id"},
+				{Key: "unit", Value: unit},
+				{Key: "timezone", Value: reportTimezone},
+			}}}},
+			{Key: "max_power", Value: bson.D{{Key: "$max", Value: "$fleet_power"}}},
+			{Key: "power_sum", Value: bson.D{{Key: "$sum", Value: "$fleet_power"}}},
+			{Key: "samples", Value: bson.D{{Key: "$sum", Value: 1}}},
+			{Key: "transaction_sets", Value: bson.D{{Key: "$push", Value: "$transactions"}}},
+		}}},
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "_id", Value: 1}}}},
+	)
+
+	project := bson.D{
+		{Key: "_id", Value: 0},
+		{Key: "date", Value: bson.D{{Key: "$dateToString", Value: bson.D{
+			{Key: "format", Value: "%Y-%m-%d"},
+			{Key: "date", Value: "$_id"},
+			{Key: "timezone", Value: reportTimezone},
+		}}}},
+		{Key: "max_power", Value: toDouble("$max_power")},
+		{Key: "samples", Value: toLong("$samples")},
+		// Seconds the fleet spent charging in this bucket, i.e. charging
+		// minutes scaled up -- not the bucket's own length.
+		{Key: "duration_seconds", Value: toLong(bson.D{
+			{Key: "$multiply", Value: bson.A{"$samples", 60}},
+		})},
+		// Each charging minute contributes power/60 Wh. This assumes samples
+		// land about once a minute, which is what the chargers are configured
+		// for; a coarser MeterValueSampleInterval would leave un-sampled
+		// minutes out of the sum and understate energy. The reconciliation
+		// check in the plan (timeline total vs charger total) is what catches
+		// that, since nothing here can observe the charger's setting.
+		{Key: "total_consumed", Value: bson.D{{Key: "$divide", Value: bson.A{"$power_sum", 60}}}},
+		// Mean fleet draw across the minutes the fleet was actually charging.
+		// Idle minutes produce no bucket at all, so they are absent from the
+		// denominator by construction: this is not mean load over the bucket,
+		// which is simply total_consumed / bucket hours.
+		{Key: "avg_charging_power", Value: safeDivideExpr("$power_sum", "$samples")},
+		// $literal, not a bare 0: a plain number in a $project is an
+		// include/exclude flag, and mixing an exclusion into an inclusion
+		// projection is rejected outright.
+		{Key: "avg_session_power", Value: bson.D{{Key: "$literal", Value: float64(0)}}},
+		// A session spanning several buckets is counted in each one, so this
+		// column does not sum to a period total.
+		{Key: "sessions", Value: toLong(bson.D{{Key: "$size", Value: bson.D{
+			{Key: "$reduce", Value: bson.D{
+				{Key: "input", Value: "$transaction_sets"},
+				{Key: "initialValue", Value: bson.A{}},
+				{Key: "in", Value: bson.D{
+					{Key: "$setUnion", Value: bson.A{"$$value", "$$this"}},
+				}},
+			}},
+		}}})},
+	}
+	if unit == "hour" {
+		project = append(project, bson.E{Key: "hour", Value: bson.D{{Key: "$hour", Value: bson.D{
+			{Key: "date", Value: "$_id"},
+			{Key: "timezone", Value: reportTimezone},
+		}}}})
+	}
+
+	return append(pipeline, bson.D{{Key: "$project", Value: project}})
+}
+
+// PowerStats aggregates instantaneous power (power_rate, watts) from the
+// meter_values embedded in finished transactions.
+//
+// It reads the raw stored array rather than the API's meter values, which are
+// downsampled to a fixed number of points and interpolated, so the peaks here
+// are exact.
+func (m *MongoDB) PowerStats(ctx context.Context, from, to time.Time, chargePointId, userGroup, groupBy string) ([]*entity.PowerStats, error) {
+	grouping, ok := entity.PowerGroupingFromString(groupBy)
+	if !ok {
+		return nil, fmt.Errorf("unknown grouping %q", groupBy)
+	}
+
+	var pipeline mongo.Pipeline
+	switch grouping {
+	case entity.PowerBySession:
+		pipeline = powerBySessionPipeline(from, to, chargePointId, userGroup)
+	case entity.PowerByHour:
+		pipeline = powerTimelinePipeline(from, to, chargePointId, userGroup, "hour")
+	case entity.PowerByDay:
+		pipeline = powerTimelinePipeline(from, to, chargePointId, userGroup, "day")
+	default:
+		pipeline = powerByChargerPipeline(from, to, chargePointId, userGroup)
+	}
+
+	// The timeline groupings unwind every sample in the range before collapsing
+	// them, so let the server spill rather than fail on a wide date range.
+	opts := options.Aggregate()
+	if grouping.IsTimeline() {
+		opts.SetAllowDiskUse(true)
+	}
+
+	return aggregateMany[*entity.PowerStats](m, ctx, collectionTransactions, pipeline, opts)
 }
 
 // StationUptime calculates uptime/downtime for stations over a period

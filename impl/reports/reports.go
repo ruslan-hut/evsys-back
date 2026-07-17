@@ -108,6 +108,29 @@ func (r *Reports) TotalsByHour(ctx context.Context, from, to time.Time, userGrou
 	return data, nil
 }
 
+func (r *Reports) PowerStats(ctx context.Context, from, to time.Time, chargePointId, userGroup, groupBy string) ([]*entity.PowerStats, error) {
+	log := r.log.With(
+		slog.Time("from", from),
+		slog.Time("to", to),
+		slog.String("chargePointId", chargePointId),
+		slog.String("userGroup", userGroup),
+		slog.String("groupBy", groupBy),
+	)
+	data, err := r.repo.PowerStats(ctx, from, to, chargePointId, userGroup, groupBy)
+	if err != nil {
+		log.Error("power stats failed", sl.Err(err))
+		return nil, err
+	}
+	if data == nil {
+		log.Debug("power stats: no data")
+		return []*entity.PowerStats{}, nil
+	}
+	log.With(
+		slog.Int("count", len(data)),
+	).Debug("power stats")
+	return data, nil
+}
+
 func (r *Reports) StationUptime(ctx context.Context, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error) {
 	log := r.log.With(
 		slog.Time("from", from),

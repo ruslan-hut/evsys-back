@@ -17,6 +17,7 @@ type Reports interface {
 	UsersStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]any, error)
 	ChargerStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]any, error)
 	ExportStats(ctx context.Context, user *entity.User, from, to time.Time, userGroup string) ([]any, error)
+	PowerStatsReport(ctx context.Context, user *entity.User, from, to time.Time, chargePointId, userGroup, groupBy string) ([]*entity.PowerStats, error)
 	StationUptimeReport(ctx context.Context, user *entity.User, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error)
 	StationStatusReport(ctx context.Context, user *entity.User, chargePointId string) ([]*entity.StationStatus, error)
 }
@@ -135,6 +136,56 @@ func ExportStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
 			return
 		}
 		web.OK(w, r, log, "export report", data)
+	}
+}
+
+// PowerStatistics reports power drawn from the meter values of finished
+// sessions. Unlike the totals endpoints, `group` is optional here: omitting it
+// reports the whole fleet rather than defaulting to a group, so production
+// figures do not quietly exclude sessions with no user attached.
+func PowerStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
+		log := reportLog(logger, r, user)
+
+		from, err := request.GetDate(r, "from")
+		if err != nil {
+			wrongParameter(w, r, log, err)
+			return
+		}
+		to, err := request.GetDate(r, "to")
+		if err != nil {
+			wrongParameter(w, r, log, err)
+			return
+		}
+		if to.Before(from) {
+			wrongParameter(w, r, log, fmt.Errorf("'to' must be after 'from'"))
+			return
+		}
+
+		groupBy := r.URL.Query().Get("group_by")
+		if _, ok := entity.PowerGroupingFromString(groupBy); !ok {
+			wrongParameter(w, r, log, fmt.Errorf("group_by=%s: expected charger, session, hour or day", groupBy))
+			return
+		}
+
+		chargePointId := r.URL.Query().Get("charge_point_id")
+		userGroup := r.URL.Query().Get("group")
+		log = log.With(
+			slog.Time("from", from),
+			slog.Time("to", to),
+			slog.String("charge_point_id", chargePointId),
+			slog.String("group", userGroup),
+			slog.String("group_by", groupBy),
+		)
+
+		data, err := handler.PowerStatsReport(ctx, user, from, to, chargePointId, userGroup, groupBy)
+		if err != nil {
+			web.Fail(w, r, log, 400, "Failed to get report data", err)
+			return
+		}
+		web.OK(w, r, log, "power report", data)
 	}
 }
 

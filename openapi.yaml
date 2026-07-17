@@ -960,6 +960,66 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /report/power:
+    get:
+      tags: [Reports]
+      summary: Power report
+      description: >-
+        Power statistics derived from the meter values of finished charging
+        sessions. Unlike the totals reports, `group` is optional: when it is
+        omitted every session in the range is included.
+      operationId: getPowerReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: Start date (RFC3339 format)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          description: End date (RFC3339 format)
+          schema:
+            type: string
+            format: date-time
+        - name: group_by
+          in: query
+          description: >-
+            How rows are aggregated. `charger` and `session` report per-session
+            peaks; `hour` and `day` report fleet output over time, where
+            max_power is the concurrent draw across all sessions.
+          schema:
+            type: string
+            enum: [charger, session, hour, day]
+            default: charger
+        - name: charge_point_id
+          in: query
+          description: Optional filter by charge point ID
+          schema:
+            type: string
+        - name: group
+          in: query
+          description: Optional filter by user group; omit to include all sessions
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Power statistics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PowerStats'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /report/uptime:
     get:
       tags: [Reports]
@@ -1784,6 +1844,71 @@ components:
         connector_id:
           type: integer
           minimum: 0
+
+    PowerStats:
+      type: object
+      description: >-
+        One row of the power report. Power is in watts and energy in
+        watt-hours. Which identifying fields are present depends on group_by.
+      properties:
+        charge_point_id:
+          type: string
+          description: Station identifier; set for charger and session groupings
+        transaction_id:
+          type: integer
+          description: Session identifier; set for the session grouping only
+        date:
+          type: string
+          format: date
+          description: Bucket date; set for the hour and day groupings
+        hour:
+          type: integer
+          description: Bucket hour (0-23); set for the hour grouping only
+        sessions:
+          type: integer
+          format: int64
+          description: >-
+            Charging sessions in the group. For hour and day groupings a session
+            spanning several buckets is counted in each, so this column does not
+            sum to a period total.
+        total_consumed:
+          type: number
+          format: double
+          description: >-
+            Energy in watt-hours. Metered (meter_stop - meter_start) for charger
+            and session groupings; integrated from fleet power for hour and day.
+        duration_seconds:
+          type: integer
+          format: int64
+          description: >-
+            Elapsed session time for charger and session groupings; seconds the
+            fleet spent charging for hour and day.
+        avg_charging_power:
+          type: number
+          format: double
+          description: >-
+            Sample-weighted mean power over samples that were actually drawing,
+            so idle time within a session does not deflate it.
+        avg_session_power:
+          type: number
+          format: double
+          description: >-
+            Energy divided by elapsed session time, so unlike avg_charging_power
+            it includes idle time. Zero for the hour and day groupings.
+        max_power:
+          type: number
+          format: double
+          description: >-
+            Peak power. For charger and session groupings this is the highest
+            single sample; for hour and day it is the highest concurrent draw
+            across all sessions, i.e. peak load. The two are not comparable.
+        samples:
+          type: integer
+          format: int64
+          description: >-
+            Meter values behind the power figures: charging samples for charger
+            and session rows, charging minutes for hour and day rows. The power
+            figures carry no meaning where this is zero.
 
     StationUptime:
       type: object

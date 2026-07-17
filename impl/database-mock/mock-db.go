@@ -761,6 +761,10 @@ func (db *MockDB) TotalsByHour(_ context.Context, from, to time.Time, userGroup 
 	return nil, nil
 }
 
+func (db *MockDB) PowerStats(_ context.Context, from, to time.Time, chargePointId, userGroup, groupBy string) ([]*entity.PowerStats, error) {
+	return nil, nil
+}
+
 func (db *MockDB) StationUptime(_ context.Context, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error) {
 	return nil, nil
 }

@@ -857,6 +857,14 @@ func (c *Core) ExportStats(ctx context.Context, user *entity.User, from, to time
 	return c.reports.TotalsByHour(ctx, from, to, userGroup)
 }
 
+func (c *Core) PowerStatsReport(ctx context.Context, user *entity.User, from, to time.Time, chargePointId, userGroup, groupBy string) ([]*entity.PowerStats, error) {
+	err := c.checkSubsystemAccess(user, subSystemReports)
+	if err != nil {
+		return nil, err
+	}
+	return c.reports.PowerStats(ctx, from, to, chargePointId, userGroup, groupBy)
+}
+
 func (c *Core) StationUptimeReport(ctx context.Context, user *entity.User, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error) {
 	err := c.checkSubsystemAccess(user, subSystemReports)
 	if err != nil {

@@ -70,8 +70,8 @@ func findMany[T any](m *MongoDB, ctx context.Context, colName string, filter any
 }
 
 // aggregateMany runs an aggregation pipeline and decodes all documents into a []T.
-func aggregateMany[T any](m *MongoDB, ctx context.Context, colName string, pipeline any) ([]T, error) {
-	cursor, err := m.col(colName).Aggregate(ctx, pipeline)
+func aggregateMany[T any](m *MongoDB, ctx context.Context, colName string, pipeline any, opts ...*options.AggregateOptions) ([]T, error) {
+	cursor, err := m.col(colName).Aggregate(ctx, pipeline, opts...)
 	if err != nil {
 		return nil, m.findError(err)
 	}
