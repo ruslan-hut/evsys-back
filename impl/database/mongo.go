@@ -477,7 +477,7 @@ func (m *MongoDB) UpdateChargePoint(ctx context.Context, level int, chargePoint 
 		{"charge_point_id": chargePoint.Id},
 		{"access_level": bson.M{"$lte": level}},
 	}}
-	update := bson.M{"$set": bson.D{
+	fields := bson.D{
 		{Key: "title", Value: chargePoint.Title},
 		{Key: "description", Value: chargePoint.Description},
 		{Key: "address", Value: chargePoint.Address},
@@ -485,7 +485,13 @@ func (m *MongoDB) UpdateChargePoint(ctx context.Context, level int, chargePoint 
 		{Key: "access_level", Value: chargePoint.AccessLevel},
 		{Key: "location.latitude", Value: chargePoint.Location.Latitude},
 		{Key: "location.longitude", Value: chargePoint.Location.Longitude},
-	}}
+	}
+	// Only written when the request carried it, so clients that don't know the
+	// field cannot silently disable meter value triggering.
+	if chargePoint.TriggerMessage != nil {
+		fields = append(fields, bson.E{Key: "trigger_message", Value: *chargePoint.TriggerMessage})
+	}
+	update := bson.M{"$set": fields}
 	result, err := collection.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return fmt.Errorf("update charge point: %v", err)

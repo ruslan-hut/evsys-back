@@ -34,6 +34,10 @@ type ChargePoint struct {
 	AccessLevel     int          `json:"access_level" bson:"access_level" validate:"omitempty"`
 	Location        GeoLocation  `json:"location" bson:"location" validate:"omitempty"`
 	Connectors      []*Connector `json:"connectors" bson:"connectors" validate:"omitempty,dive"`
+	// TriggerMessage controls whether the central system actively triggers
+	// MeterValues during a transaction. A pointer so that a request omitting it
+	// leaves the stored value alone instead of disabling triggering.
+	TriggerMessage *bool `json:"trigger_message,omitempty" bson:"trigger_message,omitempty"`
 }
 
 func (cp *ChargePoint) GetConnector(id int) (*Connector, error) {
