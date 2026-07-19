@@ -28,6 +28,25 @@ type ChargeState struct {
 	PaymentPlan        *PaymentPlan       `json:"payment_plan,omitempty" bson:"payment_plan,omitempty" validate:"omitempty"`
 	PaymentMethod      *PaymentMethod     `json:"payment_method,omitempty" bson:"payment_method,omitempty" validate:"omitempty"`
 	PaymentOrders      []PaymentOrder     `json:"payment_orders,omitempty" bson:"payment_orders,omitempty" validate:"omitempty,dive"`
+
+	// Carried through from Transaction so the detail view has the same data as
+	// the transactions list, which serializes Transaction directly.
+	SessionId       string         `json:"session_id,omitempty" bson:"session_id,omitempty" validate:"omitempty"`
+	IsFinished      bool           `json:"is_finished" bson:"is_finished"`
+	Username        string         `json:"username,omitempty" bson:"username,omitempty" validate:"omitempty"`
+	IdTagNote       string         `json:"id_tag_note,omitempty" bson:"id_tag_note,omitempty" validate:"omitempty"`
+	UserTag         *UserTag       `json:"user_tag,omitempty" bson:"user_tag,omitempty" validate:"omitempty"`
+	ReservationId   *int           `json:"reservation_id,omitempty" bson:"reservation_id,omitempty" validate:"omitempty,min=0"`
+	MeterStop       int            `json:"meter_stop" bson:"meter_stop" validate:"min=0"`
+	TimeStop        time.Time      `json:"time_stop" bson:"time_stop"`
+	Reason          string         `json:"reason,omitempty" bson:"reason,omitempty" validate:"omitempty,stop_reason"`
+	PaymentAmount   int            `json:"payment_amount" bson:"payment_amount" validate:"min=0"`
+	PaymentOrder    int            `json:"payment_order" bson:"payment_order" validate:"min=0"`
+	PaymentError    string         `json:"payment_error,omitempty" bson:"payment_error,omitempty"`
+	Tariff          *Tariff        `json:"tariff,omitempty" bson:"tariff,omitempty" validate:"omitempty"`
+	ProtocolVersion string         `json:"protocol_version,omitempty" bson:"protocol_version,omitempty" validate:"omitempty"`
+	EvseId          *int           `json:"evse_id,omitempty" bson:"evse_id,omitempty" validate:"omitempty,min=0"`
+	Metadata        map[string]any `json:"metadata,omitempty" bson:"metadata,omitempty"`
 }
 
 func (cs *ChargeState) CheckState() {

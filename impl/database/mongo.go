@@ -585,6 +585,23 @@ func (m *MongoDB) getTransactionState(ctx context.Context, userId string, level 
 		PaymentPlan:        transaction.Plan,
 		PaymentMethod:      transaction.PaymentMethod,
 		PaymentOrders:      transaction.PaymentOrders,
+
+		SessionId:       transaction.SessionId,
+		IsFinished:      transaction.IsFinished,
+		Username:        transaction.Username,
+		IdTagNote:       transaction.IdTagNote,
+		UserTag:         transaction.UserTag,
+		ReservationId:   transaction.ReservationId,
+		MeterStop:       transaction.MeterStop,
+		TimeStop:        transaction.TimeStop,
+		Reason:          transaction.Reason,
+		PaymentAmount:   transaction.PaymentAmount,
+		PaymentOrder:    transaction.PaymentOrder,
+		PaymentError:    transaction.PaymentError,
+		Tariff:          transaction.Tariff,
+		ProtocolVersion: transaction.ProtocolVersion,
+		EvseId:          transaction.EvseId,
+		Metadata:        transaction.Metadata,
 	}
 
 	return &chargeState, nil
