@@ -2,6 +2,56 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Linked Projects
+
+| Repository | Local path | Role |
+|---|---|---|
+| [evsys](https://github.com/ruslan-hut/evsys) | `~/projects/evsys` | OCPP central system; writes the MongoDB documents this service reads |
+| [evsys-front](https://github.com/ruslan-hut/evsys-front) | `~/projects/evsys-front` | Angular web app (operator/admin) |
+| Wattbrews | `~/projects/Wattbrews` | Android app, Jetpack Compose + Kotlin (`energy.h2plt.evcharge`); REST + WebSocket |
+| wattbrews-web | `~/projects/wattbrews-web` | Angular 21 web app; REST + one global WebSocket |
+
+### Rule: this API has clients that cannot be updated in lockstep
+
+evsys-front is only one of four consumers. The Android app in particular ships
+through the Play Store and released versions stay in use long after a deploy -
+a user on an old build cannot be made to upgrade. **Treat every response shape
+and endpoint as a published contract.**
+
+Safe:
+- Adding a field to a response
+- Adding an endpoint
+- Adding an optional request field, decoded as a pointer so an absent value is
+  distinguishable from a zero one and leaves stored data alone
+
+Breaking - needs a new endpoint or an explicit version, never an edit in place:
+- Removing or renaming a response field, or changing its type or units
+- Making an optional request field required, or tightening validation
+- Changing an endpoint's path, method, or status codes
+
+No compile error will warn about a break - the clients are separate codebases.
+Before changing a shape, grep all four for the JSON field name:
+
+```bash
+grep -rn "field_name" ~/projects/evsys-front/src ~/projects/wattbrews-web/src \
+  ~/projects/Wattbrews/app/src
+```
+
+### Rule: entity structs mirror evsys, by hand
+
+evsys owns the schema and writes the documents; the structs in `entity/` are a
+hand-maintained copy. Go's BSON decoder ignores document fields with no
+matching struct member, so a field added in evsys reaches no client and nothing
+fails loudly. When a field appears in `~/projects/evsys/entity/`, mirror it
+here with the same bson tag, add it to `ChargeState` in
+`entity/charge_state.go` if it belongs to a transaction - the transaction
+detail endpoint returns that DTO, not the entity - and carry it into the
+mapping in `impl/database/mongo.go`.
+
+`UpdateChargePoint` writes a named `$set` list rather than replacing the
+document, which is what keeps fields this service does not model from being
+wiped on save. Keep it that way.
+
 ## Build and Run Commands
 
 ```bash
