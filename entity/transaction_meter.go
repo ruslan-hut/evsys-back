@@ -3,9 +3,14 @@ package entity
 import "time"
 
 type TransactionMeter struct {
-	Id              int       `json:"transaction_id" bson:"transaction_id" validate:"required,min=1"`
-	Value           int       `json:"value" bson:"value" validate:"min=0"`
-	PowerRate       int       `json:"power_rate" bson:"power_rate" validate:"min=0"`
+	Id        int `json:"transaction_id" bson:"transaction_id" validate:"required,min=1"`
+	Value     int `json:"value" bson:"value" validate:"min=0"`
+	PowerRate int `json:"power_rate" bson:"power_rate" validate:"min=0"`
+	// PowerRateWh is PowerRate expressed in kW. PowerActive is the value the
+	// charger reported itself, where PowerRate may instead be derived from the
+	// difference between consecutive meter readings.
+	PowerRateWh     float64   `json:"power_rate_wh" bson:"power_rate_wh" validate:"min=0"`
+	PowerActive     int       `json:"power_active" bson:"power_active" validate:"min=0"`
 	BatteryLevel    int       `json:"battery_level" bson:"battery_level" validate:"min=0,max=100"`
 	ConsumedEnergy  int       `json:"consumed_energy" bson:"consumed_energy" validate:"min=0"`
 	Price           int       `json:"price" bson:"price" validate:"min=0"`

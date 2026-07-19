@@ -42,6 +42,12 @@ func NormalizeMeterValues(meterValues []entity.TransactionMeter, newLength int) 
 			p1 := float64(meterValues[lowerIndex].PowerRate)
 			p2 := float64(meterValues[upperIndex].PowerRate)
 			normalized[i].PowerRate = int(interpolate(originalIndex, float64(lowerIndex), float64(upperIndex), p1, p2))
+			// Kept in step with PowerRate rather than carrying the lower
+			// sample's raw value, which would break power_rate == power_rate_wh * 1000.
+			normalized[i].PowerRateWh = float64(normalized[i].PowerRate) / 1000
+			a1 := float64(meterValues[lowerIndex].PowerActive)
+			a2 := float64(meterValues[upperIndex].PowerActive)
+			normalized[i].PowerActive = int(interpolate(originalIndex, float64(lowerIndex), float64(upperIndex), a1, a2))
 		}
 	}
 	return normalized
