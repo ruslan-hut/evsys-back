@@ -14,5 +14,5 @@ type Connector struct {
 	VendorId      string    `json:"vendor_id" bson:"vendor_id" validate:"omitempty"`
 	ErrorCode     string    `json:"error_code" bson:"error_code" validate:"omitempty"`
 	Power         int       `json:"power" bson:"power" validate:"min=0"`
-	TransactionId int       `json:"current_transaction_id" bson:"current_transaction_id" validate:"min=0"`
+	TransactionId int       `json:"current_transaction_id" bson:"current_transaction_id"`
 }
