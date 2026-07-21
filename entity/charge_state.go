@@ -18,6 +18,7 @@ type ChargeState struct {
 	Duration           int                `json:"duration" bson:"duration" validate:"min=0"`
 	Consumed           int                `json:"consumed" bson:"consumed" validate:"min=0"`
 	PowerRate          int                `json:"power_rate" bson:"power_rate" validate:"min=0"`
+	PowerLimit         int                `json:"power_limit" bson:"power_limit" validate:"min=0"`
 	Price              int                `json:"price" bson:"price" validate:"min=0"`
 	PaymentBilled      int                `json:"payment_billed" bson:"payment_billed" validate:"min=0"`
 	Status             string             `json:"status" bson:"status" validate:"omitempty,connector_status"`

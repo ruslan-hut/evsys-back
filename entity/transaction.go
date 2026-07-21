@@ -44,6 +44,7 @@ type Transaction struct {
 	UserTag         *UserTag           `json:"user_tag,omitempty" bson:"user_tag,omitempty" validate:"omitempty"`
 	ProtocolVersion string             `json:"protocol_version,omitempty" bson:"protocol_version,omitempty" validate:"omitempty"`
 	EvseId          *int               `json:"evse_id,omitempty" bson:"evse_id,omitempty" validate:"omitempty,min=0"`
+	PowerLimit      int                `json:"power_limit" bson:"power_limit" validate:"min=0"`
 	Metadata        map[string]any     `json:"metadata,omitempty" bson:"metadata,omitempty"`
 }
 

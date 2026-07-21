@@ -581,6 +581,7 @@ func (m *MongoDB) getTransactionState(ctx context.Context, userId string, level 
 		MeterStart:         transaction.MeterStart,
 		Consumed:           consumed,
 		PowerRate:          powerRate,
+		PowerLimit:         transaction.PowerLimit,
 		Price:              price,
 		PaymentBilled:      transaction.PaymentBilled,
 		Status:             connector.Status,
