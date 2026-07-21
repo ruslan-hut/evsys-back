@@ -15,4 +15,6 @@ type Connector struct {
 	ErrorCode     string    `json:"error_code" bson:"error_code" validate:"omitempty"`
 	Power         int       `json:"power" bson:"power" validate:"min=0"`
 	TransactionId int       `json:"current_transaction_id" bson:"current_transaction_id"`
+	// CurrentPowerLimit is the active charging current limit in amperes.
+	CurrentPowerLimit int `json:"current_power_limit" bson:"current_power_limit" validate:"min=0"`
 }
