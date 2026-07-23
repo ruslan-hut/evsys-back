@@ -14,26 +14,33 @@ const (
 )
 
 type ChargePoint struct {
-	Id              string       `json:"charge_point_id" bson:"charge_point_id" validate:"required"`
-	IsEnabled       bool         `json:"is_enabled" bson:"is_enabled"`
-	Title           string       `json:"title" bson:"title" validate:"omitempty"`
-	Description     string       `json:"description,omitempty" bson:"description" validate:"omitempty"`
-	Model           string       `json:"model" bson:"model" validate:"omitempty"`
-	SerialNumber    string       `json:"serial_number,omitempty" bson:"serial_number" validate:"omitempty"`
-	Vendor          string       `json:"vendor,omitempty" bson:"vendor" validate:"omitempty"`
-	FirmwareVersion string       `json:"firmware_version,omitempty" bson:"firmware_version" validate:"omitempty"`
-	Status          string       `json:"status" bson:"status" validate:"omitempty,connector_status"`
-	ErrorCode       string       `json:"error_code" bson:"error_code" validate:"omitempty"`
-	Info            string       `json:"info,omitempty" bson:"info" validate:"omitempty"`
-	LastSeen        string       `json:"last_seen" bson:"last_seen" validate:"omitempty"` // deprecated
-	EventTime       time.Time    `json:"event_time" bson:"event_time" validate:"omitempty"`
-	IsOnline        bool         `json:"is_online" bson:"is_online"`
-	StatusTime      time.Time    `json:"status_time" bson:"status_time" validate:"omitempty"`
-	Address         string       `json:"address" bson:"address" validate:"omitempty"`
-	AccessType      string       `json:"access_type" bson:"access_type" validate:"omitempty"`
-	AccessLevel     int          `json:"access_level" bson:"access_level" validate:"omitempty"`
-	Location        GeoLocation  `json:"location" bson:"location" validate:"omitempty"`
-	Connectors      []*Connector `json:"connectors" bson:"connectors" validate:"omitempty,dive"`
+	Id              string      `json:"charge_point_id" bson:"charge_point_id" validate:"required"`
+	IsEnabled       bool        `json:"is_enabled" bson:"is_enabled"`
+	Title           string      `json:"title" bson:"title" validate:"omitempty"`
+	Description     string      `json:"description,omitempty" bson:"description" validate:"omitempty"`
+	Model           string      `json:"model" bson:"model" validate:"omitempty"`
+	SerialNumber    string      `json:"serial_number,omitempty" bson:"serial_number" validate:"omitempty"`
+	Vendor          string      `json:"vendor,omitempty" bson:"vendor" validate:"omitempty"`
+	FirmwareVersion string      `json:"firmware_version,omitempty" bson:"firmware_version" validate:"omitempty"`
+	Status          string      `json:"status" bson:"status" validate:"omitempty,connector_status"`
+	ErrorCode       string      `json:"error_code" bson:"error_code" validate:"omitempty"`
+	Info            string      `json:"info,omitempty" bson:"info" validate:"omitempty"`
+	LastSeen        string      `json:"last_seen" bson:"last_seen" validate:"omitempty"` // deprecated
+	EventTime       time.Time   `json:"event_time" bson:"event_time" validate:"omitempty"`
+	IsOnline        bool        `json:"is_online" bson:"is_online"`
+	StatusTime      time.Time   `json:"status_time" bson:"status_time" validate:"omitempty"`
+	Address         string      `json:"address" bson:"address" validate:"omitempty"`
+	AccessType      string      `json:"access_type" bson:"access_type" validate:"omitempty"`
+	AccessLevel     int         `json:"access_level" bson:"access_level" validate:"omitempty"`
+	Location        GeoLocation `json:"location" bson:"location" validate:"omitempty"`
+	// LocationId groups charge points under a location (the locations collection);
+	// empty on charge points not assigned to one.
+	LocationId string `json:"location_id" bson:"location_id" validate:"omitempty"`
+	// SmartCharging reports whether the central system manages this charge
+	// point's power limits. Only smart-charging charge points have a meaningful
+	// profile verdict to show.
+	SmartCharging bool         `json:"smart_charging" bson:"smart_charging"`
+	Connectors    []*Connector `json:"connectors" bson:"connectors" validate:"omitempty,dive"`
 	// TriggerMessage controls whether the central system actively triggers
 	// MeterValues during a transaction. A pointer so that a request omitting it
 	// leaves the stored value alone instead of disabling triggering.
