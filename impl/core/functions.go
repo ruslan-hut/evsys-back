@@ -48,6 +48,15 @@ func NormalizeMeterValues(meterValues []entity.TransactionMeter, newLength int) 
 			a1 := float64(meterValues[lowerIndex].PowerActive)
 			a2 := float64(meterValues[upperIndex].PowerActive)
 			normalized[i].PowerActive = int(interpolate(originalIndex, float64(lowerIndex), float64(upperIndex), a1, a2))
+			// Interpolated alongside PowerActive: these are plotted against it,
+			// and carrying the lower sample's raw value would put a downsampled
+			// curve out of step with the power it is meant to explain.
+			normalized[i].Voltage = interpolate(originalIndex, float64(lowerIndex), float64(upperIndex),
+				meterValues[lowerIndex].Voltage, meterValues[upperIndex].Voltage)
+			normalized[i].CurrentImport = interpolate(originalIndex, float64(lowerIndex), float64(upperIndex),
+				meterValues[lowerIndex].CurrentImport, meterValues[upperIndex].CurrentImport)
+			normalized[i].CurrentOffered = interpolate(originalIndex, float64(lowerIndex), float64(upperIndex),
+				meterValues[lowerIndex].CurrentOffered, meterValues[upperIndex].CurrentOffered)
 		}
 	}
 	return normalized
