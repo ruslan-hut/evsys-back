@@ -63,6 +63,11 @@ type RedsysClient interface {
 	// the web "add card" redirect flow. Used by POST /payment/order
 	// when mode == "web".
 	BuildEntryForm(req EntryFormRequest) (*EntryFormResponse, error)
+	// VerifyNotification authenticates an inbound Redsys notification.
+	// merchantParams is the encoded Ds_MerchantParameters as received and
+	// orderNumber the Ds_Order it decodes to. Returns nil when the
+	// signature matches the merchant secret.
+	VerifyNotification(merchantParams, signature, orderNumber string) error
 }
 
 // EntryFormRequest asks the Redsys adapter for a signed hosted-form
@@ -1491,6 +1496,21 @@ func (c *Core) Notify(ctx context.Context, data []byte) error {
 	paymentResult, err := c.decodePaymentParameters(merchantParams)
 	if err != nil {
 		return err
+	}
+
+	// The endpoint is public: nothing but the signature separates a genuine
+	// Redsys callback from a forged one, and the payload below enrolls card
+	// tokens and closes orders. Reject anything that does not verify.
+	if c.redsys == nil {
+		c.log.Error("notification rejected: redsys client not configured")
+		return fmt.Errorf("redsys client not configured")
+	}
+	if err = c.redsys.VerifyNotification(merchantParams, params.Get("Ds_Signature"), paymentResult.Order); err != nil {
+		c.log.With(
+			slog.String("order", paymentResult.Order),
+			sl.Err(err),
+		).Error("notification signature verification failed")
+		return fmt.Errorf("verify notification: %w", err)
 	}
 
 	c.runAsync("processNotifyResponse", func(ctx context.Context) {

@@ -222,6 +222,18 @@ func (c *Client) Refund(ctx context.Context, req core.RefundRequest) (*core.Capt
 	return c.performSimpleTransaction(ctx, req.OrderNumber, req.Amount, TransactionTypeRefund)
 }
 
+// VerifyNotification authenticates an async Redsys notification. The endpoint
+// that receives it is public, so this is the only thing that distinguishes a
+// genuine callback from a forged one — an unverified notification carrying a
+// card token would enroll that card against a user.
+//
+// merchantParams must be the Base64 Ds_MerchantParameters string exactly as
+// received (the signature covers the encoded form, not the decoded JSON), and
+// orderNumber the Ds_Order it decodes to.
+func (c *Client) VerifyNotification(merchantParams, signature, orderNumber string) error {
+	return VerifySignature(merchantParams, signature, c.config.SecretKey, orderNumber)
+}
+
 // performMITTransaction executes a Merchant Initiated Transaction with stored credentials.
 // Used by both Preauthorize (type "1") and Pay (type "0").
 func (c *Client) performMITTransaction(ctx context.Context, orderNumber string, amount int, cardToken, cofTid, txType string) (*core.CaptureResponse, error) {

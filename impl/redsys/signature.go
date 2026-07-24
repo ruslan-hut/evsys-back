@@ -38,6 +38,58 @@ func GenerateSignature(merchantParams, secretKey, orderNumber string) (string, e
 	return base64.StdEncoding.EncodeToString(signature), nil
 }
 
+// VerifySignature checks the Ds_Signature of an inbound Redsys message
+// (the async notification posted to /payment/notify) against the merchant
+// secret.
+//
+// The signature is computed over the *encoded* Ds_MerchantParameters string
+// exactly as received, with the HMAC key diversified by the order number the
+// notification itself carries (Ds_Order). Redsys returns the signature in
+// URL-safe Base64 ("-" and "_"), while the REST API uses the standard
+// alphabet, so both encodings are accepted.
+func VerifySignature(merchantParams, signature, secretKey, orderNumber string) error {
+	if signature == "" {
+		return fmt.Errorf("missing signature")
+	}
+
+	expected, err := GenerateSignature(merchantParams, secretKey, orderNumber)
+	if err != nil {
+		return err
+	}
+
+	expectedRaw, err := base64.StdEncoding.DecodeString(expected)
+	if err != nil {
+		return fmt.Errorf("failed to decode expected signature: %w", err)
+	}
+
+	receivedRaw, err := decodeSignature(signature)
+	if err != nil {
+		return err
+	}
+
+	if !hmac.Equal(expectedRaw, receivedRaw) {
+		return fmt.Errorf("signature mismatch")
+	}
+	return nil
+}
+
+// decodeSignature decodes a Base64 signature accepting both the standard and
+// the URL-safe alphabet, with or without padding.
+func decodeSignature(signature string) ([]byte, error) {
+	encodings := []*base64.Encoding{
+		base64.StdEncoding,
+		base64.URLEncoding,
+		base64.RawStdEncoding,
+		base64.RawURLEncoding,
+	}
+	for _, enc := range encodings {
+		if raw, err := enc.DecodeString(signature); err == nil {
+			return raw, nil
+		}
+	}
+	return nil, fmt.Errorf("failed to decode signature")
+}
+
 // encrypt3DES encrypts plaintext using 3DES in CBC mode with zero-padding.
 // Redsys-specific requirements (mandated by their API specification):
 // 1. Fixed all-zero IV (not cryptographically secure but required)
