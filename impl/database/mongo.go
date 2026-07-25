@@ -151,7 +151,11 @@ func (m *MongoDB) Close() error {
 	return nil
 }
 
-func (m *MongoDB) read(ctx context.Context, table, dataType string) (any, error) {
+// maxLogRecords caps how many records a single log request may return, no
+// matter what limit the client asks for.
+const maxLogRecords int64 = 50000
+
+func (m *MongoDB) read(ctx context.Context, table, dataType string, logFilter *entity.LogFilter) (any, error) {
 	var logMessages any
 	timeFieldName := "timestamp"
 
@@ -166,10 +170,33 @@ func (m *MongoDB) read(ctx context.Context, table, dataType string) (any, error)
 
 	collection := m.col(table)
 	filter := bson.D{}
-	opts := options.Find().SetSort(bson.D{{Key: timeFieldName, Value: -1}})
-	if m.logRecordsNumber > 0 {
-		opts.SetLimit(m.logRecordsNumber)
+	limit := m.logRecordsNumber
+
+	if logFilter != nil {
+		period := bson.D{}
+		if logFilter.From != nil {
+			period = append(period, bson.E{Key: "$gte", Value: *logFilter.From})
+		}
+		if logFilter.To != nil {
+			period = append(period, bson.E{Key: "$lte", Value: *logFilter.To})
+		}
+		if len(period) > 0 {
+			filter = append(filter, bson.E{Key: timeFieldName, Value: period})
+		}
+		// only the system log records a charge point
+		if logFilter.ChargePointId != "" && dataType == entity.FeatureMessageType {
+			filter = append(filter, bson.E{Key: "charge_point_id", Value: logFilter.ChargePointId})
+		}
+		if logFilter.Limit > 0 {
+			limit = logFilter.Limit
+		}
 	}
+
+	if limit <= 0 || limit > maxLogRecords {
+		limit = maxLogRecords
+	}
+
+	opts := options.Find().SetSort(bson.D{{Key: timeFieldName, Value: -1}}).SetLimit(limit)
 	cursor, err := collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, m.findError(err)
@@ -180,14 +207,14 @@ func (m *MongoDB) read(ctx context.Context, table, dataType string) (any, error)
 	return logMessages, nil
 }
 
-func (m *MongoDB) ReadLog(ctx context.Context, logName string) (any, error) {
+func (m *MongoDB) ReadLog(ctx context.Context, logName string, filter *entity.LogFilter) (any, error) {
 	switch logName {
 	case "sys":
-		return m.read(ctx, collectionSysLog, entity.FeatureMessageType)
+		return m.read(ctx, collectionSysLog, entity.FeatureMessageType, filter)
 	case "back":
-		return m.read(ctx, collectionBackLog, entity.LogMessageType)
+		return m.read(ctx, collectionBackLog, entity.LogMessageType, filter)
 	case "pay":
-		return m.read(ctx, collectionPaymentLog, entity.LogMessageType)
+		return m.read(ctx, collectionPaymentLog, entity.LogMessageType, filter)
 	default:
 		return nil, fmt.Errorf("unknown log name: %s", logName)
 	}

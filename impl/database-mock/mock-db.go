@@ -711,7 +711,7 @@ func (db *MockDB) GetPaymentParameters(orderId string) (*entity.PaymentParameter
 
 // --- Locations and Charge Points ---
 
-func (db *MockDB) ReadLog(_ context.Context, logName string) (any, error) {
+func (db *MockDB) ReadLog(_ context.Context, logName string, _ *entity.LogFilter) (any, error) {
 	return nil, nil
 }
 

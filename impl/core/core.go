@@ -390,8 +390,8 @@ func (c *Core) GetConfig(ctx context.Context, name string) (any, error) {
 	return c.repo.GetConfig(ctx, name)
 }
 
-func (c *Core) GetLog(ctx context.Context, name string) (any, error) {
-	return c.repo.ReadLog(ctx, name)
+func (c *Core) GetLog(ctx context.Context, name string, filter *entity.LogFilter) (any, error) {
+	return c.repo.ReadLog(ctx, name, filter)
 }
 
 func (c *Core) AuthenticateByToken(ctx context.Context, token string) (*entity.User, error) {
