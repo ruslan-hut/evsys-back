@@ -12,6 +12,7 @@ import (
 	"evsys-back/internal/api/handlers/transactions"
 	"evsys-back/internal/api/handlers/users"
 	"evsys-back/internal/api/handlers/usertags"
+	"evsys-back/internal/api/handlers/webhooks"
 	"evsys-back/internal/api/middleware/apikey"
 	"evsys-back/internal/api/middleware/authenticate"
 	"evsys-back/internal/api/middleware/authorize"
@@ -55,6 +56,7 @@ type Core interface {
 	payments.RetryQueue
 	report.Reports
 	mail.Handler
+	webhooks.Handler
 
 	websocket.Core
 }
@@ -122,6 +124,13 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 
 				r.Get("/payment/retries", payments.RetryQueueList(log, core))
 				r.Post("/payment/retries/{transactionId}/force", payments.RetryQueueForce(log, core))
+
+				r.Get("/webhooks/subscribers", webhooks.List(log, core))
+				r.Post("/webhooks/subscribers", webhooks.Create(log, core))
+				r.Put("/webhooks/subscribers/{id}", webhooks.Update(log, core))
+				r.Delete("/webhooks/subscribers/{id}", webhooks.Delete(log, core))
+				r.Get("/webhooks/health", webhooks.Health(log, core))
+				r.Get("/webhooks/failures", webhooks.Failures(log, core))
 			})
 
 			r.Post("/csc", centralsystem.Command(log, core))

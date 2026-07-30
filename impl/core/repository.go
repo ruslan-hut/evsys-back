@@ -68,4 +68,11 @@ type Repository interface {
 	GetMailSubscription(ctx context.Context, id string) (*entity.MailSubscription, error)
 	SaveMailSubscription(ctx context.Context, sub *entity.MailSubscription) (*entity.MailSubscription, error)
 	DeleteMailSubscription(ctx context.Context, id string) error
+
+	// Webhook subscribers and delivery health (collections written by evsys)
+	ListWebhookSubscribers(ctx context.Context) ([]*entity.WebhookSubscriber, error)
+	SaveWebhookSubscriber(ctx context.Context, sub *entity.WebhookSubscriber) (*entity.WebhookSubscriber, error)
+	DeleteWebhookSubscriber(ctx context.Context, id string) error
+	GetWebhookOutboxStats(ctx context.Context) ([]*entity.WebhookOutboxStats, error)
+	ListWebhookProblemDeliveries(ctx context.Context, limit int) ([]*entity.WebhookDeliveryView, error)
 }

@@ -217,6 +217,22 @@ Admin/operator only (`RequirePowerUser`):
 
 `period` is one of `daily | weekly | monthly`. `user_group` matches the same value the frontend statistic page sends as the `group` query param (e.g. `default`, `office`).
 
+## Webhook Admin API Endpoints
+
+Admin/operator only (`RequirePowerUser`). Manages the `webhook_subscribers` /
+`webhook_outbox` collections written and consumed by evsys (protocol contract:
+evsys `docs/WEBHOOKS.md`):
+- `GET    /api/v1/webhooks/subscribers`      — List all subscribers (incl. disabled)
+- `POST   /api/v1/webhooks/subscribers`      — Create `{name, url, token, events[], is_enabled}`
+- `PUT    /api/v1/webhooks/subscribers/{id}` — Update subscriber
+- `DELETE /api/v1/webhooks/subscribers/{id}` — Delete subscriber (outbox history kept)
+- `GET    /api/v1/webhooks/health`           — Per-subscriber counters: pending/delivered/failed, oldest_pending, last_delivered
+- `GET    /api/v1/webhooks/failures`         — Last 100 failed or retrying deliveries (no payload bytes)
+
+`name` must stay unique (evsys enforces a unique index). `events` entries are
+exact types (`transaction.start`), prefix wildcards (`transaction.*`) or `*`.
+evsys picks up subscriber changes within one minute, no restart needed.
+
 ## Deployment
 
 CI/CD via GitHub Actions (`.github/workflows/deploy.yml`):

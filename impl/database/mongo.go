@@ -36,6 +36,10 @@ const (
 	collectionPreauthorizations = "preauthorizations"
 	collectionPaymentRetries    = "payment_retries"
 	collectionMailSubscriptions = "mail_subscriptions"
+
+	// written by evsys; see evsys docs/WEBHOOKS.md for the schema contract
+	collectionWebhookSubscribers = "webhook_subscribers"
+	collectionWebhookOutbox      = "webhook_outbox"
 )
 
 type MongoDB struct {
@@ -1350,4 +1354,84 @@ func (m *MongoDB) SaveMailSubscription(ctx context.Context, sub *entity.MailSubs
 // DeleteMailSubscription removes a subscription by id.
 func (m *MongoDB) DeleteMailSubscription(ctx context.Context, id string) error {
 	return m.deleteOne(ctx, collectionMailSubscriptions, bson.D{{Key: "_id", Value: id}}, "subscription")
+}
+
+// ListWebhookSubscribers returns all webhook subscribers ordered by creation time.
+func (m *MongoDB) ListWebhookSubscribers(ctx context.Context) ([]*entity.WebhookSubscriber, error) {
+	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}})
+	return findMany[*entity.WebhookSubscriber](m, ctx, collectionWebhookSubscribers, bson.M{}, opts)
+}
+
+// SaveWebhookSubscriber inserts a new subscriber or updates an existing one. The
+// name carries a unique index created by evsys migration 004, so a duplicate name
+// surfaces as an insert/update error.
+func (m *MongoDB) SaveWebhookSubscriber(ctx context.Context, sub *entity.WebhookSubscriber) (*entity.WebhookSubscriber, error) {
+	collection := m.col(collectionWebhookSubscribers)
+	now := time.Now().UTC()
+	sub.UpdatedAt = now
+	if sub.Id == "" {
+		sub.Id = primitive.NewObjectID().Hex()
+		sub.CreatedAt = now
+		if _, err := collection.InsertOne(ctx, sub); err != nil {
+			return nil, err
+		}
+		return sub, nil
+	}
+	update := bson.M{"$set": bson.M{
+		"name":       sub.Name,
+		"url":        sub.URL,
+		"token":      sub.Token,
+		"events":     sub.Events,
+		"is_enabled": sub.IsEnabled,
+		"updated_at": sub.UpdatedAt,
+	}}
+	if err := m.updateOne(ctx, collectionWebhookSubscribers, bson.D{{Key: "_id", Value: sub.Id}}, update, "webhook subscriber"); err != nil {
+		return nil, err
+	}
+	return sub, nil
+}
+
+// DeleteWebhookSubscriber removes a subscriber by id. Outbox documents are left in
+// place: evsys stops producing new ones once the config is gone, and history stays
+// inspectable.
+func (m *MongoDB) DeleteWebhookSubscriber(ctx context.Context, id string) error {
+	return m.deleteOne(ctx, collectionWebhookSubscribers, bson.D{{Key: "_id", Value: id}}, "webhook subscriber")
+}
+
+// GetWebhookOutboxStats aggregates delivery counters per subscriber. $min/$max
+// ignore nulls, so the conditional timestamps only consider matching statuses.
+func (m *MongoDB) GetWebhookOutboxStats(ctx context.Context) ([]*entity.WebhookOutboxStats, error) {
+	statusCount := func(status string) bson.M {
+		return bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", status}}, 1, 0}}}
+	}
+	pipeline := bson.A{
+		bson.M{"$group": bson.M{
+			"_id":       "$subscriber",
+			"pending":   statusCount("pending"),
+			"delivered": statusCount("delivered"),
+			"failed":    statusCount("failed"),
+			"oldest_pending": bson.M{"$min": bson.M{"$cond": bson.A{
+				bson.M{"$eq": bson.A{"$status", "pending"}}, "$created_at", nil,
+			}}},
+			"last_delivered": bson.M{"$max": bson.M{"$cond": bson.A{
+				bson.M{"$eq": bson.A{"$status", "delivered"}}, "$delivered_at", nil,
+			}}},
+		}},
+		bson.M{"$sort": bson.M{"_id": 1}},
+	}
+	return aggregateMany[*entity.WebhookOutboxStats](m, ctx, collectionWebhookOutbox, pipeline)
+}
+
+// ListWebhookProblemDeliveries returns recent deliveries that are failed or being
+// retried, newest first. The payload bytes are excluded from the projection.
+func (m *MongoDB) ListWebhookProblemDeliveries(ctx context.Context, limit int) ([]*entity.WebhookDeliveryView, error) {
+	filter := bson.M{"$or": bson.A{
+		bson.M{"status": "failed"},
+		bson.M{"status": "pending", "attempts": bson.M{"$gt": 0}},
+	}}
+	opts := options.Find().
+		SetSort(bson.D{{Key: "created_at", Value: -1}}).
+		SetLimit(int64(limit)).
+		SetProjection(bson.M{"payload": 0})
+	return findMany[*entity.WebhookDeliveryView](m, ctx, collectionWebhookOutbox, filter, opts)
 }

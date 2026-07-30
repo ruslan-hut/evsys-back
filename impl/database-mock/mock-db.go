@@ -10,24 +10,25 @@ import (
 
 // MockDB provides an in-memory database implementation for testing
 type MockDB struct {
-	users             map[string]*entity.User             // key: username
-	usersById         map[string]*entity.User             // key: userId
-	tokens            map[string]*entity.User             // key: token
-	userTags          map[string][]entity.UserTag         // key: userId
-	allTags           map[string]bool                     // key: idTag (for uniqueness check)
-	invites           map[string]*entity.Invite           // key: code
-	transactions      map[int]*entity.Transaction         // key: transactionId
-	chargeStates      map[int]*entity.ChargeState         // key: transactionId
-	meterValues       map[int][]entity.TransactionMeter   // key: transactionId
-	paymentMethods    map[string][]*entity.PaymentMethod  // key: userId
-	paymentOrders     map[int]*entity.PaymentOrder        // key: orderId
-	ordersByTx        map[int]*entity.PaymentOrder        // key: transactionId
-	preauthorizations map[string]*entity.Preauthorization // key: orderNumber
-	preauthByTx       map[int]*entity.Preauthorization    // key: transactionId
-	paymentRetries    map[int]*entity.PaymentRetry        // key: transactionId
-	mailSubscriptions map[string]*entity.MailSubscription // key: id
-	lastOrderId       int
-	mux               sync.RWMutex
+	users              map[string]*entity.User              // key: username
+	usersById          map[string]*entity.User              // key: userId
+	tokens             map[string]*entity.User              // key: token
+	userTags           map[string][]entity.UserTag          // key: userId
+	allTags            map[string]bool                      // key: idTag (for uniqueness check)
+	invites            map[string]*entity.Invite            // key: code
+	transactions       map[int]*entity.Transaction          // key: transactionId
+	chargeStates       map[int]*entity.ChargeState          // key: transactionId
+	meterValues        map[int][]entity.TransactionMeter    // key: transactionId
+	paymentMethods     map[string][]*entity.PaymentMethod   // key: userId
+	paymentOrders      map[int]*entity.PaymentOrder         // key: orderId
+	ordersByTx         map[int]*entity.PaymentOrder         // key: transactionId
+	preauthorizations  map[string]*entity.Preauthorization  // key: orderNumber
+	preauthByTx        map[int]*entity.Preauthorization     // key: transactionId
+	paymentRetries     map[int]*entity.PaymentRetry         // key: transactionId
+	mailSubscriptions  map[string]*entity.MailSubscription  // key: id
+	webhookSubscribers map[string]*entity.WebhookSubscriber // key: id
+	lastOrderId        int
+	mux                sync.RWMutex
 }
 
 // NewMockDB creates a new MockDB with initialized maps
@@ -55,6 +56,7 @@ func (db *MockDB) clear() {
 	db.preauthByTx = make(map[int]*entity.Preauthorization)
 	db.paymentRetries = make(map[int]*entity.PaymentRetry)
 	db.mailSubscriptions = make(map[string]*entity.MailSubscription)
+	db.webhookSubscribers = make(map[string]*entity.WebhookSubscriber)
 	db.lastOrderId = 0
 }
 
@@ -950,4 +952,49 @@ func (db *MockDB) DeleteMailSubscription(_ context.Context, id string) error {
 	}
 	delete(db.mailSubscriptions, id)
 	return nil
+}
+
+func (db *MockDB) ListWebhookSubscribers(_ context.Context) ([]*entity.WebhookSubscriber, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	subs := make([]*entity.WebhookSubscriber, 0, len(db.webhookSubscribers))
+	for _, s := range db.webhookSubscribers {
+		subs = append(subs, s)
+	}
+	return subs, nil
+}
+
+func (db *MockDB) SaveWebhookSubscriber(_ context.Context, sub *entity.WebhookSubscriber) (*entity.WebhookSubscriber, error) {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	now := time.Now().UTC()
+	sub.UpdatedAt = now
+	if sub.Id == "" {
+		sub.Id = fmt.Sprintf("mock-%d", now.UnixNano())
+		sub.CreatedAt = now
+	} else if existing, ok := db.webhookSubscribers[sub.Id]; ok {
+		sub.CreatedAt = existing.CreatedAt
+	} else {
+		return nil, fmt.Errorf("webhook subscriber %w", entity.ErrNotFound)
+	}
+	db.webhookSubscribers[sub.Id] = sub
+	return sub, nil
+}
+
+func (db *MockDB) DeleteWebhookSubscriber(_ context.Context, id string) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	if _, ok := db.webhookSubscribers[id]; !ok {
+		return fmt.Errorf("webhook subscriber %w", entity.ErrNotFound)
+	}
+	delete(db.webhookSubscribers, id)
+	return nil
+}
+
+func (db *MockDB) GetWebhookOutboxStats(_ context.Context) ([]*entity.WebhookOutboxStats, error) {
+	return nil, nil
+}
+
+func (db *MockDB) ListWebhookProblemDeliveries(_ context.Context, _ int) ([]*entity.WebhookDeliveryView, error) {
+	return nil, nil
 }

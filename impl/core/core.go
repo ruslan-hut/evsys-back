@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -2186,4 +2187,88 @@ func (c *Core) schedulePaymentRetry(ctx context.Context, transactionId int, last
 		slog.Int("attempt", attempt),
 		slog.Time("next_retry", retry.NextRetryTime),
 	).Info("payment retry scheduled")
+}
+
+// ListWebhookSubscribers returns all webhook subscribers (admin only).
+func (c *Core) ListWebhookSubscribers(ctx context.Context, author *entity.User) ([]*entity.WebhookSubscriber, error) {
+	if err := c.requirePowerUser(author); err != nil {
+		return nil, err
+	}
+	return c.repo.ListWebhookSubscribers(ctx)
+}
+
+// SaveWebhookSubscriber creates or updates a webhook subscriber (admin only).
+func (c *Core) SaveWebhookSubscriber(ctx context.Context, author *entity.User, sub *entity.WebhookSubscriber) (*entity.WebhookSubscriber, error) {
+	if err := c.requirePowerUser(author); err != nil {
+		return nil, err
+	}
+	return c.repo.SaveWebhookSubscriber(ctx, sub)
+}
+
+// DeleteWebhookSubscriber removes a webhook subscriber (admin only).
+func (c *Core) DeleteWebhookSubscriber(ctx context.Context, author *entity.User, id string) error {
+	if err := c.requirePowerUser(author); err != nil {
+		return err
+	}
+	return c.repo.DeleteWebhookSubscriber(ctx, id)
+}
+
+// GetWebhookHealth returns per-subscriber delivery counters joined with the
+// subscriber configuration (admin only). Subscribers without outbox documents get
+// zero counters; outbox rows whose subscriber config was deleted are still listed,
+// marked as not configured.
+func (c *Core) GetWebhookHealth(ctx context.Context, author *entity.User) ([]*entity.WebhookHealthView, error) {
+	if err := c.requirePowerUser(author); err != nil {
+		return nil, err
+	}
+	subscribers, err := c.repo.ListWebhookSubscribers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stats, err := c.repo.GetWebhookOutboxStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byName := make(map[string]*entity.WebhookOutboxStats, len(stats))
+	for _, s := range stats {
+		byName[s.Subscriber] = s
+	}
+	views := make([]*entity.WebhookHealthView, 0, len(subscribers)+len(stats))
+	for _, sub := range subscribers {
+		view := &entity.WebhookHealthView{
+			Name:       sub.Name,
+			URL:        sub.URL,
+			IsEnabled:  sub.IsEnabled,
+			Configured: true,
+		}
+		if s, ok := byName[sub.Name]; ok {
+			view.Pending = s.Pending
+			view.Delivered = s.Delivered
+			view.Failed = s.Failed
+			view.OldestPending = s.OldestPending
+			view.LastDelivered = s.LastDelivered
+			delete(byName, sub.Name)
+		}
+		views = append(views, view)
+	}
+	for _, s := range byName {
+		views = append(views, &entity.WebhookHealthView{
+			Name:          s.Subscriber,
+			Pending:       s.Pending,
+			Delivered:     s.Delivered,
+			Failed:        s.Failed,
+			OldestPending: s.OldestPending,
+			LastDelivered: s.LastDelivered,
+		})
+	}
+	sort.Slice(views, func(i, j int) bool { return views[i].Name < views[j].Name })
+	return views, nil
+}
+
+// ListWebhookFailures returns recent failed or retrying deliveries (admin only).
+func (c *Core) ListWebhookFailures(ctx context.Context, author *entity.User) ([]*entity.WebhookDeliveryView, error) {
+	if err := c.requirePowerUser(author); err != nil {
+		return nil, err
+	}
+	return c.repo.ListWebhookProblemDeliveries(ctx, 100)
 }
