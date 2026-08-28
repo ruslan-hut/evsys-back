@@ -1,6 +1,8 @@
 package entity
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -69,7 +71,7 @@ func TestBuildSiteConcurrencySingleSession(t *testing.T) {
 	if r.PeakAssignedAmps != 150 {
 		t.Errorf("peak assigned = %d A, want 150", r.PeakAssignedAmps)
 	}
-	if !r.PeakAssignedAt.Equal(at(10)) {
+	if r.PeakAssignedAt == nil || !r.PeakAssignedAt.Equal(at(10)) {
 		t.Errorf("peak assigned at %v, want %v", r.PeakAssignedAt, at(10))
 	}
 	if len(r.Segments) != 0 {
@@ -98,7 +100,7 @@ func TestBuildSiteConcurrencyOverlapSteps(t *testing.T) {
 	if r.PeakAssignedAmps != 350 {
 		t.Errorf("peak assigned = %d A, want 350", r.PeakAssignedAmps)
 	}
-	if !r.PeakAssignedAt.Equal(at(20)) {
+	if r.PeakAssignedAt == nil || !r.PeakAssignedAt.Equal(at(20)) {
 		t.Errorf("peak assigned at %v, want %v", r.PeakAssignedAt, at(20))
 	}
 	// 10-30 two, 20-30 three, 30-40 two, 40-50 one: overlap runs 10..40
@@ -303,5 +305,32 @@ func TestBuildSiteConcurrencySegmentsAreContiguousAndOrdered(t *testing.T) {
 			t.Fatalf("gap between segment %d (ends %v) and %d (starts %v)",
 				i-1, r.Segments[i-1].To, i, seg.From)
 		}
+	}
+}
+
+// encoding/json's omitempty does not apply to a struct, so a bare time.Time
+// here reached clients as 0001-01-01T00:00:00Z and rendered as a real date -
+// "31 Dec 23:45" on a site whose sessions carried no assigned limit.
+func TestBuildSiteConcurrencyOmitsPeakTimeWhenThereIsNoPeak(t *testing.T) {
+	r := BuildSiteConcurrency([]ConcurrencySession{
+		{TransactionId: 1, PowerLimit: 0, TimeStart: at(10), TimeStop: at(40), IsFinished: true},
+	}, at(0), at(60), 2, 0)
+
+	if r.PeakAssignedAmps != 0 {
+		t.Fatalf("peak assigned = %d A, want 0", r.PeakAssignedAmps)
+	}
+	if r.PeakAssignedAt != nil {
+		t.Errorf("peak assigned at %v, want nil so the field is omitted", r.PeakAssignedAt)
+	}
+
+	blob, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if bytes.Contains(blob, []byte("peak_assigned_at")) {
+		t.Errorf("peak_assigned_at was serialised with no peak to report: %s", blob)
+	}
+	if bytes.Contains(blob, []byte("0001-01-01")) {
+		t.Errorf("the zero time reached the response: %s", blob)
 	}
 }

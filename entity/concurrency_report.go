@@ -94,8 +94,13 @@ type SiteConcurrency struct {
 	// PeakAssignedAmps is the highest sum of assigned limits over any segment -
 	// what the balancer permitted, not what was drawn. PeakAssignedAt is the
 	// start of the segment where it happened.
-	PeakAssignedAmps int       `json:"peak_assigned_amps"`
-	PeakAssignedAt   time.Time `json:"peak_assigned_at,omitempty"`
+	//
+	// The times are pointers so that "never happened" is absent from the
+	// response rather than the zero time: encoding/json's omitempty does not
+	// apply to a struct, so a bare time.Time here reaches clients as
+	// 0001-01-01T00:00:00Z and renders as a real date.
+	PeakAssignedAmps int        `json:"peak_assigned_amps"`
+	PeakAssignedAt   *time.Time `json:"peak_assigned_at,omitempty"`
 
 	// PeakPowerWatts is the highest concurrent draw the site actually supplied,
 	// measured from reported meter values and resolved to the minute.
@@ -104,9 +109,9 @@ type SiteConcurrency struct {
 	// It is zero when no session in the window reported power. That is not the
 	// same as an idle site: chargers that do not report MeterValues, or report
 	// them without a power measurand, are invisible here while still drawing.
-	PeakPowerWatts    float64   `json:"peak_power_watts"`
-	PeakPowerAt       time.Time `json:"peak_power_at,omitempty"`
-	PeakPowerSessions int       `json:"peak_power_sessions"`
+	PeakPowerWatts    float64    `json:"peak_power_watts"`
+	PeakPowerAt       *time.Time `json:"peak_power_at,omitempty"`
+	PeakPowerSessions int        `json:"peak_power_sessions"`
 
 	// Levels is the time spent at each concurrency count, ascending from 0.
 	Levels []ConcurrencyLevel `json:"levels"`
@@ -229,8 +234,9 @@ func BuildSiteConcurrency(sessions []ConcurrencySession, from, to time.Time, min
 			report.OverlapSeconds += seconds
 		}
 		if amps > report.PeakAssignedAmps {
+			at := segFrom
 			report.PeakAssignedAmps = amps
-			report.PeakAssignedAt = segFrom
+			report.PeakAssignedAt = &at
 		}
 		if len(detail) == 0 {
 			continue

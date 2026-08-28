@@ -1043,8 +1043,9 @@ func (m *MongoDB) SiteConcurrency(ctx context.Context, from, to time.Time, locat
 		report.LocationId = loc
 		report.LocationName = names[loc]
 		if peak := peakByLocation[loc]; peak != nil {
+			at := peak.At
 			report.PeakPowerWatts = peak.Watts
-			report.PeakPowerAt = peak.At
+			report.PeakPowerAt = &at
 			report.PeakPowerSessions = peak.Sessions
 		}
 		out = append(out, &report)

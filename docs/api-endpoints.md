@@ -1881,9 +1881,9 @@ Returns an array of one object per location.
 | max_sessions | integer | Highest number of sessions charging at once |
 | overlap_seconds | integer | Time with at least two sessions charging |
 | peak_assigned_amps | integer | Highest sum of assigned limits over any segment — permitted, not measured |
-| peak_assigned_at | string | Start of the segment where that peak occurred |
+| peak_assigned_at | string | Start of the segment where that peak occurred; omitted when no limit was assigned |
 | peak_power_watts | number | Highest concurrent draw measured from meter values, resolved to the minute |
-| peak_power_at | string | The minute the measured peak occurred in |
+| peak_power_at | string | The minute the measured peak occurred in; omitted when no power was reported |
 | peak_power_sessions | integer | Sessions drawing power in that minute |
 | levels | array | Seconds spent at each concurrency count, ascending from 0 |
 | segments | array | Stretches with an unchanging set of sessions, in time order, filtered by `min_sessions` |

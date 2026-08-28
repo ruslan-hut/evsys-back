@@ -205,7 +205,7 @@ func TestSiteConcurrencyPeakPowerSumsSessionsAndCollapsesDuplicateSamples(t *tes
 		t.Fatalf("peak power = %.0f W, want 51000: 31000 + 20000, the duplicate sample counted once",
 			main.PeakPowerWatts)
 	}
-	if !main.PeakPowerAt.Equal(mm(30)) {
+	if main.PeakPowerAt == nil || !main.PeakPowerAt.Equal(mm(30)) {
 		t.Errorf("peak at %v, want the minute %v", main.PeakPowerAt, mm(30))
 	}
 	if main.PeakPowerSessions != 2 {
@@ -364,7 +364,7 @@ func TestSiteConcurrencyPeakPowerReportsTheMinuteOfThePeak(t *testing.T) {
 	if main.PeakPowerWatts != 45000 {
 		t.Fatalf("peak power = %.0f W, want 45000", main.PeakPowerWatts)
 	}
-	if !main.PeakPowerAt.Equal(mm(40)) {
+	if main.PeakPowerAt == nil || !main.PeakPowerAt.Equal(mm(40)) {
 		t.Fatalf("peak at %v, want %v: the peak's minute was not carried with its value",
 			main.PeakPowerAt, mm(40))
 	}
