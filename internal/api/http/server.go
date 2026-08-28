@@ -157,6 +157,7 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 			r.Get("/report/power", report.PowerStatistics(log, core))
 			r.Get("/report/uptime", report.StationUptimeStatistics(log, core))
 			r.Get("/report/status", report.StationStatusStatistics(log, core))
+			r.Get("/report/concurrency", report.SiteConcurrencyStatistics(log, core))
 
 			r.Get("/log/{name}", helper.Log(log, core))
 		})

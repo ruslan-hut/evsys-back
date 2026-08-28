@@ -19,4 +19,7 @@ type Reports interface {
 	// Station uptime reports
 	StationUptime(ctx context.Context, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error)
 	StationStatus(ctx context.Context, chargePointId string) ([]*entity.StationStatus, error)
+
+	// Site concurrency reports
+	SiteConcurrency(ctx context.Context, from, to time.Time, locationId string, minSessions, maxSegments int) ([]*entity.SiteConcurrency, error)
 }

@@ -2272,3 +2272,11 @@ func (c *Core) ListWebhookFailures(ctx context.Context, author *entity.User) ([]
 	}
 	return c.repo.ListWebhookProblemDeliveries(ctx, 100)
 }
+
+func (c *Core) SiteConcurrencyReport(ctx context.Context, user *entity.User, from, to time.Time, locationId string, minSessions, maxSegments int) ([]*entity.SiteConcurrency, error) {
+	err := c.checkSubsystemAccess(user, subSystemReports)
+	if err != nil {
+		return nil, err
+	}
+	return c.reports.SiteConcurrency(ctx, from, to, locationId, minSessions, maxSegments)
+}

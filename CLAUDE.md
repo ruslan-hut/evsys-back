@@ -217,6 +217,27 @@ Admin/operator only (`RequirePowerUser`):
 
 `period` is one of `daily | weekly | monthly`. `user_group` matches the same value the frontend statistic page sends as the `group` query param (e.g. `default`, `office`).
 
+## Site Concurrency Report
+
+`GET /api/v1/report/concurrency?from=&to=&location_id=&min_sessions=` answers,
+per location, when sessions overlapped and how much the site drew. It reports
+two peaks that must not be confused: `peak_assigned_amps` is what the load
+balancer permitted, `peak_power_watts` what the chargers measured. See
+[docs/api-endpoints.md](docs/api-endpoints.md#get-apiv1reportconcurrency).
+
+The interval sweep lives in `entity/concurrency_report.go` as a pure function,
+not in the aggregation, because its edge cases - sessions that touch without
+overlapping, ties, a session still running, one that began before the window -
+are where the report is right or wrong and are worth unit tests. What has to be
+in the pipeline is the meter-value explosion, which is covered by the
+MongoDB-backed tests in `impl/database/concurrency_test.go`. Those are skipped
+unless `MONGO_TEST_URI` is set, so `go test ./...` stays green without Docker:
+
+```bash
+docker run -d --name evsys-test-mongo -p 27019:27017 mongo:7
+MONGO_TEST_URI=mongodb://localhost:27019 go test ./...
+```
+
 ## Webhook Admin API Endpoints
 
 Admin/operator only (`RequirePowerUser`). Manages the `webhook_subscribers` /

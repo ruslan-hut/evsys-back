@@ -48,6 +48,7 @@ Detailed documentation for all REST API endpoints.
   - [GET /report/charger](#get-apiv1reportcharger)
   - [GET /report/uptime](#get-apiv1reportuptime)
   - [GET /report/status](#get-apiv1reportstatus)
+  - [GET /report/concurrency](#get-apiv1reportconcurrency)
 - [Central System](#central-system)
   - [POST /csc](#post-apiv1csc)
 - [Utility](#utility)
@@ -1807,3 +1808,98 @@ Represents the current connection status for a station.
 | duration_seconds | integer | Time in current state in seconds |
 | duration_minutes | number | Time in current state in minutes |
 | last_event_text | string | Text of last status event (e.g., "registered", "unregistered") |
+
+### GET /api/v1/report/concurrency
+
+Per location: when charging sessions ran at the same time, the amperage the load
+balancer assigned them, and the highest load the site actually supplied.
+
+Two peaks are reported and they answer different questions.
+`peak_assigned_amps` is the sum of the limits the balancer handed out — what the
+site was *permitted* to draw. `peak_power_watts` is measured from the meter
+values the chargers reported — what it *did* draw. A permitted total that is
+never approached means the limits are not binding; a draw above it means a limit
+was not in force.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| from | string | Yes | Start date |
+| to | string | Yes | End date; must be after `from` |
+| location_id | string | No | Restrict to one location; omitted reports every location with activity |
+| min_sessions | integer | No | Minimum concurrent sessions for a segment to be listed. Default 2 — overlaps only. `1` returns the whole timeline |
+
+`min_sessions` selects what is listed, not what is measured: the summary fields
+and `levels` are computed over every segment regardless.
+
+**Success Response:**
+
+Returns an array of one object per location.
+
+```json
+{
+  "location_id": "loc1",
+  "location_name": "Main site",
+  "from": "2026-08-22T00:00:00Z",
+  "to": "2026-08-29T00:00:00Z",
+  "sessions": 54,
+  "max_sessions": 4,
+  "overlap_seconds": 21528,
+  "peak_assigned_amps": 435,
+  "peak_assigned_at": "2026-08-22T12:29:33Z",
+  "peak_power_watts": 104000,
+  "peak_power_at": "2026-08-22T12:31:00Z",
+  "peak_power_sessions": 4,
+  "levels": [
+    { "sessions": 0, "seconds": 429804 },
+    { "sessions": 1, "seconds": 72900 },
+    { "sessions": 2, "seconds": 18036 }
+  ],
+  "segments": [
+    {
+      "from": "2026-08-22T12:01:29Z",
+      "to": "2026-08-22T12:07:51Z",
+      "seconds": 382,
+      "sessions": 2,
+      "assigned_amps": 265,
+      "detail": [
+        { "transaction_id": 4813, "charge_point_id": "PE00001", "connector_id": 1, "power_limit": 150 },
+        { "transaction_id": 4814, "charge_point_id": "PE00005", "connector_id": 2, "power_limit": 115 }
+      ]
+    }
+  ],
+  "truncated": false
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| location_id | string | Location identifier |
+| location_name | string | Location name, omitted when the location document has none |
+| sessions | integer | Sessions overlapping the window, including those starting before it or running past its end |
+| max_sessions | integer | Highest number of sessions charging at once |
+| overlap_seconds | integer | Time with at least two sessions charging |
+| peak_assigned_amps | integer | Highest sum of assigned limits over any segment — permitted, not measured |
+| peak_assigned_at | string | Start of the segment where that peak occurred |
+| peak_power_watts | number | Highest concurrent draw measured from meter values, resolved to the minute |
+| peak_power_at | string | The minute the measured peak occurred in |
+| peak_power_sessions | integer | Sessions drawing power in that minute |
+| levels | array | Seconds spent at each concurrency count, ascending from 0 |
+| segments | array | Stretches with an unchanging set of sessions, in time order, filtered by `min_sessions` |
+| truncated | boolean | Present when the segment list was capped at 2000; the summary fields stay exact |
+
+**Notes:**
+
+- A segment boundary is a session start or stop, so a segment is the longest
+  interval that can be described by one answer to "who is charging, under what
+  limit".
+- Sessions are clamped to the window. A session still running has no stop time;
+  the window's end stands in for one.
+- `peak_power_watts` is `0` when no session in the window reported power. That is
+  not the same as an idle site — chargers that do not send MeterValues, or send
+  them without a power measurand, are invisible to it while still drawing.
+- A charge point with no `location_id` is excluded: it cannot be attributed to a
+  supply.
+- Sessions with no recorded `power_limit` count toward concurrency but add
+  nothing to `assigned_amps`.

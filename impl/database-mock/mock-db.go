@@ -775,6 +775,10 @@ func (db *MockDB) StationStatus(_ context.Context, chargePointId string) ([]*ent
 	return nil, nil
 }
 
+func (db *MockDB) SiteConcurrency(_ context.Context, from, to time.Time, locationId string, minSessions, maxSegments int) ([]*entity.SiteConcurrency, error) {
+	return nil, nil
+}
+
 // --- Preauthorizations ---
 
 func (db *MockDB) SavePreauthorization(_ context.Context, preauth *entity.Preauthorization) error {

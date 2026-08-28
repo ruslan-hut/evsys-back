@@ -18,4 +18,8 @@ type Repository interface {
 	// Station uptime reports
 	StationUptime(ctx context.Context, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error)
 	StationStatus(ctx context.Context, chargePointId string) ([]*entity.StationStatus, error)
+
+	// Site concurrency: when sessions overlapped at a location, what the load
+	// balancer allowed them, and the peak the site actually supplied
+	SiteConcurrency(ctx context.Context, from, to time.Time, locationId string, minSessions, maxSegments int) ([]*entity.SiteConcurrency, error)
 }

@@ -170,3 +170,25 @@ func (r *Reports) StationStatus(ctx context.Context, chargePointId string) ([]*e
 	).Debug("station status")
 	return data, nil
 }
+
+func (r *Reports) SiteConcurrency(ctx context.Context, from, to time.Time, locationId string, minSessions, maxSegments int) ([]*entity.SiteConcurrency, error) {
+	log := r.log.With(
+		slog.Time("from", from),
+		slog.Time("to", to),
+		slog.String("locationId", locationId),
+		slog.Int("minSessions", minSessions),
+	)
+	data, err := r.repo.SiteConcurrency(ctx, from, to, locationId, minSessions, maxSegments)
+	if err != nil {
+		log.Error("site concurrency failed", sl.Err(err))
+		return nil, err
+	}
+	if data == nil {
+		log.Debug("site concurrency: no data")
+		return []*entity.SiteConcurrency{}, nil
+	}
+	log.With(
+		slog.Int("locations", len(data)),
+	).Debug("site concurrency")
+	return data, nil
+}

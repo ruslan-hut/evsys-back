@@ -854,3 +854,222 @@ func (m *MongoDB) getEnabledChargePointIds(ctx context.Context, chargePointId st
 	}
 	return ids, nil
 }
+
+// concurrencyWindowMatch selects sessions that overlap [from, to] rather than
+// ones that merely ended inside it. A session running when the window opened is
+// part of the site's load for as long as it continued, and a peak found by
+// ignoring it would be a peak of the wrong site.
+//
+// An unfinished session has no time_stop at all, so it cannot be matched on one;
+// the sweep gives it the window's end. That is right for a session still
+// charging and wrong for one abandoned without a stop, which evsys's sweeper
+// normally closes but cannot when it never sees the charger again.
+func concurrencyWindowMatch(from, to time.Time, locationId string) mongo.Pipeline {
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.D{
+			{Key: "time_start", Value: bson.D{{Key: "$lte", Value: to}}},
+			{Key: "$or", Value: bson.A{
+				bson.D{{Key: "is_finished", Value: false}},
+				bson.D{{Key: "time_stop", Value: bson.D{{Key: "$gte", Value: from}}}},
+			}},
+		}}},
+		// The location is the unit of load: charge points on the same supply
+		// compete, ones on different supplies do not. It lives on the charge
+		// point, not the transaction, so it has to be joined in.
+		{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: collectionChargePoints},
+			{Key: "localField", Value: "charge_point_id"},
+			{Key: "foreignField", Value: "charge_point_id"},
+			{Key: "as", Value: "cp"},
+		}}},
+		{{Key: "$addFields", Value: bson.D{
+			{Key: "location_id", Value: bson.D{
+				{Key: "$arrayElemAt", Value: bson.A{"$cp.location_id", 0}},
+			}},
+		}}},
+	}
+
+	// A charge point with no location cannot be attributed to a site, and
+	// bundling those together under "" would report a load nobody supplies.
+	locMatch := bson.D{{Key: "location_id", Value: bson.D{
+		{Key: "$nin", Value: bson.A{nil, ""}},
+	}}}
+	if locationId != "" {
+		locMatch = bson.D{{Key: "location_id", Value: locationId}}
+	}
+	return append(pipeline, bson.D{{Key: "$match", Value: locMatch}})
+}
+
+// concurrencySessionsPipeline reads the session intervals the sweep runs on.
+// meter_values is deliberately not projected: the array is the bulk of a
+// transaction document and this query only needs the interval and the limit.
+func concurrencySessionsPipeline(from, to time.Time, locationId string) mongo.Pipeline {
+	return append(concurrencyWindowMatch(from, to, locationId),
+		bson.D{{Key: "$project", Value: bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "transaction_id", Value: 1},
+			{Key: "charge_point_id", Value: 1},
+			{Key: "connector_id", Value: 1},
+			{Key: "power_limit", Value: 1},
+			{Key: "time_start", Value: 1},
+			{Key: "time_stop", Value: 1},
+			{Key: "is_finished", Value: 1},
+			{Key: "location_id", Value: 1},
+		}}},
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "time_start", Value: 1}}}},
+	)
+}
+
+// sitePeakPowerPipeline finds the highest concurrent draw each location actually
+// supplied, from the meter values embedded in its sessions.
+//
+// The per-session-minute collapse is not an optimisation: a charger reporting
+// two measurands in the same minute, or sampling faster than once a minute,
+// would otherwise have its power counted once per sample and invent a peak the
+// site never saw. Taking the max within the minute is what makes the outer sum
+// a sum over distinct sessions.
+func sitePeakPowerPipeline(from, to time.Time, locationId string) mongo.Pipeline {
+	return append(concurrencyWindowMatch(from, to, locationId),
+		bson.D{{Key: "$project", Value: bson.D{
+			{Key: "transaction_id", Value: 1},
+			{Key: "location_id", Value: 1},
+			{Key: "meter_values.power_rate", Value: 1},
+			{Key: "meter_values.time", Value: 1},
+		}}},
+		bson.D{{Key: "$unwind", Value: "$meter_values"}},
+		// Samples can predate the window when a session started before it, so
+		// the series is bounded on sample time. The $type guard matters:
+		// $dateTrunc on a non-date aborts the aggregation.
+		bson.D{{Key: "$match", Value: bson.D{
+			{Key: "meter_values.power_rate", Value: bson.D{{Key: "$gt", Value: 0}}},
+			{Key: "meter_values.time", Value: bson.D{
+				{Key: "$type", Value: "date"},
+				{Key: "$gte", Value: from},
+				{Key: "$lte", Value: to},
+			}},
+		}}},
+		bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{
+				{Key: "loc", Value: "$location_id"},
+				{Key: "txn", Value: "$transaction_id"},
+				{Key: "minute", Value: bson.D{{Key: "$dateTrunc", Value: bson.D{
+					{Key: "date", Value: "$meter_values.time"},
+					{Key: "unit", Value: "minute"},
+				}}}},
+			}},
+			{Key: "power", Value: bson.D{{Key: "$max", Value: "$meter_values.power_rate"}}},
+		}}},
+		// Concurrent site draw, one row per location-minute.
+		bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{
+				{Key: "loc", Value: "$_id.loc"},
+				{Key: "minute", Value: "$_id.minute"},
+			}},
+			{Key: "site_power", Value: bson.D{{Key: "$sum", Value: "$power"}}},
+			{Key: "sessions", Value: bson.D{{Key: "$sum", Value: 1}}},
+		}}},
+		// $first after $sort is how the peak keeps the minute it happened in;
+		// a plain $max would give the value and lose the moment.
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "site_power", Value: -1}}}},
+		bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: "$_id.loc"},
+			{Key: "watts", Value: bson.D{{Key: "$first", Value: "$site_power"}}},
+			{Key: "at", Value: bson.D{{Key: "$first", Value: "$_id.minute"}}},
+			{Key: "sessions", Value: bson.D{{Key: "$first", Value: "$sessions"}}},
+		}}},
+		bson.D{{Key: "$project", Value: bson.D{
+			{Key: "watts", Value: toDouble("$watts")},
+			{Key: "at", Value: 1},
+			{Key: "sessions", Value: 1},
+		}}},
+	)
+}
+
+// SiteConcurrency reports, per location, when charging sessions ran at the same
+// time, what the load balancer allowed them between them, and the highest load
+// the site actually supplied.
+//
+// The interval sweep runs in Go rather than in the pipeline: its edge cases -
+// sessions that touch without overlapping, ties, a session still running, one
+// that started before the window - are where the report is right or wrong, and
+// they are worth unit tests. What has to be in the pipeline is the meter value
+// explosion, which is the only part that would not fit in memory.
+func (m *MongoDB) SiteConcurrency(ctx context.Context, from, to time.Time, locationId string, minSessions, maxSegments int) ([]*entity.SiteConcurrency, error) {
+	sessions, err := aggregateMany[entity.ConcurrencySession](
+		m, ctx, collectionTransactions, concurrencySessionsPipeline(from, to, locationId))
+	if err != nil {
+		return nil, err
+	}
+
+	// Unwinding every sample in the range can outgrow the 100 MB stage limit on
+	// a wide window, exactly as the power timeline can.
+	peaks, err := aggregateMany[*entity.SitePeakPower](
+		m, ctx, collectionTransactions, sitePeakPowerPipeline(from, to, locationId),
+		options.Aggregate().SetAllowDiskUse(true))
+	if err != nil {
+		return nil, err
+	}
+	peakByLocation := make(map[string]*entity.SitePeakPower, len(peaks))
+	for _, p := range peaks {
+		peakByLocation[p.LocationId] = p
+	}
+
+	names, err := m.locationNames(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	grouped := make(map[string][]entity.ConcurrencySession)
+	order := make([]string, 0)
+	for _, s := range sessions {
+		if _, seen := grouped[s.LocationId]; !seen {
+			order = append(order, s.LocationId)
+		}
+		grouped[s.LocationId] = append(grouped[s.LocationId], s)
+	}
+	// A location can peak on power while every session ran alone, so a peak
+	// with no sessions grouped under it still deserves a row.
+	for loc := range peakByLocation {
+		if _, seen := grouped[loc]; !seen {
+			order = append(order, loc)
+			grouped[loc] = nil
+		}
+	}
+	sort.Strings(order)
+
+	out := make([]*entity.SiteConcurrency, 0, len(order))
+	for _, loc := range order {
+		report := entity.BuildSiteConcurrency(grouped[loc], from, to, minSessions, maxSegments)
+		report.LocationId = loc
+		report.LocationName = names[loc]
+		if peak := peakByLocation[loc]; peak != nil {
+			report.PeakPowerWatts = peak.Watts
+			report.PeakPowerAt = peak.At
+			report.PeakPowerSessions = peak.Sessions
+		}
+		out = append(out, &report)
+	}
+	return out, nil
+}
+
+// locationNames maps location id to name so the report can be read without a
+// second lookup. A location whose document is missing simply has no name.
+func (m *MongoDB) locationNames(ctx context.Context) (map[string]string, error) {
+	cursor, err := m.col(collectionLocations).Find(ctx, bson.D{},
+		options.Find().SetProjection(bson.D{{Key: "_id", Value: 0}, {Key: "id", Value: 1}, {Key: "name", Value: 1}}))
+	if err != nil {
+		return nil, m.findError(err)
+	}
+	var rows []struct {
+		Id   string `bson:"id"`
+		Name string `bson:"name"`
+	}
+	if err = cursor.All(ctx, &rows); err != nil {
+		return nil, err
+	}
+	names := make(map[string]string, len(rows))
+	for _, r := range rows {
+		names[r.Id] = r.Name
+	}
+	return names, nil
+}

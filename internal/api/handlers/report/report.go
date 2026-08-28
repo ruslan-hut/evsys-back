@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -20,6 +21,7 @@ type Reports interface {
 	PowerStatsReport(ctx context.Context, user *entity.User, from, to time.Time, chargePointId, userGroup, groupBy string) ([]*entity.PowerStats, error)
 	StationUptimeReport(ctx context.Context, user *entity.User, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error)
 	StationStatusReport(ctx context.Context, user *entity.User, chargePointId string) ([]*entity.StationStatus, error)
+	SiteConcurrencyReport(ctx context.Context, user *entity.User, from, to time.Time, locationId string, minSessions, maxSegments int) ([]*entity.SiteConcurrency, error)
 }
 
 func reportLog(logger *slog.Logger, r *http.Request, user *entity.User) *slog.Logger {
@@ -249,5 +251,69 @@ func StationStatusStatistics(logger *slog.Logger, handler Reports) http.HandlerF
 			result[i] = s.ToJSON()
 		}
 		web.OK(w, r, log, "station status report", result)
+	}
+}
+
+const (
+	// defaultMinSessions returns only the segments where sessions overlapped,
+	// which is what the report is usually asked for. min_sessions=1 widens it to
+	// the whole timeline, including the stretches with a single car.
+	defaultMinSessions = 2
+	// maxConcurrencySegments bounds the response. A segment boundary is a
+	// session start or stop, so a busy site over a long window can produce
+	// thousands; the summary figures are computed before the cut and stay exact.
+	maxConcurrencySegments = 2000
+)
+
+// SiteConcurrencyStatistics reports, per location, when charging sessions
+// overlapped, the amperage the load balancer assigned them, and the highest
+// load the site actually supplied.
+//
+// Query: from, to (required), location_id, min_sessions.
+func SiteConcurrencyStatistics(logger *slog.Logger, handler Reports) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		user := cont.GetUser(ctx)
+		log := reportLog(logger, r, user)
+
+		from, err := request.GetDate(r, "from")
+		if err != nil {
+			wrongParameter(w, r, log, err)
+			return
+		}
+		to, err := request.GetDate(r, "to")
+		if err != nil {
+			wrongParameter(w, r, log, err)
+			return
+		}
+		if !to.After(from) {
+			wrongParameter(w, r, log, fmt.Errorf("'to' must be after 'from'"))
+			return
+		}
+
+		minSessions := defaultMinSessions
+		if raw := r.URL.Query().Get("min_sessions"); raw != "" {
+			n, convErr := strconv.Atoi(raw)
+			if convErr != nil || n < 1 {
+				wrongParameter(w, r, log, fmt.Errorf("min_sessions=%s: expected a positive integer", raw))
+				return
+			}
+			minSessions = n
+		}
+
+		locationId := r.URL.Query().Get("location_id")
+		log = log.With(
+			slog.Time("from", from),
+			slog.Time("to", to),
+			slog.String("location_id", locationId),
+			slog.Int("min_sessions", minSessions),
+		)
+
+		data, err := handler.SiteConcurrencyReport(ctx, user, from, to, locationId, minSessions, maxConcurrencySegments)
+		if err != nil {
+			web.Fail(w, r, log, 400, "Failed to get report data", err)
+			return
+		}
+		web.OK(w, r, log, "site concurrency report", data)
 	}
 }
