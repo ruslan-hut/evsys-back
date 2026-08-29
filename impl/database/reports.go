@@ -1042,11 +1042,20 @@ func (m *MongoDB) SiteConcurrency(ctx context.Context, from, to time.Time, locat
 		report := entity.BuildSiteConcurrency(grouped[loc], from, to, minSessions, maxSegments)
 		report.LocationId = loc
 		report.LocationName = names[loc]
-		if peak := peakByLocation[loc]; peak != nil {
+		peak := peakByLocation[loc]
+		if peak != nil {
 			at := peak.At
 			report.PeakPowerWatts = peak.Watts
 			report.PeakPowerAt = &at
 			report.PeakPowerSessions = peak.Sessions
+		}
+		// The query matches a session that overlaps the window; the sweep then
+		// clamps it, and a session that only touches an edge clamps to nothing.
+		// That leaves a location with no sessions, no peak and a row of zeroes -
+		// a site the reader has to look at to discover there is nothing to see.
+		// Sessions counts what survived clamping, so this drops exactly those.
+		if report.Sessions == 0 && peak == nil {
+			continue
 		}
 		out = append(out, &report)
 	}

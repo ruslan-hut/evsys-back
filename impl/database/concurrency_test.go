@@ -369,3 +369,108 @@ func TestSiteConcurrencyPeakPowerReportsTheMinuteOfThePeak(t *testing.T) {
 			main.PeakPowerAt, mm(40))
 	}
 }
+
+// A session that only touches the edge of the window clamps to nothing, but the
+// query still matched it, so its location arrived as a row of zeroes: no
+// sessions, no peak, dashes throughout. A reader had to look at it to find out
+// there was nothing to look at.
+func TestSiteConcurrencyOmitsLocationWithNothingToReport(t *testing.T) {
+	m := testMongo(t)
+	seedSite(t, m)
+	seed(t, m, collectionTransactions,
+		// ends exactly when the window opens: matched by the query, zero length
+		// once clamped, and no samples inside the range
+		tx(1, "WB1", 1, 0, -60, 0, sample(7000, mm(-30))),
+		// a real session at the other site, so the call still returns something
+		tx(2, "PE00001", 1, 150, 10, 40, sample(40000, mm(20))),
+	)
+
+	rows, err := m.SiteConcurrency(context.Background(), mm(0), mm(60), "", 1, 0)
+	if err != nil {
+		t.Fatalf("SiteConcurrency: %v", err)
+	}
+	for _, r := range rows {
+		if r.LocationId == "loc2" {
+			t.Fatalf("returned an empty row for loc2: %d sessions, %.0f W", r.Sessions, r.PeakPowerWatts)
+		}
+	}
+	if len(rows) != 1 || rows[0].LocationId != "loc1" {
+		t.Fatalf("got %d rows %v, want only loc1", len(rows), rows)
+	}
+}
+
+// The filter must not reach past the empty case. A site whose chargers report no
+// power at all is exactly the site an operator needs to see - it is drawing
+// current that nothing is measuring - so sessions alone earn a row.
+func TestSiteConcurrencyKeepsLocationWithSessionsButNoPower(t *testing.T) {
+	m := testMongo(t)
+	seedSite(t, m)
+	seed(t, m, collectionTransactions,
+		tx(1, "PE00001", 1, 150, 10, 40), // no meter values at all
+		tx(2, "PE00002", 2, 115, 20, 50),
+	)
+
+	rows, err := m.SiteConcurrency(context.Background(), mm(0), mm(60), "", 2, 0)
+	if err != nil {
+		t.Fatalf("SiteConcurrency: %v", err)
+	}
+	main := find(t, rows, "loc1")
+	if main.Sessions != 2 || main.MaxSessions != 2 {
+		t.Fatalf("%d sessions, max %d, want 2 and 2", main.Sessions, main.MaxSessions)
+	}
+	if main.PeakPowerWatts != 0 {
+		t.Errorf("peak power = %.0f W, want 0", main.PeakPowerWatts)
+	}
+	if main.PeakAssignedAmps != 265 {
+		t.Errorf("peak assigned = %d A, want 265: the limits are still worth reporting", main.PeakAssignedAmps)
+	}
+}
+
+// And a location that drew power without ever running two sessions at once is
+// still a location that drew power.
+func TestSiteConcurrencyKeepsLocationWithPeakButNoOverlap(t *testing.T) {
+	m := testMongo(t)
+	seedSite(t, m)
+	seed(t, m, collectionTransactions,
+		tx(1, "PE00001", 1, 150, 10, 20, sample(60000, mm(15))),
+	)
+
+	rows, err := m.SiteConcurrency(context.Background(), mm(0), mm(60), "", 2, 0)
+	if err != nil {
+		t.Fatalf("SiteConcurrency: %v", err)
+	}
+	main := find(t, rows, "loc1")
+	if main.PeakPowerWatts != 60000 {
+		t.Errorf("peak power = %.0f W, want 60000", main.PeakPowerWatts)
+	}
+	if len(main.Segments) != 0 {
+		t.Errorf("got %d segments at min_sessions=2, want none", len(main.Segments))
+	}
+}
+
+// The other half of the emptiness test. A session ending exactly as the window
+// opens clamps to nothing, but its charger can still have a sample timestamped
+// inside the window - chargers drift, and a reading can land after the stop the
+// system recorded. That is measured load at the site, so the row survives on the
+// peak alone even with no session left to attribute it to. Hiding it would hide
+// current the site actually drew.
+func TestSiteConcurrencyKeepsLocationWhoseOnlyEvidenceIsAPeak(t *testing.T) {
+	m := testMongo(t)
+	seedSite(t, m)
+	seed(t, m, collectionTransactions,
+		tx(1, "PE00001", 1, 150, -60, 0, sample(55000, mm(20))),
+	)
+
+	rows, err := m.SiteConcurrency(context.Background(), mm(0), mm(60), "", 1, 0)
+	if err != nil {
+		t.Fatalf("SiteConcurrency: %v", err)
+	}
+	main := find(t, rows, "loc1")
+	if main.Sessions != 0 {
+		t.Fatalf("sessions = %d, want 0: the session clamps to nothing", main.Sessions)
+	}
+	if main.PeakPowerWatts != 55000 {
+		t.Fatalf("peak power = %.0f W, want 55000: the row was kept but lost its peak",
+			main.PeakPowerWatts)
+	}
+}

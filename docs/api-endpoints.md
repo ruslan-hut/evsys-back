@@ -1835,7 +1835,10 @@ and `levels` are computed over every segment regardless.
 
 **Success Response:**
 
-Returns an array of one object per location.
+Returns an array of one object per location that has something to report — at
+least one session overlapping the window, or measured power inside it. A
+location whose only session touches the edge of the range is omitted rather than
+returned as a row of zeroes.
 
 ```json
 {
