@@ -13,7 +13,8 @@ import (
 // their last reported status, meter values are not resampled unless asked -
 // because the caller is analysing the system rather than rendering it.
 
-// InspectLocations returns all locations. As in GetLocations, only users with
+// InspectLocations returns all locations, roaming or not, with their charge
+// points (connectors not included). As in GetLocations, only users with
 // the maximum access level see them.
 func (c *Core) InspectLocations(ctx context.Context, author *entity.User) ([]*entity.Location, error) {
 	if err := c.requirePowerUser(author); err != nil {
@@ -22,7 +23,7 @@ func (c *Core) InspectLocations(ctx context.Context, author *entity.User) ([]*en
 	if author.AccessLevel < MaxAccessLevel {
 		return nil, fmt.Errorf("access denied: locations need access level %d", MaxAccessLevel)
 	}
-	return c.repo.GetLocations(ctx)
+	return c.repo.GetAllLocations(ctx)
 }
 
 // InspectChargePoints returns charge points matching the search term, within

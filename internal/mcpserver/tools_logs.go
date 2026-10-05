@@ -28,7 +28,7 @@ type readLogInput struct {
 	ChargePointId string `json:"charge_point_id,omitempty" jsonschema:"only records of this charge point (sys and errors logs)"`
 	Search        string `json:"search,omitempty" jsonschema:"case-insensitive substring of the record text (on errors: info, error code or vendor error code)"`
 	Category      string `json:"category,omitempty" jsonschema:"exact match on the OCPP feature for sys (e.g. StatusNotification, BootNotification, MeterValues), the category for back and pay, the error code for errors"`
-	Level         string `json:"level,omitempty" jsonschema:"exact match on importance for sys or level for back and pay (e.g. error, warn, info)"`
+	Level         string `json:"level,omitempty" jsonschema:"exact match on level for back and pay (e.g. error, warn, info). Sys records mostly carry no importance, so this filter rarely matches there"`
 	Limit         int    `json:"limit,omitempty" jsonschema:"maximum number of records, newest first; default 100, at most 1000"`
 }
 

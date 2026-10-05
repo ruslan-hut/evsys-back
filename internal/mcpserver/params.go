@@ -39,7 +39,7 @@ func parseTime(value string, endOfDay bool) (time.Time, error) {
 // period resolves optional from/to inputs: to defaults to now, from to
 // defaultSpan before to.
 func period(from, to string, now time.Time, defaultSpan time.Duration) (time.Time, time.Time, error) {
-	end := now.UTC()
+	end := now.UTC().Truncate(time.Second)
 	if to != "" {
 		t, err := parseTime(to, true)
 		if err != nil {

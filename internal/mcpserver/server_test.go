@@ -102,7 +102,10 @@ func (f *fakeCore) StationUptimeReport(_ context.Context, _ *entity.User, _, _ t
 	return []*entity.StationUptime{{ChargePointId: "CP1", OnlineDuration: time.Hour, UptimePercent: 50, FinalState: entity.StateOnline}}, nil
 }
 func (f *fakeCore) StationStatusReport(_ context.Context, _ *entity.User, _ string) ([]*entity.StationStatus, error) {
-	return []*entity.StationStatus{{ChargePointId: "CP1", State: entity.StateOffline, Since: testNow.Add(-time.Hour), Duration: time.Hour}}, nil
+	return []*entity.StationStatus{
+		{ChargePointId: "CP1", State: entity.StateOnline, Since: testNow.Add(-48 * time.Hour)},
+		{ChargePointId: "CP2", State: entity.StateOffline, Since: testNow.Add(-72 * time.Hour), Duration: 72 * time.Hour},
+	}, nil
 }
 func (f *fakeCore) SiteConcurrencyReport(_ context.Context, _ *entity.User, from, to time.Time, _ string, minSessions, maxSegments int) ([]*entity.SiteConcurrency, error) {
 	f.lastFrom, f.lastTo, f.lastMinSess, f.lastMaxSegs = from, to, minSessions, maxSegments
@@ -281,6 +284,14 @@ func TestSystemOverview(t *testing.T) {
 	require.Len(t, problems, 2)
 	kinds := []string{problems[0].(map[string]any)["problem"].(string), problems[1].(map[string]any)["problem"].(string)}
 	assert.ElementsMatch(t, []string{"connector error", "offline"}, kinds)
+	for _, p := range problems {
+		p := p.(map[string]any)
+		if p["problem"] == "offline" {
+			// since is the disconnect from the sys log, not the last message
+			assert.Equal(t, "2026-10-02T12:00:00Z", p["since"])
+			assert.Equal(t, "2026-10-05T10:00:00Z", p["last_event"])
+		}
+	}
 
 	active := out["active_sessions"].(map[string]any)
 	assert.EqualValues(t, 1, active["count"])

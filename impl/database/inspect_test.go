@@ -216,3 +216,28 @@ func TestTransactionStateOfUnknownId(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, state)
 }
+
+func TestAllLocations(t *testing.T) {
+	m := testMongo(t)
+	seed(t, m, collectionLocations,
+		bson.M{"id": "ELP", "roaming": true, "name": "El Pedernoso"},
+		bson.M{"id": "ALP", "roaming": false, "name": "Alpicat"},
+		bson.M{"id": "EMPTY", "roaming": false},
+	)
+	seed(t, m, collectionChargePoints,
+		bson.M{"charge_point_id": "PE00001", "location_id": "ELP"},
+		bson.M{"charge_point_id": "Wallbox1", "location_id": "ALP"},
+		bson.M{"charge_point_id": "Wallbox2", "location_id": "ALP"},
+	)
+	locations, err := m.GetAllLocations(context.Background())
+	require.NoError(t, err)
+	require.Len(t, locations, 3, "non-roaming locations and those without charge points are included")
+	assert.Equal(t, "ALP", locations[0].Id)
+	assert.Len(t, locations[0].ChargePoints, 2)
+	assert.Equal(t, "EMPTY", locations[2].Id)
+	assert.Empty(t, locations[2].ChargePoints)
+
+	roaming, err := m.GetLocations(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, roaming, 1, "the REST query is unchanged")
+}

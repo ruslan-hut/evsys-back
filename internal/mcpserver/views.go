@@ -19,7 +19,7 @@ type connectorView struct {
 	ErrorCode         string                 `json:"error_code,omitempty"`
 	Info              string                 `json:"info,omitempty"`
 	VendorId          string                 `json:"vendor_id,omitempty"`
-	TransactionId     int                    `json:"current_transaction_id,omitempty"`
+	TransactionId     int                    `json:"current_transaction_id,omitempty"` // evsys writes -1 when idle
 	CurrentLimitAmps  int                    `json:"current_limit_a,omitempty"`
 	LastProfileAnswer *entity.ProfileVerdict `json:"last_profile,omitempty"`
 }
@@ -48,6 +48,10 @@ type chargePointView struct {
 }
 
 func connectorFrom(c *entity.Connector) connectorView {
+	transactionId := c.TransactionId
+	if transactionId < 0 {
+		transactionId = 0
+	}
 	return connectorView{
 		ConnectorId:       c.Id,
 		Name:              c.IdName,
@@ -58,7 +62,7 @@ func connectorFrom(c *entity.Connector) connectorView {
 		ErrorCode:         c.ErrorCode,
 		Info:              c.Info,
 		VendorId:          c.VendorId,
-		TransactionId:     c.TransactionId,
+		TransactionId:     transactionId,
 		CurrentLimitAmps:  c.CurrentPowerLimit,
 		LastProfileAnswer: c.LastProfile,
 	}

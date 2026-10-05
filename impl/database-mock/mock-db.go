@@ -749,6 +749,10 @@ func (db *MockDB) GetConfig(_ context.Context, name string) (any, error) {
 	return nil, nil
 }
 
+func (db *MockDB) GetAllLocations(_ context.Context) ([]*entity.Location, error) {
+	return nil, nil
+}
+
 func (db *MockDB) GetLocations(_ context.Context) ([]*entity.Location, error) {
 	return nil, nil
 }

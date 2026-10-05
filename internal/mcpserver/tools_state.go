@@ -17,6 +17,9 @@ type problemView struct {
 	ErrorCode     string `json:"error_code,omitempty"`
 	Info          string `json:"info,omitempty"`
 	Since         string `json:"since,omitempty"`
+	// LastEvent is the last message from an offline charge point, which is
+	// not when it disconnected: keep-alives and retries come after that.
+	LastEvent string `json:"last_event,omitempty"`
 }
 
 // problemsOf lists what is wrong with an enabled charge point: being offline,
@@ -30,7 +33,7 @@ func problemsOf(cp *entity.ChargePoint) []problemView {
 		problems = append(problems, problemView{
 			ChargePointId: cp.Id,
 			Problem:       "offline",
-			Since:         timestamp(cp.EventTime),
+			LastEvent:     timestamp(cp.EventTime),
 		})
 	}
 	if hasError(cp.ErrorCode) || cp.Status == "Faulted" {
@@ -70,6 +73,31 @@ func problemsOf(cp *entity.ChargePoint) []problemView {
 	return problems
 }
 
+// disconnectedSince maps each offline charge point to the time it
+// disconnected, from the connect/disconnect events in the sys log. It is
+// diagnostic detail: on failure the problems simply go without it.
+func (t *tools) disconnectedSince(ctx context.Context, user *entity.User, chargePointId string) map[string]string {
+	since := map[string]string{}
+	statuses, err := t.core.StationStatusReport(ctx, user, chargePointId)
+	if err != nil {
+		return since
+	}
+	for _, s := range statuses {
+		if s.State == entity.StateOffline {
+			since[s.ChargePointId] = timestamp(s.Since)
+		}
+	}
+	return since
+}
+
+func setOfflineSince(problems []problemView, since map[string]string) {
+	for i := range problems {
+		if problems[i].Problem == "offline" {
+			problems[i].Since = since[problems[i].ChargePointId]
+		}
+	}
+}
+
 func (t *tools) systemOverview(ctx context.Context, user *entity.User, _ noInput) (any, error) {
 	chargePoints, err := t.core.InspectChargePoints(ctx, user, "")
 	if err != nil {
@@ -80,6 +108,7 @@ func (t *tools) systemOverview(ctx context.Context, user *entity.User, _ noInput
 		return nil, err
 	}
 	now := t.now()
+	since := t.disconnectedSince(ctx, user, "")
 
 	type cpSummary struct {
 		Total    int `json:"total"`
@@ -120,6 +149,7 @@ func (t *tools) systemOverview(ctx context.Context, user *entity.User, _ noInput
 		}
 		problems = append(problems, problemsOf(cp)...)
 	}
+	setOfflineSince(problems, since)
 
 	totalPower := 0
 	active := make([]activeSessionView, 0, len(sessions))
@@ -174,9 +204,11 @@ func (t *tools) getChargePoint(ctx context.Context, user *entity.User, in charge
 		return nil, err
 	}
 	view := chargePointFrom(cp)
+	problems := problemsOf(cp)
+	setOfflineSince(problems, t.disconnectedSince(ctx, user, cp.Id))
 	return map[string]any{
 		"charge_point": view,
-		"problems":     problemsOf(cp),
+		"problems":     problems,
 		"geo_location": cp.Location,
 		"description":  cp.Description,
 	}, nil
@@ -231,6 +263,6 @@ func (t *tools) listLocations(ctx context.Context, user *entity.User, _ noInput)
 	return map[string]any{
 		"count":     len(views),
 		"locations": views,
-		"note":      "power_limit is the site's rated capacity, recorded for reference only; default_power_limit is the amperage of the default charging profile installed on its charge points at boot (0 = none). Only roaming-enabled locations are listed.",
+		"note":      "power_limit is the site's rated capacity, recorded for reference only; default_power_limit is the amperage of the default charging profile installed on its charge points at boot (0 = none).",
 	}, nil
 }

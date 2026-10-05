@@ -14,7 +14,7 @@ func (t *tools) register(s *mcp.Server) {
 		"One charge point in full, with connectors and its current problems.",
 		t.getChargePoint)
 	addTool(t, s, "list_locations", "List locations",
-		"Sites with their power settings and the charge points installed there. Locations are the unit of load balancing and of the site_concurrency report.",
+		"All sites, roaming or not, with their power settings and the charge points installed there. Locations are the unit of load balancing and of the site_concurrency report.",
 		t.listLocations)
 
 	// transactions

@@ -14,6 +14,7 @@ type Repository interface {
 	GetWarningEmailRecipients(ctx context.Context) ([]*entity.User, error)
 
 	GetLocations(ctx context.Context) ([]*entity.Location, error)
+	GetAllLocations(ctx context.Context) ([]*entity.Location, error)
 	GetChargePoints(ctx context.Context, level int, searchTerm string) ([]*entity.ChargePoint, error)
 	GetChargePoint(ctx context.Context, level int, id string) (*entity.ChargePoint, error)
 	UpdateChargePoint(ctx context.Context, level int, chargePoint *entity.ChargePoint) error

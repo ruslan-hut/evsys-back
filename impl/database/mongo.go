@@ -1279,6 +1279,22 @@ func parsePeriod(period string) (time1, time2 time.Time, err error) {
 }
 
 // GetLocations get all locations with all nested charge points and connectors
+// GetAllLocations returns every location with its charge points, roaming or
+// not, and also those without charge points; unlike GetLocations it does not
+// join connectors.
+func (m *MongoDB) GetAllLocations(ctx context.Context) ([]*entity.Location, error) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: collectionChargePoints},
+			{Key: "localField", Value: "id"},
+			{Key: "foreignField", Value: "location_id"},
+			{Key: "as", Value: "charge_points"},
+		}}},
+		{{Key: "$sort", Value: bson.D{{Key: "id", Value: 1}}}},
+	}
+	return aggregateMany[*entity.Location](m, ctx, collectionLocations, pipeline)
+}
+
 func (m *MongoDB) GetLocations(ctx context.Context) ([]*entity.Location, error) {
 	pipeline := bson.A{
 		bson.D{

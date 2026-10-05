@@ -167,6 +167,9 @@ func handlerFor[In any](t *tools, name string, fn func(ctx context.Context, user
 			return nil, nil, err
 		}
 		body, err := json.Marshal(out)
+		if err == nil {
+			body, err = roundFloats(body)
+		}
 		if err != nil {
 			return nil, nil, fmt.Errorf("encoding result: %w", err)
 		}
