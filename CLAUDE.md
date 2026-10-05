@@ -91,14 +91,16 @@ impl/                       Core implementations
 ├── redsys/                 Redsys payment gateway client (MIT payments, preauth, refunds)
 ├── brevo/                  Brevo (Sendinblue) transactional email client
 ├── mail/                   Scheduled report-mail service (daily/weekly/monthly)
+├── oauth/                  OAuth 2.1 authorization server guarding the MCP endpoint
 ├── reports/                Statistics generation
 ├── status-reader/          Transaction state management
 └── central-system/         External API proxy
     ↓
+internal/mcpserver/         MCP server: read-only tools over the data (see docs/mcp.md)
 internal/api/
 ├── http/server.go          Chi router, WebSocket pool, middleware stack
 ├── handlers/               REST endpoints (users/, locations/, transactions/, payments/, report/)
-├── middleware/             authenticate (token validation), timeout (5s)
+├── middleware/             authenticate (token validation), timeout (5s REST, mcp.request_timeout for /api/v1/mcp)
 └── lib/                    Utilities (logger, validate, api/response, api/request)
     ↓
 entity/                     Domain models and DTOs (26 files)
@@ -134,7 +136,7 @@ Two config files:
 - `config.yml` - Local development (hardcoded values, mongo disabled)
 - `back.yml` - Deployment template with `${ENV_VAR}` placeholders
 
-Key config sections: `listen` (server), `mongo` (database), `central_system` (external API), `firebase_key` (optional auth), `redsys` (payment gateway), `brevo` (mail provider).
+Key config sections: `listen` (server), `mongo` (database), `central_system` (external API), `firebase_key` (optional auth), `redsys` (payment gateway), `brevo` (mail provider), `mcp` (MCP server and its OAuth).
 
 ### Redsys Payment Config
 
@@ -237,6 +239,45 @@ unless `MONGO_TEST_URI` is set, so `go test ./...` stays green without Docker:
 docker run -d --name evsys-test-mongo -p 27019:27017 mongo:7
 MONGO_TEST_URI=mongodb://localhost:27019 go test ./...
 ```
+
+## MCP Server
+
+`/api/v1/mcp` serves MCP clients (Claude, Claude Code) read-only tools over
+charge points, transactions, logs and the workload reports. It authenticates
+with OAuth access tokens issued by `impl/oauth`; the consent step is a page in
+evsys-front (`/oauth/authorize`) that signs the user in as usual and posts the
+decision with the user's API token. Only admins and operators can connect, and
+the user is reloaded on every call. Full reference: [docs/mcp.md](docs/mcp.md).
+
+Deployment needs nginx to forward `/.well-known/oauth-authorization-server`,
+`/.well-known/oauth-protected-resource` and `/.well-known/openid-configuration/api/`
+to the backend: OAuth discovery starts at the site root, where the evsys-front
+SPA otherwise answers 200 with HTML and breaks it (docs/mcp.md, Reverse proxy).
+
+```yaml
+mcp:
+  enabled: false
+  public_url: "https://wattbrews.me"        # MCP endpoint = {public_url}/api/v1/mcp
+  frontend_url: "https://wattbrews.me"      # consent page = {frontend_url}/oauth/authorize
+  access_token_ttl: 60                       # minutes
+  refresh_token_ttl: 30                      # days
+  request_timeout: 60                        # seconds, MCP requests only
+```
+
+When changing it:
+- Tools read through the `Inspect*` methods in `impl/core/inspect.go` and the
+  existing report methods, so they keep the REST access rules. Add a tool in
+  `internal/mcpserver/tools.go`; return a view from `views.go`, not an entity -
+  views leave out credentials (API tokens, card `identifier`/`merchant_cof_txnid`)
+  and unset times.
+- Every tool result is one JSON object; lists are wrapped (`{count, rows}`) and
+  carry a `note` where a field's meaning is not obvious from its name. Bound
+  list sizes with a `limit` input.
+- The OAuth endpoints answer in the RFC 6749 error shape, not
+  `response.Error`: OAuth client libraries parse them.
+- Tool output shapes are read by a model, not by the four app clients, so the
+  published-contract rule above does not bind them; the OAuth endpoints are
+  bound by the RFCs instead.
 
 ## Webhook Admin API Endpoints
 

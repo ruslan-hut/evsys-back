@@ -59,6 +59,22 @@ type Config struct {
 		SenderMail string `yaml:"sender_email" env-default:"noreply@example.com"`
 		ApiUrl     string `yaml:"api_url" env-default:"https://api.brevo.com/v3/smtp/email"`
 	} `yaml:"brevo"`
+	Mcp struct {
+		Enabled bool `yaml:"enabled" env-default:"false"`
+		// PublicUrl is the externally reachable origin of this backend, as MCP
+		// clients see it (e.g. https://wattbrews.me). The MCP endpoint is
+		// {PublicUrl}/api/v1/mcp and the OAuth issuer {PublicUrl}/api/v1/oauth.
+		PublicUrl string `yaml:"public_url" env-default:""`
+		// FrontendUrl is the evsys-front origin; the consent page lives at
+		// {FrontendUrl}/oauth/authorize.
+		FrontendUrl string `yaml:"frontend_url" env-default:""`
+		// AccessTokenTTL is in minutes, RefreshTokenTTL in days.
+		AccessTokenTTL  int `yaml:"access_token_ttl" env-default:"60"`
+		RefreshTokenTTL int `yaml:"refresh_token_ttl" env-default:"30"`
+		// RequestTimeout bounds one MCP request, in seconds. Reports over long
+		// periods outrun the 5 second budget of the REST API.
+		RequestTimeout int `yaml:"request_timeout" env-default:"60"`
+	} `yaml:"mcp"`
 }
 
 var instance *Config

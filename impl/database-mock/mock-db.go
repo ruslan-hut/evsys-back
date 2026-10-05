@@ -4,6 +4,7 @@ import (
 	"context"
 	"evsys-back/entity"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -27,6 +28,8 @@ type MockDB struct {
 	paymentRetries     map[int]*entity.PaymentRetry         // key: transactionId
 	mailSubscriptions  map[string]*entity.MailSubscription  // key: id
 	webhookSubscribers map[string]*entity.WebhookSubscriber // key: id
+	oauthClients       map[string]*entity.OAuthClient       // key: clientId
+	oauthTokens        map[string]*entity.OAuthToken        // key: hash
 	lastOrderId        int
 	mux                sync.RWMutex
 }
@@ -57,6 +60,8 @@ func (db *MockDB) clear() {
 	db.paymentRetries = make(map[int]*entity.PaymentRetry)
 	db.mailSubscriptions = make(map[string]*entity.MailSubscription)
 	db.webhookSubscribers = make(map[string]*entity.WebhookSubscriber)
+	db.oauthClients = make(map[string]*entity.OAuthClient)
+	db.oauthTokens = make(map[string]*entity.OAuthToken)
 	db.lastOrderId = 0
 }
 
@@ -513,7 +518,26 @@ func (db *MockDB) GetFilteredTransactions(_ context.Context, filter *entity.Tran
 		txs = append(txs, tx)
 	}
 
+	sort.Slice(txs, func(i, j int) bool { return txs[i].TimeStart.After(txs[j].TimeStart) })
+	if filter.Limit > 0 && int64(len(txs)) > filter.Limit {
+		txs = txs[:filter.Limit]
+	}
 	return txs, nil
+}
+
+func (db *MockDB) GetAllActiveTransactions(_ context.Context, _ int) ([]*entity.ChargeState, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	states := make([]*entity.ChargeState, 0)
+	for txId, tx := range db.transactions {
+		if tx.IsFinished {
+			continue
+		}
+		if state, exists := db.chargeStates[txId]; exists {
+			states = append(states, state)
+		}
+	}
+	return states, nil
 }
 
 func (db *MockDB) GetTransactionsToBill(userId string) ([]*entity.Transaction, error) {
@@ -1001,4 +1025,60 @@ func (db *MockDB) GetWebhookOutboxStats(_ context.Context) ([]*entity.WebhookOut
 
 func (db *MockDB) ListWebhookProblemDeliveries(_ context.Context, _ int) ([]*entity.WebhookDeliveryView, error) {
 	return nil, nil
+}
+
+func (db *MockDB) ErrorSummary(_ context.Context, _, _ time.Time, _ string) ([]*entity.ErrorSummary, error) {
+	return nil, nil
+}
+
+// --- OAuth ---
+
+func (db *MockDB) SaveOAuthClient(_ context.Context, client *entity.OAuthClient) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	if _, ok := db.oauthClients[client.ClientId]; ok {
+		return fmt.Errorf("oauth client %s already exists", client.ClientId)
+	}
+	db.oauthClients[client.ClientId] = client
+	return nil
+}
+
+func (db *MockDB) GetOAuthClient(_ context.Context, clientId string) (*entity.OAuthClient, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	return db.oauthClients[clientId], nil
+}
+
+func (db *MockDB) SaveOAuthToken(_ context.Context, token *entity.OAuthToken) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	db.oauthTokens[token.Hash] = token
+	return nil
+}
+
+func (db *MockDB) GetOAuthToken(_ context.Context, hash string) (*entity.OAuthToken, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	return db.oauthTokens[hash], nil
+}
+
+func (db *MockDB) DeleteOAuthToken(_ context.Context, hash string) (bool, error) {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	if _, ok := db.oauthTokens[hash]; !ok {
+		return false, nil
+	}
+	delete(db.oauthTokens, hash)
+	return true, nil
+}
+
+func (db *MockDB) DeleteOAuthGrant(_ context.Context, grantId string) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	for hash, token := range db.oauthTokens {
+		if token.GrantId == grantId {
+			delete(db.oauthTokens, hash)
+		}
+	}
+	return nil
 }

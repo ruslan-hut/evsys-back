@@ -10,6 +10,12 @@ type TransactionFilter struct {
 	IdTag         string     // Filter by RFID tag ID
 	ChargePointId string     // Filter by charge point identifier
 	WithError     bool       // Filter transactions with non-empty payment_error
+	// Limit caps the number of transactions returned, newest first; 0 means
+	// no cap. Not part of HasFilters: the REST API never sets it.
+	Limit int64
+	// SkipMeterValues leaves the embedded meter values out of the query, for
+	// callers that only need the session totals.
+	SkipMeterValues bool
 }
 
 // HasFilters returns true if any filter is set

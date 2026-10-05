@@ -53,6 +53,7 @@ Detailed documentation for all REST API endpoints.
   - [POST /csc](#post-apiv1csc)
 - [Utility](#utility)
   - [GET /log/{name}](#get-apiv1logname)
+- [MCP and OAuth](#mcp-and-oauth)
 - [WebSocket](#websocket)
   - [WebSocket Request](#websocket-request)
   - [WebSocket Response](#websocket-response)
@@ -1358,11 +1359,29 @@ Read log entries by name.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| name | string | Yes | Log name/category |
+| name | string | Yes | `sys` (OCPP events, from evsys), `back` (this service), `pay` (payments) or `errors` (connector errors, from evsys) |
+
+**Query Parameters:** `from`, `to`, `charge_point_id` (sys and errors only), `limit`.
 
 **Success Response:**
 
-Returns log entries (structure varies).
+Returns log entries, newest first; the structure depends on the log.
+
+---
+
+## MCP and OAuth
+
+Enabled with `mcp.enabled`. The MCP endpoint `POST /api/v1/mcp` takes OAuth
+access tokens, not user API tokens, and the OAuth endpoints under
+`/api/v1/oauth/` follow RFC 6749/7591/7009/8414/9728 rather than the response
+format of this document. The consent calls evsys-front makes with the user's
+API token:
+
+- `GET /api/v1/oauth/requests/{id}` - pending request: `client_name`, `redirect_host`, `expires_at`, `can_approve`
+- `POST /api/v1/oauth/requests/{id}/approve` - `{redirect_url}`; 403 unless admin or operator
+- `POST /api/v1/oauth/requests/{id}/deny` - `{redirect_url}`
+
+See [mcp.md](mcp.md) for the flow, the endpoints and the tools.
 
 ---
 

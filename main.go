@@ -10,6 +10,7 @@ import (
 	"evsys-back/impl/database"
 	databasemock "evsys-back/impl/database-mock"
 	"evsys-back/impl/mail"
+	"evsys-back/impl/oauth"
 	"evsys-back/impl/redsys"
 	"evsys-back/impl/reports"
 	statusreader "evsys-back/impl/status-reader"
@@ -142,7 +143,42 @@ func main() {
 		mailService.Start()
 	}
 
-	server := http.NewServer(conf, log, coreHandler)
+	// MCP endpoint and the OAuth server guarding it; the interface stays nil
+	// when disabled, which keeps the routes out
+	var oauthService http.OAuth
+	if conf.Mcp.Enabled {
+		var oauthRepo oauth.Repository
+		if conf.Mongo.Enabled {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err = mongo.EnsureOAuthIndexes(ctx)
+			cancel()
+			if err != nil {
+				log.Error("oauth indexes", sl.Err(err))
+				return
+			}
+			oauthRepo = mongo
+		} else {
+			oauthRepo = mockDb
+		}
+		service, err := oauth.New(oauth.Config{
+			PublicUrl:       conf.Mcp.PublicUrl,
+			FrontendUrl:     conf.Mcp.FrontendUrl,
+			AccessTokenTTL:  time.Duration(conf.Mcp.AccessTokenTTL) * time.Minute,
+			RefreshTokenTTL: time.Duration(conf.Mcp.RefreshTokenTTL) * 24 * time.Hour,
+		}, oauthRepo, log)
+		if err != nil {
+			log.Error("mcp oauth", sl.Err(err))
+			return
+		}
+		log.With(
+			slog.String("endpoint", service.Resource()),
+			slog.String("issuer", service.Issuer()),
+			slog.String("consent", conf.Mcp.FrontendUrl),
+		).Info("mcp server enabled")
+		oauthService = service
+	}
+
+	server := http.NewServer(conf, log, coreHandler, oauthService)
 	if conf.Mongo.Enabled {
 		server.SetStatusReader(statusreader.New(log, mongo))
 	}

@@ -101,7 +101,10 @@ func Options() func(next http.Handler) http.Handler {
 
 			w.Header().Add("Access-Control-Allow-Origin", r.Header.Get("Origin"))
 			w.Header().Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Add("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			// the Mcp-* headers and the exposed WWW-Authenticate let browser-based
+			// MCP clients reach /api/v1/mcp and discover its OAuth server
+			w.Header().Add("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Protocol-Version, Mcp-Session-Id, Last-Event-ID")
+			w.Header().Add("Access-Control-Expose-Headers", "WWW-Authenticate, Mcp-Session-Id")
 
 			if r.Method == http.MethodOptions {
 				render.Status(r, http.StatusOK)

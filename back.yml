@@ -39,3 +39,7 @@ brevo:
   sender_name: ${BREVO_SENDER_NAME}
   sender_email: ${BREVO_SENDER_EMAIL}
   api_url: ${BREVO_API_URL}
+mcp:
+  enabled: ${MCP_ENABLED}
+  public_url: ${MCP_PUBLIC_URL}
+  frontend_url: ${MCP_FRONTEND_URL}

@@ -6,6 +6,7 @@ import (
 	"evsys-back/config"
 	"evsys-back/entity"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -40,6 +41,12 @@ const (
 	// written by evsys; see evsys docs/WEBHOOKS.md for the schema contract
 	collectionWebhookSubscribers = "webhook_subscribers"
 	collectionWebhookOutbox      = "webhook_outbox"
+	// connector errors, written by evsys
+	collectionErrorLog = "errors_log"
+
+	// owned by this service, see oauth.go
+	collectionOAuthClients = "oauth_clients"
+	collectionOAuthTokens  = "oauth_tokens"
 )
 
 type MongoDB struct {
@@ -159,49 +166,87 @@ func (m *MongoDB) Close() error {
 // matter what limit the client asks for.
 const maxLogRecords int64 = 50000
 
+// logFields names the fields a log filter applies to in one log collection.
+// An empty name means the criterion does not apply to that log.
+type logFields struct {
+	chargePoint string
+	search      []string
+	category    string
+	level       string
+}
+
+var (
+	featureLogFields = logFields{chargePoint: "charge_point_id", search: []string{"text"}, category: "feature", level: "importance"}
+	messageLogFields = logFields{search: []string{"text"}, category: "category", level: "level"}
+	errorLogFields   = logFields{chargePoint: "charge_point_id", search: []string{"info", "error_code", "vendor_error_code"}, category: "error_code"}
+)
+
+// logQuery translates a log filter into a find filter for a collection with
+// the given fields.
+func logQuery(logFilter *entity.LogFilter, fields logFields) bson.D {
+	filter := bson.D{}
+	if logFilter == nil {
+		return filter
+	}
+	period := bson.D{}
+	if logFilter.From != nil {
+		period = append(period, bson.E{Key: "$gte", Value: *logFilter.From})
+	}
+	if logFilter.To != nil {
+		period = append(period, bson.E{Key: "$lte", Value: *logFilter.To})
+	}
+	if len(period) > 0 {
+		filter = append(filter, bson.E{Key: "timestamp", Value: period})
+	}
+	if logFilter.ChargePointId != "" && fields.chargePoint != "" {
+		filter = append(filter, bson.E{Key: fields.chargePoint, Value: logFilter.ChargePointId})
+	}
+	if logFilter.Category != "" && fields.category != "" {
+		filter = append(filter, bson.E{Key: fields.category, Value: logFilter.Category})
+	}
+	if logFilter.Level != "" && fields.level != "" {
+		filter = append(filter, bson.E{Key: fields.level, Value: logFilter.Level})
+	}
+	if logFilter.Search != "" && len(fields.search) > 0 {
+		pattern := primitive.Regex{Pattern: regexp.QuoteMeta(logFilter.Search), Options: "i"}
+		alternatives := bson.A{}
+		for _, field := range fields.search {
+			alternatives = append(alternatives, bson.D{{Key: field, Value: pattern}})
+		}
+		filter = append(filter, bson.E{Key: "$or", Value: alternatives})
+	}
+	return filter
+}
+
 func (m *MongoDB) read(ctx context.Context, table, dataType string, logFilter *entity.LogFilter) (any, error) {
 	var logMessages any
-	timeFieldName := "timestamp"
+	var fields logFields
 
 	switch dataType {
 	case entity.FeatureMessageType:
 		logMessages = []entity.FeatureMessage{}
+		fields = featureLogFields
 	case entity.LogMessageType:
 		logMessages = []entity.LogMessage{}
+		fields = messageLogFields
+	case entity.ErrorRecordType:
+		logMessages = []entity.ErrorRecord{}
+		fields = errorLogFields
 	default:
 		return nil, fmt.Errorf("unknown data type: %s", dataType)
 	}
 
-	collection := m.col(table)
-	filter := bson.D{}
+	filter := logQuery(logFilter, fields)
 	limit := m.logRecordsNumber
-
-	if logFilter != nil {
-		period := bson.D{}
-		if logFilter.From != nil {
-			period = append(period, bson.E{Key: "$gte", Value: *logFilter.From})
-		}
-		if logFilter.To != nil {
-			period = append(period, bson.E{Key: "$lte", Value: *logFilter.To})
-		}
-		if len(period) > 0 {
-			filter = append(filter, bson.E{Key: timeFieldName, Value: period})
-		}
-		// only the system log records a charge point
-		if logFilter.ChargePointId != "" && dataType == entity.FeatureMessageType {
-			filter = append(filter, bson.E{Key: "charge_point_id", Value: logFilter.ChargePointId})
-		}
-		if logFilter.Limit > 0 {
-			limit = logFilter.Limit
-		}
+	if logFilter != nil && logFilter.Limit > 0 {
+		limit = logFilter.Limit
 	}
-
 	if limit <= 0 || limit > maxLogRecords {
 		limit = maxLogRecords
 	}
 
-	opts := options.Find().SetSort(bson.D{{Key: timeFieldName, Value: -1}}).SetLimit(limit)
-	cursor, err := collection.Find(ctx, filter, opts)
+	opts := options.Find().SetSort(bson.D{{Key: "timestamp", Value: -1}}).SetLimit(limit)
+	cursor, err := m.col(table).Find(ctx, filter, opts)
 	if err != nil {
 		return nil, m.findError(err)
 	}
@@ -219,6 +264,8 @@ func (m *MongoDB) ReadLog(ctx context.Context, logName string, filter *entity.Lo
 		return m.read(ctx, collectionBackLog, entity.LogMessageType, filter)
 	case "pay":
 		return m.read(ctx, collectionPaymentLog, entity.LogMessageType, filter)
+	case "errors":
+		return m.read(ctx, collectionErrorLog, entity.ErrorRecordType, filter)
 	default:
 		return nil, fmt.Errorf("unknown log name: %s", logName)
 	}
@@ -650,6 +697,9 @@ func (m *MongoDB) GetTransactionState(ctx context.Context, userId string, level 
 	if err != nil {
 		return nil, err
 	}
+	if transaction == nil {
+		return nil, nil
+	}
 	chargeState, err := m.getTransactionState(ctx, userId, level, transaction)
 	if err != nil {
 		return nil, err
@@ -816,12 +866,17 @@ func (m *MongoDB) GetFilteredTransactions(ctx context.Context, filter *entity.Tr
 		mongoFilter = append(mongoFilter, bson.E{Key: "charge_point_id", Value: filter.ChargePointId})
 	}
 
-	// Filter by date range
+	// Filter by date range; both bounds go in one element, a second
+	// "time_stop" key would make the document ambiguous
+	period := bson.D{}
 	if filter.From != nil {
-		mongoFilter = append(mongoFilter, bson.E{Key: "time_stop", Value: bson.D{{Key: "$gte", Value: *filter.From}}})
+		period = append(period, bson.E{Key: "$gte", Value: *filter.From})
 	}
 	if filter.To != nil {
-		mongoFilter = append(mongoFilter, bson.E{Key: "time_stop", Value: bson.D{{Key: "$lte", Value: *filter.To}}})
+		period = append(period, bson.E{Key: "$lte", Value: *filter.To})
+	}
+	if len(period) > 0 {
+		mongoFilter = append(mongoFilter, bson.E{Key: "time_stop", Value: period})
 	}
 
 	// Filter by payment_error (non-empty)
@@ -834,8 +889,73 @@ func (m *MongoDB) GetFilteredTransactions(ctx context.Context, filter *entity.Tr
 
 	// Sort by time_start descending (newest first)
 	opts := options.Find().SetSort(bson.D{{Key: "time_start", Value: -1}})
+	if filter.Limit > 0 {
+		opts.SetLimit(filter.Limit)
+	}
+	if filter.SkipMeterValues {
+		opts.SetProjection(bson.D{{Key: "meter_values", Value: 0}})
+	}
 
 	return findMany[*entity.Transaction](m, ctx, collectionTransactions, mongoFilter, opts)
+}
+
+// GetAllActiveTransactions returns the state of every unfinished transaction,
+// whoever started it, on charge points visible at the given access level.
+// Transactions whose charge point or connector cannot be resolved are skipped,
+// as in GetActiveTransactions.
+func (m *MongoDB) GetAllActiveTransactions(ctx context.Context, level int) ([]*entity.ChargeState, error) {
+	filter := bson.D{{Key: "is_finished", Value: false}}
+	opts := options.Find().SetSort(bson.D{{Key: "time_start", Value: -1}})
+	transactions, err := findMany[entity.Transaction](m, ctx, collectionTransactions, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	states := make([]*entity.ChargeState, 0, len(transactions))
+	for i := range transactions {
+		state, _ := m.getTransactionState(ctx, "", level, &transactions[i])
+		if state != nil {
+			states = append(states, state)
+		}
+	}
+	return states, nil
+}
+
+// ErrorSummary counts errors_log records per charge point, connector and error
+// code over a period, most frequent first.
+func (m *MongoDB) ErrorSummary(ctx context.Context, from, to time.Time, chargePointId string) ([]*entity.ErrorSummary, error) {
+	match := bson.D{{Key: "timestamp", Value: bson.D{{Key: "$gte", Value: from}, {Key: "$lte", Value: to}}}}
+	if chargePointId != "" {
+		match = append(match, bson.E{Key: "charge_point_id", Value: chargePointId})
+	}
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: match}},
+		{{Key: "$sort", Value: bson.D{{Key: "timestamp", Value: 1}}}},
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{
+				{Key: "charge_point_id", Value: "$charge_point_id"},
+				{Key: "connector_id", Value: "$connector_id"},
+				{Key: "error_code", Value: "$error_code"},
+				{Key: "vendor_error_code", Value: "$vendor_error_code"},
+			}},
+			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
+			{Key: "first", Value: bson.D{{Key: "$first", Value: "$timestamp"}}},
+			{Key: "last", Value: bson.D{{Key: "$last", Value: "$timestamp"}}},
+			{Key: "last_info", Value: bson.D{{Key: "$last", Value: "$info"}}},
+		}}},
+		{{Key: "$project", Value: bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "charge_point_id", Value: "$_id.charge_point_id"},
+			{Key: "connector_id", Value: "$_id.connector_id"},
+			{Key: "error_code", Value: "$_id.error_code"},
+			{Key: "vendor_error_code", Value: "$_id.vendor_error_code"},
+			{Key: "count", Value: 1},
+			{Key: "first", Value: 1},
+			{Key: "last", Value: 1},
+			{Key: "last_info", Value: 1},
+		}}},
+		{{Key: "$sort", Value: bson.D{{Key: "count", Value: -1}, {Key: "charge_point_id", Value: 1}}}},
+	}
+	return aggregateMany[*entity.ErrorSummary](m, ctx, collectionErrorLog, pipeline)
 }
 
 func (m *MongoDB) GetTransactionByTag(ctx context.Context, idTag string, timeStart time.Time) (*entity.Transaction, error) {

@@ -7,6 +7,7 @@ import (
 	"evsys-back/internal/api/handlers/helper"
 	"evsys-back/internal/api/handlers/locations"
 	"evsys-back/internal/api/handlers/mail"
+	oauthapi "evsys-back/internal/api/handlers/oauth"
 	"evsys-back/internal/api/handlers/payments"
 	"evsys-back/internal/api/handlers/report"
 	"evsys-back/internal/api/handlers/transactions"
@@ -19,10 +20,12 @@ import (
 	"evsys-back/internal/api/middleware/timeout"
 	"evsys-back/internal/api/websocket"
 	"evsys-back/internal/lib/sl"
+	"evsys-back/internal/mcpserver"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -57,11 +60,28 @@ type Core interface {
 	report.Reports
 	mail.Handler
 	webhooks.Handler
+	mcpserver.Core
 
 	websocket.Core
 }
 
-func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
+// OAuth is the authorization server guarding the MCP endpoint.
+type OAuth interface {
+	oauthapi.Service
+	mcpserver.TokenVerifier
+	ResourceMetadataUrl() string
+}
+
+const (
+	// apiTimeout bounds REST requests, in seconds.
+	apiTimeout = 5
+	// defaultMcpTimeout bounds an MCP request when the config leaves it unset.
+	defaultMcpTimeout = 60
+)
+
+// NewServer builds the HTTP server. oauth may be nil, which leaves the MCP
+// endpoint and the OAuth routes out.
+func NewServer(conf *config.Config, log *slog.Logger, core Core, oauth OAuth) *Server {
 
 	server := Server{
 		conf: conf,
@@ -75,22 +95,64 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 	}
 
 	router := chi.NewRouter()
-	router.Use(timeout.Timeout(5))
 	router.Use(middleware.RequestID)
 	router.Use(middleware.Recoverer)
 	router.Use(render.SetContentType(render.ContentTypeJSON))
 
 	router.Use(helper.Options())
 
+	// The MCP endpoint has its own timeout: a report over a long period takes
+	// longer than the REST budget, and the tools read only.
+	if oauth != nil {
+		mcpTimeout := time.Duration(conf.Mcp.RequestTimeout)
+		if mcpTimeout <= 0 {
+			mcpTimeout = defaultMcpTimeout
+		}
+		router.With(timeout.Timeout(mcpTimeout)).Handle("/api/v1/mcp",
+			mcpserver.NewHandler(log, core, oauth, oauth.ResourceMetadataUrl()))
+	}
+
+	router.Group(func(router chi.Router) {
+		router.Use(timeout.Timeout(apiTimeout))
+
+		server.routes(router, log, core, oauth)
+	})
+
+	server.httpServer = &http.Server{
+		Handler: router,
+	}
+
+	return &server
+}
+
+func (s *Server) routes(router chi.Router, log *slog.Logger, core Core, oauth OAuth) {
 	// websocket connection
 	router.Route("/", func(r chi.Router) {
-		r.Get("/ws", server.handleWs)
+		r.Get("/ws", s.handleWs)
+
+		// OAuth discovery at the well-known locations (RFC 8414, RFC 9728).
+		// Clients reach them only if the proxy forwards /.well-known to this
+		// service; the copies under /api/v1/oauth below work without that.
+		if oauth != nil {
+			r.Get("/.well-known/oauth-protected-resource", oauthapi.ProtectedResourceMetadata(oauth))
+			r.Get("/.well-known/oauth-protected-resource/*", oauthapi.ProtectedResourceMetadata(oauth))
+			r.Get("/.well-known/oauth-authorization-server", oauthapi.AuthorizationServerMetadata(oauth))
+			r.Get("/.well-known/oauth-authorization-server/*", oauthapi.AuthorizationServerMetadata(oauth))
+			r.Get("/.well-known/openid-configuration/*", oauthapi.AuthorizationServerMetadata(oauth))
+		}
 	})
 
 	router.Route("/api/v1", func(r chi.Router) {
 		// requests with authorization token
 		r.Group(func(r chi.Router) {
 			r.Use(authenticate.New(log, core))
+
+			// consent page of evsys-front, deciding on an MCP client
+			if oauth != nil {
+				r.Get("/oauth/requests/{id}", oauthapi.ConsentInfo(log, oauth))
+				r.Post("/oauth/requests/{id}/approve", oauthapi.ConsentApprove(log, oauth))
+				r.Post("/oauth/requests/{id}/deny", oauthapi.ConsentDeny(log, oauth))
+			}
 
 			r.Get("/locations", locations.ListLocations(log, core))
 			r.Get("/chp", locations.ListChargePoints(log, core))
@@ -163,9 +225,9 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 		})
 
 		// service-to-service payment endpoints (API key auth)
-		if conf.Redsys.ApiKey != "" {
+		if s.conf.Redsys.ApiKey != "" {
 			r.Group(func(r chi.Router) {
-				r.Use(apikey.New(log, conf.Redsys.ApiKey))
+				r.Use(apikey.New(log, s.conf.Redsys.ApiKey))
 
 				r.Get("/payment/pay/{transactionId}", payments.Pay(log, core))
 				r.Get("/payment/return/{transactionId}", payments.Return(log, core))
@@ -179,14 +241,19 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core) *Server {
 			r.Post("/users/authenticate", users.Authenticate(log, core))
 			r.Post("/users/register", users.Register(log, core))
 			r.Post("/payment/notify", payments.Notify(log, core))
+
+			// OAuth authorization server for MCP clients
+			if oauth != nil {
+				r.Get("/oauth/protected-resource", oauthapi.ProtectedResourceMetadata(oauth))
+				r.Get("/oauth/.well-known/oauth-authorization-server", oauthapi.AuthorizationServerMetadata(oauth))
+				r.Get("/oauth/.well-known/openid-configuration", oauthapi.AuthorizationServerMetadata(oauth))
+				r.Post("/oauth/register", oauthapi.Register(log, oauth))
+				r.Get("/oauth/authorize", oauthapi.Authorize(log, oauth))
+				r.Post("/oauth/token", oauthapi.Token(log, oauth))
+				r.Post("/oauth/revoke", oauthapi.Revoke(log, oauth))
+			}
 		})
 	})
-
-	server.httpServer = &http.Server{
-		Handler: router,
-	}
-
-	return &server
 }
 
 func (s *Server) SetStatusReader(statusReader websocket.StatusReader) {
