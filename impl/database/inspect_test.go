@@ -241,3 +241,39 @@ func TestAllLocations(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, roaming, 1, "the REST query is unchanged")
 }
+
+func TestUserOutstandingTransactions(t *testing.T) {
+	m := testMongo(t)
+	seed(t, m, collectionUserTags,
+		bson.M{"user_id": "u1", "username": "alice", "id_tag": "TAGA", "is_enabled": false},
+		bson.M{"user_id": "u2", "username": "bob", "id_tag": "TAGB", "is_enabled": true},
+	)
+	paid := func(id int, tag string, amount, billed int, perr string, stop int, finished bool) bson.M {
+		doc := bson.M{"transaction_id": id, "id_tag": tag, "is_finished": finished,
+			"payment_amount": amount, "payment_billed": billed, "time_stop": mm(stop)}
+		if perr != "" {
+			doc["payment_error"] = perr
+		}
+		return doc
+	}
+	seed(t, m, collectionTransactions,
+		paid(1, "TAGA", 1000, 1000, "", 10, true),      // paid
+		paid(2, "TAGA", 1000, 0, "", 30, true),         // not charged yet
+		paid(3, "TAGA", 500, 500, "SIS0334", 20, true), // declined
+		paid(4, "TAGA", 0, 0, "", 40, true),            // free
+		paid(5, "TAGA", 800, 0, "", 50, false),         // still running
+		paid(6, "TAGB", 900, 0, "", 60, true),          // someone else's
+		paid(7, "TAGA", 300, 300, "", 70, true),        // paid, empty error
+	)
+	txs, err := m.GetUserOutstandingTransactions(context.Background(), "u1")
+	require.NoError(t, err)
+	var ids []int
+	for _, tx := range txs {
+		ids = append(ids, tx.TransactionId)
+	}
+	assert.Equal(t, []int{3, 2}, ids, "unpaid ones of this user, oldest first, on a disabled tag too")
+
+	none, err := m.GetUserOutstandingTransactions(context.Background(), "nobody")
+	require.NoError(t, err)
+	assert.Empty(t, none)
+}

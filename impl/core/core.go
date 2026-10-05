@@ -23,6 +23,14 @@ const (
 	NormalizedMeterValuesLength     = 60
 	subSystemReports                = "reports"
 	maxRetryAttempts                = 4
+
+	// paymentInFlight is how long an open payment order counts as a Redsys
+	// request still running (they time out after 30s); older open orders are
+	// closed as unanswered and the payment is sent again.
+	paymentInFlight = 2 * time.Minute
+	// settleTimeout bounds how long starting a session waits for the user's
+	// pending payments to be answered.
+	settleTimeout = 15 * time.Second
 )
 
 var retryDelays = []time.Duration{
@@ -799,7 +807,8 @@ func (c *Core) WsRequest(request *entity.UserRequest) error {
 
 	switch request.Command {
 	case entity.StartTransaction:
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		// long enough to charge an unpaid previous session and hear back
+		ctx, cancel := context.WithTimeout(context.Background(), settleTimeout+10*time.Second)
 		err := c.validateStartTransactionPaymentMethod(ctx, request)
 		cancel()
 		if err != nil {
@@ -1260,6 +1269,16 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 		return nil
 	}
 
+	// The Redsys request runs after this function returns, so an order opened
+	// moments ago may still be waiting for its answer. Sending another one now
+	// would charge the session twice: the 5-minute pass and a session start
+	// can both get here for the same transaction.
+	if open, e := c.repo.GetPaymentOrderByTransaction(ctx, transactionId); e == nil && open != nil &&
+		time.Since(open.TimeOpened) < paymentInFlight {
+		log.With(slog.Int("order", open.Order)).Info("payment already in progress")
+		return nil
+	}
+
 	// Resolve user tag
 	tag := transaction.UserTag
 	if tag == nil {
@@ -1283,6 +1302,14 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 
 	// Resolve payment method with fallback logic
 	paymentMethod := transaction.PaymentMethod
+	if paymentMethod != nil {
+		// The copy stored on the transaction keeps the fail count it had when
+		// it was first charged; read the card's current state, or the switch
+		// to another card below never sees that this one has failed since.
+		if current, e := c.repo.GetPaymentMethodByIdentifier(ctx, paymentMethod.Identifier); e == nil && current != nil {
+			paymentMethod = current
+		}
+	}
 	if paymentMethod == nil {
 		paymentMethod, err = c.repo.GetDefaultPaymentMethod(ctx, tag.UserId)
 		if err != nil {
@@ -1908,6 +1935,10 @@ func (c *Core) validateStartTransactionPaymentMethod(ctx context.Context, reques
 		return fmt.Errorf("user tag %s has no user id", tag.IdTag)
 	}
 
+	if err = c.settleOutstanding(ctx, tag); err != nil {
+		return err
+	}
+
 	methods, err := c.repo.GetPaymentMethods(ctx, tag.UserId)
 	if err != nil {
 		return fmt.Errorf("load payment methods: %w", err)
@@ -1936,6 +1967,79 @@ func (c *Core) validateStartTransactionPaymentMethod(ctx context.Context, reques
 		}
 	}
 	return fmt.Errorf("no usable payment method; add a new card or contact support")
+}
+
+// settleOutstanding charges what the user still owes before a new session
+// starts, and refuses the start when that fails. Sessions are charged after
+// they end, on the next pass of the payment processor; without this, a user
+// could start a second session in that gap on a card that is about to be
+// declined (transactions 5091 and 5092). Owing means a finished session not
+// charged yet, or a failed payment that is still in the retry queue; failures
+// whose retries are exhausted do not block.
+func (c *Core) settleOutstanding(ctx context.Context, tag *entity.UserTag) error {
+	if c.redsys == nil || c.disablePayment {
+		return nil
+	}
+	transactions, err := c.repo.GetUserOutstandingTransactions(ctx, tag.UserId)
+	if err != nil {
+		return fmt.Errorf("check unpaid sessions: %w", err)
+	}
+	for _, t := range transactions {
+		if err = c.settleTransaction(ctx, tag, t); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Core) settleTransaction(ctx context.Context, tag *entity.UserTag, t *entity.Transaction) error {
+	id := t.TransactionId
+	if t.PaymentBilled < t.PaymentAmount {
+		c.payLog(ctx, "info", "pay",
+			"transaction %d: charging now, user %s is starting a new session", id, tag.Username)
+		if err := c.guardPayment(ctx, id, func() error { return c.PayTransaction(ctx, id) }); err != nil {
+			return fmt.Errorf("previous session %d could not be paid: %v; update your payment method", id, err)
+		}
+	} else {
+		retry, _ := c.repo.GetPaymentRetry(ctx, id)
+		if retry == nil {
+			return nil
+		}
+		// Charging the card that just failed again would most likely fail
+		// again; only a card added since is worth trying now.
+		if c.pickFreshPaymentMethod(ctx, tag.UserId, "") == nil {
+			return fmt.Errorf("previous session %d is unpaid (%s); add a new payment method", id, t.PaymentError)
+		}
+		c.payLog(ctx, "info", "retry",
+			"transaction %d: charging now, user %s is starting a new session", id, tag.Username)
+		if err := c.guardPayment(ctx, id, func() error { return c.retryOne(ctx, id, retry.Attempt) }); err != nil {
+			return fmt.Errorf("previous session %d could not be paid: %v; update your payment method", id, err)
+		}
+	}
+	return c.awaitPayment(ctx, id)
+}
+
+// awaitPayment waits for the answer to a payment just sent: the Redsys request
+// runs asynchronously and records its result on the transaction.
+func (c *Core) awaitPayment(ctx context.Context, transactionId int) error {
+	ctx, cancel := context.WithTimeout(ctx, settleTimeout)
+	defer cancel()
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		t, err := c.repo.GetTransaction(ctx, transactionId)
+		if err == nil && t != nil && t.PaymentBilled >= t.PaymentAmount {
+			if t.PaymentError != "" {
+				return fmt.Errorf("payment for previous session %d failed (%s); update your payment method", transactionId, t.PaymentError)
+			}
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("payment for previous session %d is still being processed; try again in a minute", transactionId)
+		case <-ticker.C:
+		}
+	}
 }
 
 // updatePaymentMethodFailCounter updates the fail count for a payment method.

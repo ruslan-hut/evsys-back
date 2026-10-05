@@ -47,6 +47,7 @@ type Repository interface {
 
 	// Payment processing methods
 	GetUnbilledTransactions(ctx context.Context) ([]*entity.Transaction, error)
+	GetUserOutstandingTransactions(ctx context.Context, userId string) ([]*entity.Transaction, error)
 
 	// Payment retry methods
 	SavePaymentRetry(ctx context.Context, retry *entity.PaymentRetry) error

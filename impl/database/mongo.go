@@ -1407,6 +1407,38 @@ func (m *MongoDB) GetUnbilledTransactions(ctx context.Context) ([]*entity.Transa
 	return findMany[*entity.Transaction](m, ctx, collectionTransactions, filter)
 }
 
+// GetUserOutstandingTransactions returns the user's finished, priced sessions
+// that are not paid: not charged yet (billed below amount) or charged with an
+// error. Oldest first. Meter values are left out.
+func (m *MongoDB) GetUserOutstandingTransactions(ctx context.Context, userId string) ([]*entity.Transaction, error) {
+	// all of the user's tags, disabled ones too: a debt run up on a tag the
+	// user no longer uses is still owed
+	tags, err := findMany[entity.UserTag](m, ctx, collectionUserTags, bson.D{{Key: "user_id", Value: userId}})
+	if err != nil {
+		return nil, err
+	}
+	idTags := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		idTags = append(idTags, strings.ToUpper(tag.IdTag))
+	}
+	if len(idTags) == 0 {
+		return nil, nil
+	}
+	filter := bson.D{
+		{Key: "id_tag", Value: bson.D{{Key: "$in", Value: idTags}}},
+		{Key: "is_finished", Value: true},
+		{Key: "payment_amount", Value: bson.D{{Key: "$gt", Value: 0}}},
+		{Key: "$or", Value: bson.A{
+			bson.D{{Key: "$expr", Value: bson.D{{Key: "$lt", Value: bson.A{"$payment_billed", "$payment_amount"}}}}},
+			bson.D{{Key: "payment_error", Value: bson.D{{Key: "$nin", Value: bson.A{"", nil}}}}},
+		}},
+	}
+	opts := options.Find().
+		SetSort(bson.D{{Key: "time_stop", Value: 1}}).
+		SetProjection(bson.D{{Key: "meter_values", Value: 0}})
+	return findMany[*entity.Transaction](m, ctx, collectionTransactions, filter, opts)
+}
+
 // SavePaymentRetry upserts a payment retry record by transaction_id
 func (m *MongoDB) SavePaymentRetry(ctx context.Context, retry *entity.PaymentRetry) error {
 	collection := m.col(collectionPaymentRetries)

@@ -387,7 +387,10 @@ func (db *MockDB) GetTransaction(_ context.Context, id int) (*entity.Transaction
 	if !ok {
 		return nil, nil
 	}
-	return tx, nil
+	// a copy, as MongoDB decodes a fresh document on every read: callers
+	// mutate what they get and write it back with UpdateTransactionPayment
+	cp := *tx
+	return &cp, nil
 }
 
 func (db *MockDB) GetTransactionByTag(_ context.Context, idTag string, timeStart time.Time) (*entity.Transaction, error) {
@@ -661,8 +664,9 @@ func (db *MockDB) GetPaymentOrder(_ context.Context, id int) (*entity.PaymentOrd
 func (db *MockDB) GetPaymentOrderByTransaction(_ context.Context, transactionId int) (*entity.PaymentOrder, error) {
 	db.mux.RLock()
 	defer db.mux.RUnlock()
+	// as MongoDB: only an order still open
 	order, ok := db.ordersByTx[transactionId]
-	if !ok {
+	if !ok || order.IsCompleted {
 		return nil, nil
 	}
 	return order, nil
@@ -883,6 +887,26 @@ func (db *MockDB) GetUnbilledTransactions(_ context.Context) ([]*entity.Transact
 			result = append(result, tx)
 		}
 	}
+	return result, nil
+}
+
+func (db *MockDB) GetUserOutstandingTransactions(_ context.Context, userId string) ([]*entity.Transaction, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	idTags := map[string]bool{}
+	for _, tag := range db.userTags[userId] {
+		idTags[tag.IdTag] = true
+	}
+	var result []*entity.Transaction
+	for _, tx := range db.transactions {
+		if !idTags[tx.IdTag] || !tx.IsFinished || tx.PaymentAmount <= 0 {
+			continue
+		}
+		if tx.PaymentBilled < tx.PaymentAmount || tx.PaymentError != "" {
+			result = append(result, tx)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].TimeStop.Before(result[j].TimeStop) })
 	return result, nil
 }
 
