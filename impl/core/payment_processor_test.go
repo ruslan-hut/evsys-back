@@ -48,19 +48,18 @@ func (s *stubRedsys) BuildEntryForm(EntryFormRequest) (*EntryFormResponse, error
 }
 func (s *stubRedsys) VerifyNotification(string, string, string) error { return nil }
 
-// unbilledWithoutCard reproduces production on 2026-10-03: a finished,
-// unpaid session whose user's only card was declined minutes earlier, so it
-// has fail_count 1 and no usable payment method is left.
-func unbilledWithoutCard(t *testing.T) (*Core, *database_mock.MockDB, *stubRedsys) {
+// unbilled builds a core with one finished, unpaid session of user_389b1 and
+// the given cards on file.
+func unbilled(t *testing.T, cards ...*entity.PaymentMethod) (*Core, *database_mock.MockDB, *stubRedsys) {
 	t.Helper()
 	db := database_mock.NewMockDB()
 	redsys := &stubRedsys{}
 	c := New(newTestLogger(), db)
 	c.SetRedsys(redsys)
-
-	require.NoError(t, db.SavePaymentMethod(context.Background(), &entity.PaymentMethod{
-		Identifier: "declined-card", UserId: "uid-389b1", UserName: "user_389b1", CofTid: "cof", FailCount: 1, ExpiryDate: "3012",
-	}))
+	for _, card := range cards {
+		card.UserId = "uid-389b1"
+		require.NoError(t, db.SavePaymentMethod(context.Background(), card))
+	}
 	db.SeedTransaction(&entity.Transaction{
 		TransactionId: 5092, ChargePointId: "PE00001", ConnectorId: 1, IdTag: "TAG", IsFinished: true,
 		MeterStart: 0, MeterStop: 67204, PaymentAmount: 3024,
@@ -69,12 +68,48 @@ func unbilledWithoutCard(t *testing.T) (*Core, *database_mock.MockDB, *stubRedsy
 	return c, db, redsys
 }
 
-func TestUnbilledTransactionWithoutUsableCard(t *testing.T) {
-	c, db, redsys := unbilledWithoutCard(t)
-	ctx := context.Background()
+func waitForPayments(t *testing.T, redsys *stubRedsys, n int) []PayRequest {
+	t.Helper()
+	// the payment request goes out asynchronously
+	require.Eventually(t, func() bool { return len(redsys.payRequests()) == n }, 2*time.Second, 10*time.Millisecond)
+	return redsys.payRequests()
+}
 
-	// used to dereference a nil payment method and take the process down
-	require.NotPanics(t, func() { c.processUnbilledTransactions(ctx) })
+// Production on 2026-10-03: the user's only card had just been declined
+// (fail_count 1), so no card without failures was left. The nil method this
+// lookup returned used to take the whole process down; now the declined card
+// is charged again, since it is all there is.
+func TestUnbilledFallsBackToFailedCard(t *testing.T) {
+	c, _, redsys := unbilled(t, &entity.PaymentMethod{Identifier: "declined-card", CofTid: "cof", FailCount: 2, ExpiryDate: "3012"})
+
+	require.NotPanics(t, func() { c.processUnbilledTransactions(context.Background()) })
+
+	req := waitForPayments(t, redsys, 1)[0]
+	assert.Equal(t, "declined-card", req.CardToken)
+	assert.Equal(t, 3024, req.Amount)
+}
+
+func TestKnownCardChoice(t *testing.T) {
+	c, _, _ := unbilled(t,
+		&entity.PaymentMethod{Identifier: "worst", CofTid: "c", FailCount: 3, ExpiryDate: "3012"},
+		&entity.PaymentMethod{Identifier: "expired", CofTid: "c", FailCount: 1, ExpiryDate: "2001"},
+		&entity.PaymentMethod{Identifier: "no-cof", FailCount: 1, ExpiryDate: "3012"},
+		&entity.PaymentMethod{Identifier: "fewer", CofTid: "c", FailCount: 1, ExpiryDate: "3012"},
+		&entity.PaymentMethod{Identifier: "fewer-default", CofTid: "c", FailCount: 1, ExpiryDate: "3012", IsDefault: true},
+	)
+	pm := c.pickKnownPaymentMethod(context.Background(), "uid-389b1")
+	require.NotNil(t, pm)
+	assert.Equal(t, "fewer-default", pm.Identifier, "fewest failures, default wins the tie, unchargeable cards skipped")
+}
+
+func TestUnbilledWithoutChargeableCard(t *testing.T) {
+	// an expired card and one without a network transaction id cannot be charged
+	c, db, redsys := unbilled(t,
+		&entity.PaymentMethod{Identifier: "expired", CofTid: "c", FailCount: 1, ExpiryDate: "2001"},
+		&entity.PaymentMethod{Identifier: "no-cof", FailCount: 1, ExpiryDate: "3012"},
+	)
+	ctx := context.Background()
+	c.processUnbilledTransactions(ctx)
 
 	tx, err := db.GetTransaction(ctx, 5092)
 	require.NoError(t, err)
@@ -94,18 +129,17 @@ func TestUnbilledTransactionWithoutUsableCard(t *testing.T) {
 }
 
 func TestRetryChargesCardAddedLater(t *testing.T) {
-	c, db, redsys := unbilledWithoutCard(t)
+	c, db, redsys := unbilled(t)
 	ctx := context.Background()
 	c.processUnbilledTransactions(ctx)
+	require.Empty(t, redsys.payRequests())
 
 	require.NoError(t, db.SavePaymentMethod(ctx, &entity.PaymentMethod{
 		Identifier: "new-card", UserId: "uid-389b1", CofTid: "cof-2", ExpiryDate: "3012", IsDefault: true,
 	}))
 	require.NoError(t, c.retryOne(ctx, 5092, 1))
 
-	// the payment request goes out asynchronously
-	require.Eventually(t, func() bool { return len(redsys.payRequests()) == 1 }, 2*time.Second, 10*time.Millisecond)
-	req := redsys.payRequests()[0]
+	req := waitForPayments(t, redsys, 1)[0]
 	assert.Equal(t, "new-card", req.CardToken)
 	assert.Equal(t, 3024, req.Amount)
 }

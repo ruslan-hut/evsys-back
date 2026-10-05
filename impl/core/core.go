@@ -1292,7 +1292,16 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 			return c.failBeforePayment(ctx, transaction, tag, "payment method lookup failed")
 		}
 		if paymentMethod == nil {
-			return c.failBeforePayment(ctx, transaction, tag, "no usable payment method")
+			// no card without failures: try the best one the user has rather
+			// than not charging at all
+			paymentMethod = c.pickKnownPaymentMethod(ctx, tag.UserId)
+			if paymentMethod == nil {
+				return c.failBeforePayment(ctx, transaction, tag, "no usable payment method")
+			}
+			log.With(
+				sl.Secret("identifier", paymentMethod.Identifier),
+				slog.Int("fail_count", paymentMethod.FailCount),
+			).Warn("no card without failures; charging a previously failed card")
 		}
 	}
 	// Try to get alternative if current has problems. Enumerate all of the user's
@@ -1400,8 +1409,8 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 }
 
 // failBeforePayment records a payment that could not be attempted: the user
-// has no usable card (every card failed before, or none was ever saved), or
-// the card lookup itself failed. It is treated like a declined payment -
+// has no card that can be charged (none saved, or only expired ones or ones
+// without a network transaction id), or the card lookup itself failed. It is treated like a declined payment -
 // marked billed with the reason as error and put on the retry queue - so that
 // a card the user adds later, or a database that recovers, gets the payment
 // through, and so that the unbilled pass does not pick the transaction up
@@ -2087,6 +2096,29 @@ func (c *Core) pickFreshPaymentMethod(ctx context.Context, userId, skipIdentifie
 		}
 	}
 	return fallback
+}
+
+// pickKnownPaymentMethod returns the user's card most likely to work when none
+// is free of failures: one that can be charged at all (CofTid set, not
+// expired), with the fewest failures, the default winning a tie. Returns nil
+// when the user has no such card.
+func (c *Core) pickKnownPaymentMethod(ctx context.Context, userId string) *entity.PaymentMethod {
+	methods, err := c.repo.GetPaymentMethods(ctx, userId)
+	if err != nil {
+		return nil
+	}
+	now := time.Now()
+	var best *entity.PaymentMethod
+	for _, pm := range methods {
+		if pm == nil || pm.CofTid == "" || isCardExpired(pm.ExpiryDate, now) {
+			continue
+		}
+		if best == nil || pm.FailCount < best.FailCount ||
+			(pm.FailCount == best.FailCount && pm.IsDefault && !best.IsDefault) {
+			best = pm
+		}
+	}
+	return best
 }
 
 // payLog persists an entry into the payment activity log so admins can trace
