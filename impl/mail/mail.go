@@ -244,7 +244,10 @@ func renderPaymentWarning(w entity.PaymentWarning) string {
 			html.EscapeString(label), html.EscapeString(value))
 	}
 	row("Transaction", fmt.Sprintf("%d", w.TransactionId))
-	row("Order", fmt.Sprintf("%d", w.OrderNumber))
+	// no order when the payment could not even be attempted (no usable card)
+	if w.OrderNumber > 0 {
+		row("Order", fmt.Sprintf("%d", w.OrderNumber))
+	}
 	if w.ChargePointId != "" {
 		row("Charge point", w.ChargePointId)
 	}

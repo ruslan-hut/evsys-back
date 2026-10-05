@@ -692,16 +692,20 @@ func (db *MockDB) GetUserTag(_ context.Context, idTag string) (*entity.UserTag, 
 func (db *MockDB) GetDefaultPaymentMethod(_ context.Context, userId string) (*entity.PaymentMethod, error) {
 	db.mux.RLock()
 	defer db.mux.RUnlock()
-	methods := db.paymentMethods[userId]
-	if len(methods) == 0 {
-		return nil, fmt.Errorf("no payment methods")
-	}
-	for _, m := range methods {
+	// as MongoDB: the usable default, else any usable method, else nil, nil
+	var fallback *entity.PaymentMethod
+	for _, m := range db.paymentMethods[userId] {
+		if m.FailCount > 0 {
+			continue
+		}
 		if m.IsDefault {
 			return m, nil
 		}
+		if fallback == nil {
+			fallback = m
+		}
 	}
-	return methods[0], nil
+	return fallback, nil
 }
 
 func (db *MockDB) GetPaymentMethodByIdentifier(_ context.Context, identifier string) (*entity.PaymentMethod, error) {

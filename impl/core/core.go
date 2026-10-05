@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"sync"
@@ -1267,6 +1268,10 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 			log.With(sl.Err(err)).Error("failed to get user tag")
 			return err
 		}
+		// MongoDB answers a missing tag with nil, nil
+		if tag == nil {
+			tag = &entity.UserTag{IdTag: transaction.IdTag}
+		}
 	}
 	if tag.UserId == "" {
 		transaction.PaymentBilled = transaction.PaymentAmount
@@ -1281,11 +1286,13 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 	if paymentMethod == nil {
 		paymentMethod, err = c.repo.GetDefaultPaymentMethod(ctx, tag.UserId)
 		if err != nil {
-			transaction.PaymentBilled = transaction.PaymentAmount
-			if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
-				log.With(sl.Err(e)).Error("failed to update transaction")
-			}
-			return fmt.Errorf("no payment method for user %s", tag.UserId)
+			// a database error says nothing about the user's cards: retry
+			// later rather than write the payment off
+			log.With(sl.Err(err)).Error("failed to look up payment method")
+			return c.failBeforePayment(ctx, transaction, tag, "payment method lookup failed")
+		}
+		if paymentMethod == nil {
+			return c.failBeforePayment(ctx, transaction, tag, "no usable payment method")
 		}
 	}
 	// Try to get alternative if current has problems. Enumerate all of the user's
@@ -1390,6 +1397,51 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 	})
 
 	return nil
+}
+
+// failBeforePayment records a payment that could not be attempted: the user
+// has no usable card (every card failed before, or none was ever saved), or
+// the card lookup itself failed. It is treated like a declined payment -
+// marked billed with the reason as error and put on the retry queue - so that
+// a card the user adds later, or a database that recovers, gets the payment
+// through, and so that the unbilled pass does not pick the transaction up
+// again every five minutes.
+func (c *Core) failBeforePayment(ctx context.Context, transaction *entity.Transaction, tag *entity.UserTag, reason string) error {
+	transaction.PaymentBilled = transaction.PaymentAmount
+	transaction.PaymentError = reason
+	if e := c.repo.UpdateTransactionPayment(ctx, transaction); e != nil {
+		c.log.With(slog.Int("transaction_id", transaction.TransactionId), sl.Err(e)).
+			Error("failed to record payment failure")
+		return e
+	}
+	c.schedulePaymentRetry(ctx, transaction.TransactionId, reason)
+
+	warning := entity.PaymentWarning{
+		TransactionId: transaction.TransactionId,
+		ChargePointId: transaction.ChargePointId,
+		CardHolder:    tag.Username,
+		Amount:        transaction.PaymentAmount,
+		Currency:      c.currency,
+		Result:        reason,
+		MaxAttempts:   maxRetryAttempts,
+		OccurredAt:    time.Now(),
+	}
+	if retry, _ := c.repo.GetPaymentRetry(ctx, transaction.TransactionId); retry != nil {
+		warning.Attempt = retry.Attempt
+		c.payLog(ctx, "error", "pay",
+			"transaction %d: %s for user %s; next retry attempt %d at %s",
+			transaction.TransactionId, reason, tag.Username, retry.Attempt,
+			retry.NextRetryTime.Format(time.RFC3339))
+	} else {
+		warning.Exhausted = true
+		c.payLog(ctx, "error", "pay",
+			"transaction %d: %s for user %s; retries exhausted",
+			transaction.TransactionId, reason, tag.Username)
+	}
+	c.runAsync("dispatchPaymentWarning", func(ctx context.Context) {
+		c.dispatchPaymentWarning(ctx, warning)
+	})
+	return fmt.Errorf("transaction %d: %s for user %s", transaction.TransactionId, reason, tag.UserId)
 }
 
 // ReturnPayment processes a full refund for a charging transaction.
@@ -1962,7 +2014,7 @@ func (c *Core) processUnbilledTransactions(ctx context.Context) {
 		}
 
 		c.log.With(slog.Int("transaction_id", tx.TransactionId)).Info("processing unbilled transaction")
-		if e := c.PayTransaction(ctx, tx.TransactionId); e != nil {
+		if e := c.guardPayment(ctx, tx.TransactionId, func() error { return c.PayTransaction(ctx, tx.TransactionId) }); e != nil {
 			c.log.With(
 				slog.Int("transaction_id", tx.TransactionId),
 				sl.Err(e),
@@ -1984,8 +2036,27 @@ func (c *Core) processPaymentRetries(ctx context.Context) {
 	}
 
 	for _, retry := range retries {
-		_ = c.retryOne(ctx, retry.TransactionId, retry.Attempt)
+		_ = c.guardPayment(ctx, retry.TransactionId, func() error { return c.retryOne(ctx, retry.TransactionId, retry.Attempt) })
 	}
+}
+
+// guardPayment runs one transaction's payment step and turns a panic into an
+// error. The processor runs on a bare goroutine: unrecovered, a panic on one
+// transaction kills the whole backend, and as the same transaction comes up
+// again on the next pass after the restart, it keeps killing it.
+func (c *Core) guardPayment(ctx context.Context, transactionId int, step func() error) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.log.With(
+				slog.Int("transaction_id", transactionId),
+				slog.Any("panic", r),
+				slog.String("stack", string(debug.Stack())),
+			).Error("payment processing panicked")
+			c.payLog(ctx, "error", "pay", "transaction %d: internal error while processing payment", transactionId)
+			err = fmt.Errorf("transaction %d: panic: %v", transactionId, r)
+		}
+	}()
+	return step()
 }
 
 // pickFreshPaymentMethod returns a usable payment method (CofTid set,
