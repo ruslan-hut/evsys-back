@@ -4,6 +4,8 @@
 evsys-back
 TMP_*
 *.log
+.env.*
+/log/
 
 # server nginx config, kept locally for reference only
 nginx-default.conf
