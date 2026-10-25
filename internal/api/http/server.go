@@ -204,6 +204,7 @@ func (s *Server) routes(router chi.Router, log *slog.Logger, core Core, oauth OA
 				r.Delete("/mail/subscriptions/{id}", mail.Delete(log, core))
 				r.Post("/mail/subscriptions/{id}/send-now", mail.SendNow(log, core))
 				r.Post("/mail/test", mail.Test(log, core))
+				r.Get("/mail/locations", mail.Locations(log, core))
 
 				r.Get("/payment/retries", payments.RetryQueueList(log, core))
 				r.Post("/payment/retries/{transactionId}/force", payments.RetryQueueForce(log, core))

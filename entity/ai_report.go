@@ -174,6 +174,9 @@ type AIReportRunRequest struct {
 	Language string `json:"language" validate:"omitempty,oneof=es en"`
 	Email    string `json:"email" validate:"omitempty,email_rfc"`
 	SendAll  bool   `json:"send_all"`
+	// LocationIds limits a manual run to these locations; empty covers the
+	// whole network. Ignored with SendAll, which follows the subscriptions.
+	LocationIds []string `json:"location_ids,omitempty" validate:"omitempty,max=50,dive,required,max=39"`
 }
 
 func (r *AIReportRunRequest) Bind(_ *http.Request) error {
@@ -197,16 +200,33 @@ type AIReport struct {
 	Model      string     `json:"model,omitempty" bson:"model,omitempty"`
 	CreatedAt  time.Time  `json:"created_at" bson:"created_at"`
 	FinishedAt *time.Time `json:"finished_at,omitempty" bson:"finished_at,omitempty"`
-	// Snapshot is the JSON the model read; left out of report lists.
-	Snapshot      string              `json:"snapshot,omitempty" bson:"snapshot,omitempty"`
-	SnapshotBytes int                 `json:"snapshot_bytes" bson:"snapshot_bytes"`
-	Analyses      []*AIAnalysis       `json:"analyses,omitempty" bson:"analyses,omitempty"`
-	Deliveries    []*AIReportDelivery `json:"deliveries,omitempty" bson:"deliveries,omitempty"`
-	CostUSD       float64             `json:"cost_usd" bson:"cost_usd"`
+	// Snapshot is the JSON the model read for the whole network; left out of
+	// report lists. Reports limited to locations keep theirs in Scopes.
+	Snapshot      string `json:"snapshot,omitempty" bson:"snapshot,omitempty"`
+	SnapshotBytes int    `json:"snapshot_bytes" bson:"snapshot_bytes"`
+	// Scopes are the sets of locations the run covered, one snapshot each;
+	// absent on reports older than location filters, which cover the whole
+	// network.
+	Scopes     []*AIReportScope    `json:"scopes,omitempty" bson:"scopes,omitempty"`
+	Analyses   []*AIAnalysis       `json:"analyses,omitempty" bson:"analyses,omitempty"`
+	Deliveries []*AIReportDelivery `json:"deliveries,omitempty" bson:"deliveries,omitempty"`
+	CostUSD    float64             `json:"cost_usd" bson:"cost_usd"`
 }
 
-// AIAnalysis is the model's answer in one language.
+// AIReportScope is one set of locations a run analysed.
+type AIReportScope struct {
+	// Key is "" for the whole network, else ScopeKey of the location ids.
+	Key           string   `json:"key" bson:"key"`
+	LocationIds   []string `json:"location_ids,omitempty" bson:"location_ids,omitempty"`
+	Locations     []string `json:"locations,omitempty" bson:"locations,omitempty"`
+	Snapshot      string   `json:"snapshot,omitempty" bson:"snapshot,omitempty"`
+	SnapshotBytes int      `json:"snapshot_bytes" bson:"snapshot_bytes"`
+}
+
+// AIAnalysis is the model's answer in one language for one scope.
 type AIAnalysis struct {
+	// Scope is the key of the AIReportScope the answer is about.
+	Scope      string            `json:"scope" bson:"scope"`
 	Language   string            `json:"language" bson:"language"`
 	Result     *AIAnalysisResult `json:"result,omitempty" bson:"result,omitempty"`
 	ResponseId string            `json:"response_id,omitempty" bson:"response_id,omitempty"`
@@ -236,6 +256,7 @@ type AIFinding struct {
 
 // AIReportDelivery records one email sent from a report.
 type AIReportDelivery struct {
+	Scope    string    `json:"scope" bson:"scope"`
 	Email    string    `json:"email" bson:"email"`
 	Language string    `json:"language" bson:"language"`
 	SentAt   time.Time `json:"sent_at" bson:"sent_at"`
@@ -244,6 +265,7 @@ type AIReportDelivery struct {
 
 // AIReportPreview is a rendered report email.
 type AIReportPreview struct {
+	Scope    string `json:"scope"`
 	Language string `json:"language"`
 	Subject  string `json:"subject"`
 	Html     string `json:"html"`

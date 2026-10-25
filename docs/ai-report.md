@@ -32,6 +32,24 @@ of the calendar month (UTC) reaches the budget in the settings; the request
 that crosses it is not cut short. A request that fails without an answer
 (timeout, network) records no tokens, though OpenAI may still bill it.
 
+## Locations
+
+A subscription may name `location_ids`; empty means the whole network. A run
+groups its recipients by the set of locations they follow and builds one
+snapshot per set (`ai_reports.scopes`, keyed by the sorted ids joined with
+commas, `""` for the whole network), then one request per set and language.
+A recipient only ever gets the analysis of their own set - another language
+of it is the fallback, never another set.
+
+A snapshot limited to locations holds their charge points, uptime, connector
+errors, sessions and their `sys_log` records, plus central-system records
+(`*`) that name one of their charge points. The backend and payment logs, the
+payment retry queue and webhooks are network-wide and left out (noted in the
+snapshot). The email subject and header name the locations.
+
+`GET /api/v1/mail/locations` (admins and operators) lists every location
+with its charge points for the picker.
+
 ## Schedule
 
 The service checks once a minute. A run is due at `weekday`/`hour` in
@@ -83,6 +101,9 @@ period and monthly budget.
 - `report` - `statistic` (default; also every document written before the
   field existed) or `ai_analysis`.
 - `language` - `es` (default) or `en`; used by the AI analysis.
+- `location_ids` - AI analysis only: the locations it covers; absent or
+  empty is the whole network. On update, an absent field keeps the stored
+  list and `[]` clears it.
 
 An `ai_analysis` subscription has no `period` or `user_group` (both are stored
 empty, so neither the statistic scheduler nor an older binary after a rollback
@@ -106,10 +127,11 @@ All under `/api/v1/ai`, guarded by `RequireAdmin`, with a 120 s timeout.
 | POST | `/ai/reports/run` | `{dry_run, language, email, send_all}` → 202 with the report, which goes on in the background; poll `GET /ai/reports/{id}` until `status` is `done` or `failed` |
 | GET | `/ai/reports?limit=` | latest runs, without snapshots |
 | GET | `/ai/reports/{id}` | one run with its snapshot |
-| GET | `/ai/reports/{id}/preview?language=` | `{language, subject, html}` of the email |
+| GET | `/ai/reports/{id}/preview?scope=&language=` | `{scope, language, subject, html}` of the email; `scope` is a key from the report's `scopes` |
 | GET | `/ai/usage?from=&to=` | `totals`, `months`, `models` and `records`; default the last 90 days |
 
-`run` variants: `dry_run` collects the snapshot only (no model, no cost);
+`run` takes optional `location_ids` (not with `send_all`, which follows the
+subscriptions). Variants: `dry_run` collects the snapshot only (no model, no cost);
 without `email` the report is generated in `language` and kept for preview;
 with `email` it is also sent there; `send_all` generates the languages of the
 subscribers and sends to all of them. One run at a time: a second start

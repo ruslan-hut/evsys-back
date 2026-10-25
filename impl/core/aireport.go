@@ -15,7 +15,7 @@ type AIReportService interface {
 	Run(ctx context.Context, author string, req *entity.AIReportRunRequest) (*entity.AIReport, error)
 	Report(ctx context.Context, id string) (*entity.AIReport, error)
 	Reports(ctx context.Context, limit int) ([]*entity.AIReport, error)
-	Preview(ctx context.Context, id, language string) (*entity.AIReportPreview, error)
+	Preview(ctx context.Context, id, scope, language string) (*entity.AIReportPreview, error)
 	Usage(ctx context.Context, from, to time.Time) (*entity.AIUsageReport, error)
 	SendTo(ctx context.Context, author string, sub *entity.MailSubscription) error
 }
@@ -96,12 +96,36 @@ func (c *Core) GetAIReport(ctx context.Context, author *entity.User, id string) 
 	return c.aiReport.Report(ctx, id)
 }
 
-// PreviewAIReport renders the email of an analysis (admin only).
-func (c *Core) PreviewAIReport(ctx context.Context, author *entity.User, id, language string) (*entity.AIReportPreview, error) {
+// PreviewAIReport renders the email of an analysis about one scope (admin only).
+func (c *Core) PreviewAIReport(ctx context.Context, author *entity.User, id, scope, language string) (*entity.AIReportPreview, error) {
 	if err := c.requireAIReport(author); err != nil {
 		return nil, err
 	}
-	return c.aiReport.Preview(ctx, id, language)
+	return c.aiReport.Preview(ctx, id, scope, language)
+}
+
+// ListReportLocations returns every location with its charge points, for
+// the location filter of the AI analysis (admins and operators).
+func (c *Core) ListReportLocations(ctx context.Context, author *entity.User) ([]*entity.ReportLocation, error) {
+	if err := c.requirePowerUser(author); err != nil {
+		return nil, err
+	}
+	locations, err := c.repo.GetAllLocations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*entity.ReportLocation, 0, len(locations))
+	for _, l := range locations {
+		rl := &entity.ReportLocation{Id: l.Id, Name: l.Name, City: l.City, ChargePoints: []string{}}
+		if rl.Name == "" {
+			rl.Name = l.Id
+		}
+		for _, cp := range l.ChargePoints {
+			rl.ChargePoints = append(rl.ChargePoints, cp.Id)
+		}
+		out = append(out, rl)
+	}
+	return out, nil
 }
 
 // GetAIUsage reports the OpenAI requests and their cost (admin only).

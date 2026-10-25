@@ -141,3 +141,33 @@ func TestMailSubscriptionAIAnalysis(t *testing.T) {
 		`{"email":"ops@example.com","enabled":true}`)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, string(body))
 }
+
+func TestMailSubscriptionLocations(t *testing.T) {
+	srv := newAIReportTestServer(t)
+
+	resp, body := do(t, http.MethodPost, srv.URL+"/api/v1/mail/subscriptions", adminApiToken, "application/json",
+		`{"email":"alp@example.com","report":"ai_analysis","location_ids":["ELP","ALP","ALP"],"enabled":true}`)
+	require.Equal(t, http.StatusCreated, resp.StatusCode, string(body))
+	var sub entity.MailSubscription
+	require.NoError(t, json.Unmarshal(body, &sub))
+	assert.Equal(t, []string{"ALP", "ELP"}, sub.LocationIds, "sorted and deduplicated")
+
+	// absent keeps the locations
+	resp, body = do(t, http.MethodPut, srv.URL+"/api/v1/mail/subscriptions/"+sub.Id, adminApiToken, "application/json",
+		`{"email":"alp@example.com","report":"ai_analysis","language":"en","enabled":true}`)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	require.NoError(t, json.Unmarshal(body, &sub))
+	assert.Equal(t, []string{"ALP", "ELP"}, sub.LocationIds)
+
+	// an empty list returns to the whole network
+	resp, body = do(t, http.MethodPut, srv.URL+"/api/v1/mail/subscriptions/"+sub.Id, adminApiToken, "application/json",
+		`{"email":"alp@example.com","report":"ai_analysis","language":"en","location_ids":[],"enabled":true}`)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	sub = entity.MailSubscription{}
+	require.NoError(t, json.Unmarshal(body, &sub))
+	assert.Empty(t, sub.LocationIds)
+
+	// operators pick locations too
+	resp, body = do(t, http.MethodGet, srv.URL+"/api/v1/mail/locations", operatorApiToken, "", "")
+	assert.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+}

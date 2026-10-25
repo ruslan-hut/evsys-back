@@ -17,6 +17,7 @@ How to read the snapshot:
 - sys_log, backend_log, payment_log: record counts by category and level, and the shapes of the notable records - numbers, addresses and ids are replaced by N, <addr>, <id>, <time>.
 - sessions: finished charging sessions; zero_energy and shorter_than_2_min sessions often mean a charger or vehicle that failed to start charging.
 - payments: the queue of failed payments waiting for an automatic retry. webhooks: delivery state of the integrations.
+- scope: present when the report covers only some locations. Then write for the operator of those locations: everything in the data is about them, and the rest of the network is not in it - do not speak about it.
 - notes: sources that could not be read or were shortened. Never treat a missing source as healthy.
 Units: energy in kWh, money in EUR, times in UTC.
 

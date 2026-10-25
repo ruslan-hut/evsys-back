@@ -90,7 +90,7 @@ func (m *MongoDB) ListAIReports(ctx context.Context, limit int) ([]*entity.AIRep
 	opts := options.Find().
 		SetSort(bson.D{{Key: "created_at", Value: -1}}).
 		SetLimit(int64(limit)).
-		SetProjection(bson.D{{Key: "snapshot", Value: 0}})
+		SetProjection(bson.D{{Key: "snapshot", Value: 0}, {Key: "scopes.snapshot", Value: 0}})
 	return findMany[*entity.AIReport](m, ctx, collectionAIReports, bson.D{}, opts)
 }
 

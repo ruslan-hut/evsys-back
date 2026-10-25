@@ -222,7 +222,9 @@ Admin/operator only (`RequirePowerUser`):
 `period` is one of `daily | weekly | monthly`. `user_group` matches the same value the frontend statistic page sends as the `group` query param (e.g. `default`, `office`).
 
 `report` is `statistic` (default, and every document written before the field
-existed) or `ai_analysis`; `language` is `es` (default) or `en`. An
+existed) or `ai_analysis`; `language` is `es` (default) or `en`;
+`location_ids` limits an AI analysis to some locations (absent keeps the
+stored list on update, `[]` means the whole network). An
 `ai_analysis` subscription needs neither period nor group, and the statistic
 scheduler skips it. An update that omits `report`/`language` keeps them.
 

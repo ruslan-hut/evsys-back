@@ -19,6 +19,7 @@ type Handler interface {
 	DeleteMailSubscription(ctx context.Context, author *entity.User, id string) error
 	SendMailSubscriptionNow(ctx context.Context, author *entity.User, id string) error
 	SendTestMail(ctx context.Context, author *entity.User, to string) error
+	ListReportLocations(ctx context.Context, author *entity.User) ([]*entity.ReportLocation, error)
 }
 
 type testMailRequest struct {
@@ -138,5 +139,22 @@ func SendNow(logger *slog.Logger, h Handler) http.HandlerFunc {
 			return
 		}
 		web.OK(w, r, log.With(slog.String("id", id)), "mail subscription sent now", map[string]any{"success": true})
+	}
+}
+
+// Locations answers GET /mail/locations: the locations a report can be
+// limited to.
+func Locations(logger *slog.Logger, h Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		author := cont.GetUser(ctx)
+		log := loggerWith(logger, r, author)
+
+		data, err := h.ListReportLocations(ctx, author)
+		if err != nil {
+			web.Fail(w, r, log, 0, "Failed to list locations", err)
+			return
+		}
+		web.OK(w, r, log, "report locations", data)
 	}
 }

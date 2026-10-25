@@ -234,7 +234,7 @@ func TestRunDryRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Status != entity.AIReportDone || got.Snapshot == "" || got.SnapshotBytes == 0 {
+	if got.Status != entity.AIReportDone || len(got.Scopes) != 1 || got.Scopes[0].Snapshot == "" || got.SnapshotBytes == 0 {
 		t.Errorf("dry run report: status %s, %d bytes", got.Status, got.SnapshotBytes)
 	}
 	if model.calls() != 0 || len(sender.all()) != 0 {

@@ -58,6 +58,7 @@ func (db *MockDB) SaveAIReport(_ context.Context, report *entity.AIReport) error
 	r := *report
 	r.Analyses = append([]*entity.AIAnalysis(nil), report.Analyses...)
 	r.Deliveries = append([]*entity.AIReportDelivery(nil), report.Deliveries...)
+	r.Scopes = append([]*entity.AIReportScope(nil), report.Scopes...)
 	db.aiReports[r.Id] = &r
 	return nil
 }
@@ -80,6 +81,12 @@ func (db *MockDB) ListAIReports(_ context.Context, limit int) ([]*entity.AIRepor
 	for _, r := range db.aiReports {
 		c := *r
 		c.Snapshot = ""
+		c.Scopes = nil
+		for _, sc := range r.Scopes {
+			light := *sc
+			light.Snapshot = ""
+			c.Scopes = append(c.Scopes, &light)
+		}
 		list = append(list, &c)
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].CreatedAt.After(list[j].CreatedAt) })

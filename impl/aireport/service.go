@@ -55,6 +55,7 @@ type Repository interface {
 	ListMailSubscriptionsByReport(ctx context.Context, report string) ([]*entity.MailSubscription, error)
 
 	GetChargePoints(ctx context.Context, level int, searchTerm string) ([]*entity.ChargePoint, error)
+	GetAllLocations(ctx context.Context) ([]*entity.Location, error)
 	StationUptime(ctx context.Context, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error)
 	ErrorSummary(ctx context.Context, from, to time.Time, chargePointId string) ([]*entity.ErrorSummary, error)
 	ReadLog(ctx context.Context, name string, filter *entity.LogFilter) (any, error)
@@ -273,12 +274,51 @@ func (s *Service) tick() {
 		}
 		return
 	}
-	s.execute(ctx, settings, report, languagesOf(recipients), recipients)
+	s.execute(ctx, settings, report, targetsOf(recipients), recipients)
 }
 
-// recipient is one address and the language it reads.
+// recipient is one address, the language it reads and the locations its
+// report covers (none: the whole network).
 type recipient struct {
 	email, language string
+	locationIds     []string
+	scope           string
+}
+
+func newRecipient(email, language string, locationIds []string) recipient {
+	if _, ok := languageNames[language]; !ok {
+		language = entity.MailLanguageES
+	}
+	ids := entity.NormalizeLocationIds(locationIds)
+	return recipient{email: email, language: language, locationIds: ids, scope: entity.ScopeKey(ids)}
+}
+
+// target is one set of locations a run analyses, in the languages its
+// readers need. Each target costs a snapshot, each of its languages a request.
+type target struct {
+	scope       string
+	locationIds []string
+	languages   []string
+}
+
+// targetsOf groups the recipients by the locations they follow, in the order
+// they come, languages in the order of entity.MailLanguages.
+func targetsOf(recipients []recipient) []target {
+	var out []target
+	index := make(map[string]int)
+	for _, r := range recipients {
+		i, ok := index[r.scope]
+		if !ok {
+			i = len(out)
+			index[r.scope] = i
+			out = append(out, target{scope: r.scope, locationIds: r.locationIds})
+		}
+		out[i].languages = append(out[i].languages, r.language)
+	}
+	for i := range out {
+		out[i].languages = orderLanguages(out[i].languages)
+	}
+	return out
 }
 
 func (s *Service) recipients(ctx context.Context) ([]recipient, error) {
@@ -289,28 +329,29 @@ func (s *Service) recipients(ctx context.Context) ([]recipient, error) {
 	seen := make(map[string]bool)
 	var out []recipient
 	for _, sub := range subs {
-		key := strings.ToLower(strings.TrimSpace(sub.Email))
-		if !sub.Enabled || seen[key] {
+		if !sub.Enabled {
+			continue
+		}
+		r := newRecipient(sub.Email, sub.Language, sub.LocationIds)
+		// one email per address and set of locations
+		key := strings.ToLower(strings.TrimSpace(sub.Email)) + "|" + r.scope
+		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		lang := sub.Language
-		if _, ok := languageNames[lang]; !ok {
-			lang = entity.MailLanguageES
-		}
-		out = append(out, recipient{email: sub.Email, language: lang})
+		out = append(out, r)
 	}
 	return out, nil
 }
 
-func languagesOf(recipients []recipient) []string {
-	seen := make(map[string]bool)
+// orderLanguages deduplicates languages in the order of entity.MailLanguages.
+func orderLanguages(languages []string) []string {
 	var out []string
 	for _, lang := range entity.MailLanguages() {
-		for _, r := range recipients {
-			if r.language == lang && !seen[lang] {
-				seen[lang] = true
+		for _, l := range languages {
+			if l == lang {
 				out = append(out, lang)
+				break
 			}
 		}
 	}
@@ -346,10 +387,11 @@ func (s *Service) newReport(settings *entity.AIReportSettings, loc *time.Locatio
 	}
 }
 
-// execute fills a stored report: collects the snapshot, asks the model in each
-// language and sends the emails. The report is saved after every step, so the
-// admin page shows the progress and a failure leaves what was done.
-func (s *Service) execute(ctx context.Context, settings *entity.AIReportSettings, report *entity.AIReport, languages []string, recipients []recipient) {
+// execute fills a stored report: collects a snapshot per set of locations,
+// asks the model in each language their readers need and sends the emails.
+// The report is saved after every step, so the admin page shows the progress
+// and a failure leaves what was done.
+func (s *Service) execute(ctx context.Context, settings *entity.AIReportSettings, report *entity.AIReport, targets []target, recipients []recipient) {
 	log := s.log.With(slog.String("report", report.Id), slog.String("trigger", report.Trigger))
 	defer func() {
 		if r := recover(); r != nil {
@@ -364,16 +406,34 @@ func (s *Service) execute(ctx context.Context, settings *entity.AIReportSettings
 		return
 	}
 	prevFrom := report.PeriodFrom.In(loc).AddDate(0, 0, -settings.PeriodDays)
-	snap := s.collect(ctx, report.PeriodFrom, report.PeriodTo, prevFrom, settings.TimeZone)
-	data, err := encodeSnapshot(snap)
-	if err != nil {
-		s.finish(report, fmt.Errorf("encode snapshot: %w", err))
-		return
+
+	snaps := make(map[string]*Snapshot)
+	data := make(map[string][]byte)
+	for _, t := range targets {
+		sc, err := s.resolveScope(ctx, t.locationIds)
+		if err != nil {
+			s.finish(report, err)
+			return
+		}
+		snap := s.collect(ctx, report.PeriodFrom, report.PeriodTo, prevFrom, settings.TimeZone, sc)
+		encoded, err := encodeSnapshot(snap)
+		if err != nil {
+			s.finish(report, fmt.Errorf("encode snapshot: %w", err))
+			return
+		}
+		snaps[sc.key], data[sc.key] = snap, encoded
+		report.Scopes = append(report.Scopes, &entity.AIReportScope{
+			Key:           sc.key,
+			LocationIds:   sc.locationIds,
+			Locations:     sc.names,
+			Snapshot:      string(encoded),
+			SnapshotBytes: len(encoded),
+		})
+		report.SnapshotBytes += len(encoded)
+		s.save(ctx, report)
+		log.Info("ai report data collected", slog.String("scope", sc.key), slog.Int("bytes", len(encoded)),
+			slog.Int("notes", len(snap.Notes)))
 	}
-	report.Snapshot = string(data)
-	report.SnapshotBytes = len(data)
-	s.save(ctx, report)
-	log.Info("ai report data collected", slog.Int("bytes", len(data)), slog.Int("notes", len(snap.Notes)))
 
 	if report.DryRun {
 		s.finish(report, nil)
@@ -384,18 +444,20 @@ func (s *Service) execute(ctx context.Context, settings *entity.AIReportSettings
 		return
 	}
 
-	for _, lang := range languages {
-		if err = s.checkBudget(ctx, settings); err != nil {
-			report.Analyses = append(report.Analyses, &entity.AIAnalysis{Language: lang, Error: err.Error()})
-			break
+budget:
+	for _, t := range targets {
+		for _, lang := range t.languages {
+			if err = s.checkBudget(ctx, settings); err != nil {
+				report.Analyses = append(report.Analyses, &entity.AIAnalysis{Scope: t.scope, Language: lang, Error: err.Error()})
+				break budget
+			}
+			report.Analyses = append(report.Analyses, s.analyse(ctx, settings, report, data[t.scope], t.scope, lang))
+			s.save(ctx, report)
 		}
-		analysis := s.analyse(ctx, settings, report, data, lang)
-		report.Analyses = append(report.Analyses, analysis)
-		s.save(ctx, report)
 	}
 
 	for _, r := range recipients {
-		report.Deliveries = append(report.Deliveries, s.deliver(ctx, report, snap, r))
+		report.Deliveries = append(report.Deliveries, s.deliver(ctx, report, snaps[r.scope], r))
 	}
 
 	var failed error
@@ -422,9 +484,24 @@ func hasResult(report *entity.AIReport) bool {
 	return false
 }
 
-func analysisIn(report *entity.AIReport, language string) *entity.AIAnalysis {
+// analysisIn returns the answer about the scope in the language, or nil.
+func analysisIn(report *entity.AIReport, scope, language string) *entity.AIAnalysis {
 	for _, a := range report.Analyses {
-		if a.Language == language && a.Result != nil {
+		if a.Scope == scope && a.Language == language && a.Result != nil {
+			return a
+		}
+	}
+	return nil
+}
+
+// analysisFor returns the answer about the scope, preferably in the language.
+// It never falls back to another scope: that one covers other locations.
+func analysisFor(report *entity.AIReport, scope, language string) *entity.AIAnalysis {
+	if a := analysisIn(report, scope, language); a != nil {
+		return a
+	}
+	for _, a := range report.Analyses {
+		if a.Scope == scope && a.Result != nil {
 			return a
 		}
 	}
@@ -433,12 +510,12 @@ func analysisIn(report *entity.AIReport, language string) *entity.AIAnalysis {
 
 // analyse asks the model for the report in one language and records the
 // request's usage, whether it succeeded or not.
-func (s *Service) analyse(ctx context.Context, settings *entity.AIReportSettings, report *entity.AIReport, snapshot []byte, language string) *entity.AIAnalysis {
+func (s *Service) analyse(ctx context.Context, settings *entity.AIReportSettings, report *entity.AIReport, snapshot []byte, scope, language string) *entity.AIAnalysis {
 	instructions := settings.SystemPrompt
 	if instructions == "" {
 		instructions = DefaultSystemPrompt
 	}
-	analysis := &entity.AIAnalysis{Language: language}
+	analysis := &entity.AIAnalysis{Scope: scope, Language: language}
 	resp, usage, err := s.request(ctx, settings, report.Trigger, report.Id, language, openai.Request{
 		Model:           settings.Model,
 		Instructions:    instructions,
@@ -559,29 +636,21 @@ func (s *Service) monthSpent(ctx context.Context) (float64, error) {
 	return total, nil
 }
 
-// deliver sends the analysis in the recipient's language, falling back to
-// any language that succeeded.
+// deliver sends the analysis of the recipient's locations in their language,
+// falling back to another language of the same locations.
 func (s *Service) deliver(ctx context.Context, report *entity.AIReport, snap *Snapshot, r recipient) *entity.AIReportDelivery {
-	d := &entity.AIReportDelivery{Email: r.email, Language: r.language, SentAt: s.now().UTC()}
+	d := &entity.AIReportDelivery{Scope: r.scope, Email: r.email, Language: r.language, SentAt: s.now().UTC()}
 	if s.sender == nil {
 		d.Error = "mail service not configured"
 		return d
 	}
-	analysis := analysisIn(report, r.language)
-	if analysis == nil {
-		for _, a := range report.Analyses {
-			if a.Result != nil {
-				analysis = a
-				break
-			}
-		}
-	}
+	analysis := analysisFor(report, r.scope, r.language)
 	if analysis == nil {
 		d.Error = "no analysis to send"
 		return d
 	}
 	d.Language = analysis.Language
-	subject := subjectOf(report, analysis.Result, analysis.Language)
+	subject := subjectOf(report, analysis.Result, analysis.Language, snap)
 	if err := s.sender.Send(ctx, r.email, subject, renderReport(report, analysis, snap)); err != nil {
 		d.Error = err.Error()
 		s.log.Error("send ai report", slog.String("report", report.Id), slog.String("to", r.email), sl.Err(err))
@@ -625,17 +694,15 @@ func (s *Service) Run(ctx context.Context, author string, req *entity.AIReportRu
 		return nil, openai.ErrNotConfigured
 	}
 
-	var languages []string
+	var targets []target
 	var recipients []recipient
+	one := newRecipient(req.Email, req.Language, req.LocationIds)
 	switch {
 	case req.DryRun:
+		targets = []target{{scope: one.scope, locationIds: one.locationIds}}
 	case req.Email != "":
-		lang := req.Language
-		if lang == "" {
-			lang = entity.MailLanguageES
-		}
-		languages = []string{lang}
-		recipients = []recipient{{email: req.Email, language: lang}}
+		recipients = []recipient{one}
+		targets = targetsOf(recipients)
 	case req.SendAll:
 		if recipients, err = s.recipients(ctx); err != nil {
 			return nil, err
@@ -643,13 +710,9 @@ func (s *Service) Run(ctx context.Context, author string, req *entity.AIReportRu
 		if len(recipients) == 0 {
 			return nil, errors.New("no enabled subscribers of the ai analysis")
 		}
-		languages = languagesOf(recipients)
+		targets = targetsOf(recipients)
 	default:
-		lang := req.Language
-		if lang == "" {
-			lang = entity.MailLanguageES
-		}
-		languages = []string{lang}
+		targets = targetsOf([]recipient{one})
 	}
 	if len(recipients) > 0 && s.sender == nil {
 		return nil, errors.New("mail service not configured")
@@ -679,22 +742,19 @@ func (s *Service) Run(ctx context.Context, author string, req *entity.AIReportRu
 		defer s.running.Unlock()
 		runCtx, cancel := s.runContext()
 		defer cancel()
-		s.execute(runCtx, settings, report, languages, recipients)
+		s.execute(runCtx, settings, report, targets, recipients)
 	}()
 	return &started, nil
 }
 
-// SendTo emails the analysis to one subscriber, in their language. A report
-// of the current period that already has that language is sent again;
-// otherwise a new one is generated. Runs in the background.
+// SendTo emails the analysis to one subscriber, of their locations in their
+// language. A report of the current period that already has it is sent
+// again; otherwise a new one is generated. Runs in the background.
 func (s *Service) SendTo(ctx context.Context, author string, sub *entity.MailSubscription) error {
 	if s.sender == nil {
 		return errors.New("mail service not configured")
 	}
-	lang := sub.Language
-	if _, ok := languageNames[lang]; !ok {
-		lang = entity.MailLanguageES
-	}
+	r := newRecipient(sub.Email, sub.Language, sub.LocationIds)
 	settings, _, err := s.loadSettings(ctx)
 	if err != nil {
 		return err
@@ -709,11 +769,11 @@ func (s *Service) SendTo(ctx context.Context, author string, sub *entity.MailSub
 	if err != nil {
 		return err
 	}
-	for _, r := range reports {
-		if r.Status != entity.AIReportDone || r.DryRun || !r.PeriodTo.Equal(to.UTC()) || analysisIn(r, lang) == nil {
+	for _, rep := range reports {
+		if rep.Status != entity.AIReportDone || rep.DryRun || !rep.PeriodTo.Equal(to.UTC()) || analysisIn(rep, r.scope, r.language) == nil {
 			continue
 		}
-		full, err := s.repo.GetAIReport(ctx, r.Id)
+		full, err := s.repo.GetAIReport(ctx, rep.Id)
 		if err != nil {
 			return err
 		}
@@ -721,11 +781,11 @@ func (s *Service) SendTo(ctx context.Context, author string, sub *entity.MailSub
 			continue
 		}
 		s.wg.Add(1)
-		go s.resend(full, recipient{email: sub.Email, language: lang})
+		go s.resend(full, r)
 		return nil
 	}
 
-	_, err = s.Run(ctx, author, &entity.AIReportRunRequest{Email: sub.Email, Language: lang})
+	_, err = s.Run(ctx, author, &entity.AIReportRunRequest{Email: sub.Email, Language: r.language, LocationIds: r.locationIds})
 	return err
 }
 
@@ -733,24 +793,35 @@ func (s *Service) resend(report *entity.AIReport, r recipient) {
 	defer s.wg.Done()
 	ctx, cancel := s.runContext()
 	defer cancel()
-	d := s.deliver(ctx, report, decodeSnapshot(report), r)
+	d := s.deliver(ctx, report, snapshotOf(report, r.scope), r)
 	report.Deliveries = append(report.Deliveries, d)
 	s.save(ctx, report)
 }
 
-func decodeSnapshot(report *entity.AIReport) *Snapshot {
-	if report.Snapshot == "" {
+// snapshotOf decodes the snapshot of one scope of a report; reports older
+// than location filters keep the whole network's in Snapshot.
+func snapshotOf(report *entity.AIReport, scope string) *Snapshot {
+	raw := ""
+	for _, sc := range report.Scopes {
+		if sc.Key == scope {
+			raw = sc.Snapshot
+		}
+	}
+	if raw == "" && scope == "" {
+		raw = report.Snapshot
+	}
+	if raw == "" {
 		return nil
 	}
 	var snap Snapshot
-	if err := json.Unmarshal([]byte(report.Snapshot), &snap); err != nil {
+	if err := json.Unmarshal([]byte(raw), &snap); err != nil {
 		return nil
 	}
 	return &snap
 }
 
-// Preview renders the email of a report in one language.
-func (s *Service) Preview(ctx context.Context, id, language string) (*entity.AIReportPreview, error) {
+// Preview renders the email of a report about one scope in one language.
+func (s *Service) Preview(ctx context.Context, id, scope, language string) (*entity.AIReportPreview, error) {
 	report, err := s.repo.GetAIReport(ctx, id)
 	if err != nil {
 		return nil, err
@@ -758,22 +829,16 @@ func (s *Service) Preview(ctx context.Context, id, language string) (*entity.AIR
 	if report == nil {
 		return nil, fmt.Errorf("report %w", entity.ErrNotFound)
 	}
-	analysis := analysisIn(report, language)
+	analysis := analysisFor(report, scope, language)
 	if analysis == nil {
-		for _, a := range report.Analyses {
-			if a.Result != nil {
-				analysis = a
-				break
-			}
-		}
+		return nil, fmt.Errorf("report has no analysis of this scope: %w", entity.ErrNotFound)
 	}
-	if analysis == nil {
-		return nil, fmt.Errorf("report has no analysis: %w", entity.ErrNotFound)
-	}
+	snap := snapshotOf(report, scope)
 	return &entity.AIReportPreview{
+		Scope:    scope,
 		Language: analysis.Language,
-		Subject:  subjectOf(report, analysis.Result, analysis.Language),
-		Html:     renderReport(report, analysis, decodeSnapshot(report)),
+		Subject:  subjectOf(report, analysis.Result, analysis.Language, snap),
+		Html:     renderReport(report, analysis, snap),
 	}, nil
 }
 

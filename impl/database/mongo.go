@@ -1509,13 +1509,14 @@ func (m *MongoDB) SaveMailSubscription(ctx context.Context, sub *entity.MailSubs
 		return sub, nil
 	}
 	update := bson.M{"$set": bson.M{
-		"email":      sub.Email,
-		"report":     sub.Report,
-		"period":     sub.Period,
-		"user_group": sub.UserGroup,
-		"language":   sub.Language,
-		"enabled":    sub.Enabled,
-		"updated_at": sub.UpdatedAt,
+		"email":        sub.Email,
+		"report":       sub.Report,
+		"period":       sub.Period,
+		"user_group":   sub.UserGroup,
+		"language":     sub.Language,
+		"location_ids": sub.LocationIds,
+		"enabled":      sub.Enabled,
+		"updated_at":   sub.UpdatedAt,
 	}}
 	if err := m.updateOne(ctx, collectionMailSubscriptions, bson.D{{Key: "_id", Value: sub.Id}}, update, "subscription"); err != nil {
 		return nil, err

@@ -27,7 +27,7 @@ type Handler interface {
 	RunAIReport(ctx context.Context, author *entity.User, req *entity.AIReportRunRequest) (*entity.AIReport, error)
 	ListAIReports(ctx context.Context, author *entity.User, limit int) ([]*entity.AIReport, error)
 	GetAIReport(ctx context.Context, author *entity.User, id string) (*entity.AIReport, error)
-	PreviewAIReport(ctx context.Context, author *entity.User, id, language string) (*entity.AIReportPreview, error)
+	PreviewAIReport(ctx context.Context, author *entity.User, id, scope, language string) (*entity.AIReportPreview, error)
 	GetAIUsage(ctx context.Context, author *entity.User, from, to time.Time) (*entity.AIUsageReport, error)
 }
 
@@ -147,16 +147,18 @@ func Get(logger *slog.Logger, h Handler) http.HandlerFunc {
 	}
 }
 
-// Preview answers GET /ai/reports/{id}/preview?language=.
+// Preview answers GET /ai/reports/{id}/preview?scope=&language=; scope is the
+// key of one of the report's scopes, empty for the whole network.
 func Preview(logger *slog.Logger, h Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		author := cont.GetUser(ctx)
 		id := chi.URLParam(r, "id")
 		language := r.URL.Query().Get("language")
-		log := loggerWith(logger, r, author).With(slog.String("id", id), slog.String("language", language))
+		scope := r.URL.Query().Get("scope")
+		log := loggerWith(logger, r, author).With(slog.String("id", id), slog.String("scope", scope), slog.String("language", language))
 
-		data, err := h.PreviewAIReport(ctx, author, id, language)
+		data, err := h.PreviewAIReport(ctx, author, id, scope, language)
 		if err != nil {
 			web.Fail(w, r, log, 0, "Failed to render ai report", err)
 			return

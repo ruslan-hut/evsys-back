@@ -96,10 +96,26 @@ func periodLabels(report *entity.AIReport) (string, string) {
 	return from.Format("02.01"), last.Format("02.01.2006")
 }
 
-func subjectOf(report *entity.AIReport, result *entity.AIAnalysisResult, language string) string {
+func subjectOf(report *entity.AIReport, result *entity.AIAnalysisResult, language string, snap *Snapshot) string {
 	t := textsFor(language)
 	from, to := periodLabels(report)
-	return fmt.Sprintf(t.subject, from, to, t.status[result.Status])
+	subject := fmt.Sprintf(t.subject, from, to, t.status[result.Status])
+	if names := scopeNames(snap); names != "" {
+		subject += " · " + names
+	}
+	return subject
+}
+
+// scopeNames lists the locations a limited snapshot covers, or "".
+func scopeNames(snap *Snapshot) string {
+	if snap == nil || snap.Scope == nil {
+		return ""
+	}
+	names := make([]string, 0, len(snap.Scope.Locations))
+	for _, l := range snap.Scope.Locations {
+		names = append(names, l.Name)
+	}
+	return strings.Join(names, ", ")
 }
 
 // renderReport builds the email of one analysis. snap may be nil when the
@@ -137,7 +153,11 @@ func renderReport(report *entity.AIReport, analysis *entity.AIAnalysis, snap *Sn
 	fmt.Fprintf(&b, `<tr><td style="padding:20px 24px;border-bottom:1px solid %s;">`, colBorder)
 	b.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td valign="middle">`)
 	fmt.Fprintf(&b, `<div style="font-size:18px;font-weight:bold;color:%s;line-height:1.3;">%s</div>`, colText, html.EscapeString(t.title))
-	fmt.Fprintf(&b, `<div style="font-size:13px;color:%s;line-height:1.5;margin-top:2px;">%s – %s</div>`, colMuted, from, to)
+	subline := from + " – " + to
+	if names := scopeNames(snap); names != "" {
+		subline += " · " + names
+	}
+	fmt.Fprintf(&b, `<div style="font-size:13px;color:%s;line-height:1.5;margin-top:2px;">%s</div>`, colMuted, html.EscapeString(subline))
 	b.WriteString(`</td><td valign="middle" align="right" style="white-space:nowrap;">`)
 	fmt.Fprintf(&b,
 		`<span style="display:inline-block;font-size:12px;font-weight:bold;color:%s;background-color:%s;padding:5px 12px;border-radius:20px;">%s</span>`,

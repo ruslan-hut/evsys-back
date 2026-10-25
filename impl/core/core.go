@@ -244,7 +244,7 @@ func (c *Core) SaveMailSubscription(ctx context.Context, author *entity.User, su
 	if err := c.requirePowerUser(author); err != nil {
 		return nil, err
 	}
-	if sub.Id != "" && (sub.Report == "" || sub.Language == "") {
+	if sub.Id != "" && (sub.Report == "" || sub.Language == "" || sub.LocationIds == nil) {
 		stored, err := c.repo.GetMailSubscription(ctx, sub.Id)
 		if err != nil {
 			return nil, err
@@ -257,6 +257,10 @@ func (c *Core) SaveMailSubscription(ctx context.Context, author *entity.User, su
 		}
 		if sub.Language == "" {
 			sub.Language = stored.Language
+		}
+		// absent keeps the stored locations; an empty list means all
+		if sub.LocationIds == nil {
+			sub.LocationIds = stored.LocationIds
 		}
 	}
 	sub.Normalize()

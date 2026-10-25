@@ -3,6 +3,8 @@ package entity
 import (
 	"evsys-back/internal/lib/validate"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -38,12 +40,16 @@ type MailSubscription struct {
 	// (checked once the stored values are merged, see core). The AI analysis
 	// covers the whole network on the schedule of its own settings and has
 	// neither, which also keeps it out of the statistic scheduler.
-	Period    string    `json:"period" bson:"period" validate:"omitempty,oneof=daily weekly monthly"`
-	UserGroup string    `json:"user_group" bson:"user_group"`
-	Language  string    `json:"language" bson:"language" validate:"omitempty,oneof=es en"`
-	Enabled   bool      `json:"enabled" bson:"enabled"`
-	CreatedAt time.Time `json:"created_at" bson:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" bson:"updated_at"`
+	Period    string `json:"period" bson:"period" validate:"omitempty,oneof=daily weekly monthly"`
+	UserGroup string `json:"user_group" bson:"user_group"`
+	Language  string `json:"language" bson:"language" validate:"omitempty,oneof=es en"`
+	// LocationIds limits an AI analysis to these locations; empty covers the
+	// whole network. On update, an absent field keeps the stored list and an
+	// empty one clears it.
+	LocationIds []string  `json:"location_ids,omitempty" bson:"location_ids,omitempty" validate:"omitempty,max=50,dive,required,max=39"`
+	Enabled     bool      `json:"enabled" bson:"enabled"`
+	CreatedAt   time.Time `json:"created_at" bson:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at" bson:"updated_at"`
 }
 
 func (m *MailSubscription) Bind(_ *http.Request) error {
@@ -69,5 +75,39 @@ func (m *MailSubscription) Normalize() {
 	if m.IsAIAnalysis() {
 		m.Period = ""
 		m.UserGroup = ""
+		m.LocationIds = NormalizeLocationIds(m.LocationIds)
+	} else {
+		m.LocationIds = nil
 	}
+}
+
+// NormalizeLocationIds sorts and deduplicates location ids; an empty list
+// becomes nil, the whole network.
+func NormalizeLocationIds(ids []string) []string {
+	seen := make(map[string]bool, len(ids))
+	var out []string
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ScopeKey names the set of locations a report covers: "" for the whole
+// network, the sorted ids joined by commas otherwise.
+func ScopeKey(locationIds []string) string {
+	return strings.Join(NormalizeLocationIds(locationIds), ",")
+}
+
+// ReportLocation is a location as the report settings offer it.
+type ReportLocation struct {
+	Id           string   `json:"id"`
+	Name         string   `json:"name"`
+	City         string   `json:"city,omitempty"`
+	ChargePoints []string `json:"charge_points"`
 }

@@ -30,8 +30,10 @@ const (
 // Snapshot is everything the model reads about one period. It holds charge
 // point ids, counts and log shapes - no user names, tags, emails or cards.
 type Snapshot struct {
-	GeneratedAt     time.Time        `json:"generated_at"`
-	TimeZone        string           `json:"time_zone"`
+	GeneratedAt time.Time `json:"generated_at"`
+	TimeZone    string    `json:"time_zone"`
+	// Scope is present when the snapshot covers only some locations.
+	Scope           *SnapshotScope   `json:"scope,omitempty"`
 	Period          Period           `json:"period"`
 	PreviousPeriod  Period           `json:"previous_period"`
 	Network         *NetworkState    `json:"network"`
@@ -46,6 +48,99 @@ type Snapshot struct {
 	// Notes tell the model what is missing or cut, so it does not read an
 	// absence as good news.
 	Notes []string `json:"notes,omitempty"`
+}
+
+// SnapshotScope names the locations a limited snapshot covers.
+type SnapshotScope struct {
+	Locations    []ScopeLocation `json:"locations"`
+	ChargePoints []string        `json:"charge_points"`
+}
+
+type ScopeLocation struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// scope limits a snapshot to the charge points of some locations; the scope
+// with an empty key covers the whole network.
+type scope struct {
+	key          string
+	locationIds  []string
+	names        []string
+	chargePoints map[string]bool
+	missing      []string
+}
+
+func (sc *scope) limited() bool { return sc.key != "" }
+
+func (sc *scope) allows(chargePointId string) bool {
+	return !sc.limited() || sc.chargePoints[chargePointId]
+}
+
+// allowsRecord admits a sys_log record of a charge point in scope, and a
+// central-system record (charge point "*") that names one of them.
+func (sc *scope) allowsRecord(chargePointId, text string) bool {
+	if !sc.limited() {
+		return true
+	}
+	if chargePointId != "*" && chargePointId != "" {
+		return sc.chargePoints[chargePointId]
+	}
+	for id := range sc.chargePoints {
+		if strings.Contains(text, id) {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveScope finds the charge points and names of the given locations.
+func (s *Service) resolveScope(ctx context.Context, locationIds []string) (*scope, error) {
+	ids := entity.NormalizeLocationIds(locationIds)
+	sc := &scope{key: entity.ScopeKey(ids), locationIds: ids, chargePoints: make(map[string]bool)}
+	if !sc.limited() {
+		return sc, nil
+	}
+	locations, err := s.repo.GetAllLocations(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read locations: %w", err)
+	}
+	byId := make(map[string]*entity.Location, len(locations))
+	for _, l := range locations {
+		byId[l.Id] = l
+	}
+	for _, id := range ids {
+		l, ok := byId[id]
+		if !ok {
+			sc.missing = append(sc.missing, id)
+			sc.names = append(sc.names, id)
+			continue
+		}
+		name := l.Name
+		if name == "" {
+			name = l.Id
+		}
+		sc.names = append(sc.names, name)
+		for _, cp := range l.ChargePoints {
+			sc.chargePoints[cp.Id] = true
+		}
+	}
+	return sc, nil
+}
+
+func (sc *scope) snapshotScope() *SnapshotScope {
+	if !sc.limited() {
+		return nil
+	}
+	out := &SnapshotScope{}
+	for i, id := range sc.locationIds {
+		out.Locations = append(out.Locations, ScopeLocation{Id: id, Name: sc.names[i]})
+	}
+	for id := range sc.chargePoints {
+		out.ChargePoints = append(out.ChargePoints, id)
+	}
+	sort.Strings(out.ChargePoints)
+	return out
 }
 
 type Period struct {
@@ -196,15 +291,22 @@ type DeliveryRow struct {
 // collect reads the snapshot of [from, to) with [prevFrom, from) for
 // comparison. A source that fails is noted and skipped, so one broken
 // aggregation does not cost the whole report.
-func (s *Service) collect(ctx context.Context, from, to, prevFrom time.Time, tz string) *Snapshot {
+func (s *Service) collect(ctx context.Context, from, to, prevFrom time.Time, tz string, sc *scope) *Snapshot {
 	snap := &Snapshot{
 		GeneratedAt:    s.now().UTC(),
 		TimeZone:       tz,
+		Scope:          sc.snapshotScope(),
 		Period:         Period{From: from.UTC(), To: to.UTC()},
 		PreviousPeriod: Period{From: prevFrom.UTC(), To: from.UTC()},
 	}
 	note := func(source string, err error) {
 		snap.Notes = append(snap.Notes, fmt.Sprintf("%s unavailable: %v", source, err))
+	}
+	if sc.limited() {
+		snap.Notes = append(snap.Notes, "the report covers only the locations in scope; backend and payment logs, the payment retry queue and webhooks are network-wide and left out")
+		if len(sc.missing) > 0 {
+			snap.Notes = append(snap.Notes, fmt.Sprintf("locations not found, so not covered: %s", strings.Join(sc.missing, ", ")))
+		}
 	}
 	// the period is [from, to); the stores filter inclusively
 	toIncl := to.Add(-time.Millisecond)
@@ -224,6 +326,15 @@ func (s *Service) collect(ctx context.Context, from, to, prevFrom time.Time, tz 
 	if err != nil {
 		note("charge points", err)
 	}
+	if sc.limited() {
+		inScope := chargePoints[:0:0]
+		for _, cp := range chargePoints {
+			if sc.allows(cp.Id) {
+				inScope = append(inScope, cp)
+			}
+		}
+		chargePoints = inScope
+	}
 	enabled := make(map[string]bool)
 	snap.Network = networkState(chargePoints)
 	for _, cp := range chargePoints {
@@ -239,6 +350,9 @@ func (s *Service) collect(ctx context.Context, from, to, prevFrom time.Time, tz 
 		note("uptime", err)
 	} else {
 		for _, r := range rows {
+			if !sc.allows(r.ChargePointId) {
+				continue
+			}
 			v := round1(r.UptimePercent)
 			station(r.ChargePointId).UptimePercent = &v
 		}
@@ -247,6 +361,9 @@ func (s *Service) collect(ctx context.Context, from, to, prevFrom time.Time, tz 
 		note("previous uptime", err)
 	} else {
 		for _, r := range rows {
+			if !sc.allows(r.ChargePointId) {
+				continue
+			}
 			v := round1(r.UptimePercent)
 			station(r.ChargePointId).PrevUptimePercent = &v
 		}
@@ -255,6 +372,7 @@ func (s *Service) collect(ctx context.Context, from, to, prevFrom time.Time, tz 
 	if rows, err := s.repo.ErrorSummary(ctx, from, toIncl, ""); err != nil {
 		note("connector errors", err)
 	} else {
+		rows = errorsInScope(rows, sc)
 		sort.Slice(rows, func(i, j int) bool { return rows[i].Count > rows[j].Count })
 		for _, r := range rows {
 			station(r.ChargePointId).ConnectorErrors += r.Count
@@ -278,17 +396,19 @@ func (s *Service) collect(ctx context.Context, from, to, prevFrom time.Time, tz 
 	if rows, err := s.repo.ErrorSummary(ctx, prevFrom, fromIncl, ""); err != nil {
 		note("previous connector errors", err)
 	} else {
-		for _, r := range rows {
+		for _, r := range errorsInScope(rows, sc) {
 			station(r.ChargePointId).PrevConnectorErrs += r.Count
 		}
 	}
 
 	sysLog, err := s.readSysLog(ctx, from, toIncl)
+	full := len(sysLog) >= maxLogRecords
+	sysLog = sysInScope(sysLog, sc)
 	if err != nil {
 		note("sys_log", err)
 	} else {
 		snap.SysLog = digestSysLog(sysLog, station)
-		if len(sysLog) >= maxLogRecords {
+		if full {
 			snap.SysLog.Truncated = true
 			snap.Notes = append(snap.Notes, fmt.Sprintf("sys_log holds more than %d records in the period: only the newest were read, so station counters miss the start of the period", maxLogRecords))
 		}
@@ -299,7 +419,7 @@ func (s *Service) collect(ctx context.Context, from, to, prevFrom time.Time, tz 
 		if len(prev) >= maxLogRecords {
 			snap.Notes = append(snap.Notes, "previous sys_log was cut at the record limit: prev_* station counters are partial")
 		}
-		for _, r := range prev {
+		for _, r := range sysInScope(prev, sc) {
 			c := classify(r)
 			st := station(r.ChargePointId)
 			if c.disconnect {
@@ -314,7 +434,9 @@ func (s *Service) collect(ctx context.Context, from, to, prevFrom time.Time, tz 
 		}
 	}
 
-	if digest, err := s.readMessageLog(ctx, "back", from, toIncl); err != nil {
+	if sc.limited() {
+		// network-wide logs, left out of a report about some locations
+	} else if digest, err := s.readMessageLog(ctx, "back", from, toIncl); err != nil {
 		note("back_log", err)
 	} else {
 		snap.BackendLog = digest
@@ -322,7 +444,9 @@ func (s *Service) collect(ctx context.Context, from, to, prevFrom time.Time, tz 
 			snap.Notes = append(snap.Notes, "back_log was cut at the record limit: only the newest records were read")
 		}
 	}
-	if digest, err := s.readMessageLog(ctx, "pay", from, toIncl); err != nil {
+	if sc.limited() {
+		// see above
+	} else if digest, err := s.readMessageLog(ctx, "pay", from, toIncl); err != nil {
 		note("payment_log", err)
 	} else {
 		snap.PaymentLog = digest
@@ -331,15 +455,20 @@ func (s *Service) collect(ctx context.Context, from, to, prevFrom time.Time, tz 
 		}
 	}
 
-	snap.Sessions = s.sessions(ctx, from, toIncl, prevFrom, fromIncl, station, note)
+	snap.Sessions = s.sessions(ctx, from, toIncl, prevFrom, fromIncl, sc, station, note)
 	snap.Sessions.ActiveNow = activeSessions(chargePoints)
-	snap.Payments = s.payments(ctx, note)
-	snap.Webhooks = s.webhooks(ctx, note)
+	if !sc.limited() {
+		snap.Payments = s.payments(ctx, note)
+		snap.Webhooks = s.webhooks(ctx, note)
+	}
 
 	// '*' marks central-system records that belong to no charge point
 	delete(stations, "*")
 	delete(stations, "")
 	for id, st := range stations {
+		if !sc.allows(id) {
+			continue
+		}
 		if len(enabled) > 0 && !enabled[id] && st.Sessions == 0 && st.ConnectorErrors == 0 {
 			continue
 		}
@@ -349,6 +478,32 @@ func (s *Service) collect(ctx context.Context, from, to, prevFrom time.Time, tz 
 		return snap.Stations[i].ChargePointId < snap.Stations[j].ChargePointId
 	})
 	return snap
+}
+
+func errorsInScope(rows []*entity.ErrorSummary, sc *scope) []*entity.ErrorSummary {
+	if !sc.limited() {
+		return rows
+	}
+	var out []*entity.ErrorSummary
+	for _, r := range rows {
+		if sc.allows(r.ChargePointId) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func sysInScope(records []entity.FeatureMessage, sc *scope) []entity.FeatureMessage {
+	if !sc.limited() {
+		return records
+	}
+	var out []entity.FeatureMessage
+	for _, r := range records {
+		if sc.allowsRecord(r.ChargePointId, r.Text) {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func networkState(chargePoints []*entity.ChargePoint) *NetworkState {
@@ -611,7 +766,7 @@ func (e *eventSet) top(n int) ([]*LogEvent, int) {
 	return list[:n], len(list) - n
 }
 
-func (s *Service) sessions(ctx context.Context, from, to, prevFrom, prevTo time.Time,
+func (s *Service) sessions(ctx context.Context, from, to, prevFrom, prevTo time.Time, sc *scope,
 	station func(string) *StationWeek, note func(string, error)) *SessionsSummary {
 	sum := &SessionsSummary{StopReasons: make(map[string]int), PaymentErrorsBy: make(map[string]int)}
 
@@ -621,6 +776,9 @@ func (s *Service) sessions(ctx context.Context, from, to, prevFrom, prevTo time.
 	}
 	rows := make(map[string]*SessionsRow)
 	for _, tx := range txs {
+		if !sc.allows(tx.ChargePointId) {
+			continue
+		}
 		energy := sessionEnergy(tx)
 		sum.Finished++
 		sum.EnergyKWh += energy
@@ -665,6 +823,9 @@ func (s *Service) sessions(ctx context.Context, from, to, prevFrom, prevTo time.
 		note("previous transactions", err)
 	}
 	for _, tx := range prev {
+		if !sc.allows(tx.ChargePointId) {
+			continue
+		}
 		sum.PrevFinished++
 		sum.PrevEnergyKWh += sessionEnergy(tx)
 		sum.PrevBilledEUR += float64(tx.PaymentBilled) / 100
