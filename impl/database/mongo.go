@@ -1479,11 +1479,13 @@ func (m *MongoDB) ListMailSubscriptions(ctx context.Context) ([]*entity.MailSubs
 	return findMany[*entity.MailSubscription](m, ctx, collectionMailSubscriptions, bson.M{}, opts)
 }
 
-// ListMailSubscriptionsByPeriod returns enabled subscriptions matching the period.
+// ListMailSubscriptionsByPeriod returns enabled statistic subscriptions
+// matching the period; the AI analysis runs on a schedule of its own.
 func (m *MongoDB) ListMailSubscriptionsByPeriod(ctx context.Context, period string) ([]*entity.MailSubscription, error) {
 	filter := bson.D{
 		{Key: "period", Value: period},
 		{Key: "enabled", Value: true},
+		{Key: "report", Value: bson.D{{Key: "$ne", Value: entity.MailReportAIAnalysis}}},
 	}
 	return findMany[*entity.MailSubscription](m, ctx, collectionMailSubscriptions, filter)
 }
@@ -1508,8 +1510,10 @@ func (m *MongoDB) SaveMailSubscription(ctx context.Context, sub *entity.MailSubs
 	}
 	update := bson.M{"$set": bson.M{
 		"email":      sub.Email,
+		"report":     sub.Report,
 		"period":     sub.Period,
 		"user_group": sub.UserGroup,
+		"language":   sub.Language,
 		"enabled":    sub.Enabled,
 		"updated_at": sub.UpdatedAt,
 	}}

@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"evsys-back/config"
+	"evsys-back/internal/api/handlers/aireport"
 	centralsystem "evsys-back/internal/api/handlers/central-system"
 	"evsys-back/internal/api/handlers/helper"
 	"evsys-back/internal/api/handlers/locations"
@@ -59,6 +60,7 @@ type Core interface {
 	payments.RetryQueue
 	report.Reports
 	mail.Handler
+	aireport.Handler
 	webhooks.Handler
 	mcpserver.Core
 
@@ -77,6 +79,9 @@ const (
 	apiTimeout = 5
 	// defaultMcpTimeout bounds an MCP request when the config leaves it unset.
 	defaultMcpTimeout = 60
+	// aiTimeout bounds the AI analysis endpoints, in seconds: the connection
+	// test waits for OpenAI. Runs themselves go on in the background.
+	aiTimeout = 120
 )
 
 // NewServer builds the HTTP server. oauth may be nil, which leaves the MCP
@@ -111,6 +116,22 @@ func NewServer(conf *config.Config, log *slog.Logger, core Core, oauth OAuth) *S
 		router.With(timeout.Timeout(mcpTimeout)).Handle("/api/v1/mcp",
 			mcpserver.NewHandler(log, core, oauth, oauth.ResourceMetadataUrl()))
 	}
+
+	// AI analysis administration, admins only
+	router.Group(func(r chi.Router) {
+		r.Use(timeout.Timeout(aiTimeout))
+		r.Use(authenticate.New(log, core))
+		r.Use(authorize.RequireAdmin(log))
+
+		r.Get("/api/v1/ai/settings", aireport.Settings(log, core))
+		r.Put("/api/v1/ai/settings", aireport.UpdateSettings(log, core))
+		r.Post("/api/v1/ai/test", aireport.Test(log, core))
+		r.Post("/api/v1/ai/reports/run", aireport.Run(log, core))
+		r.Get("/api/v1/ai/reports", aireport.List(log, core))
+		r.Get("/api/v1/ai/reports/{id}", aireport.Get(log, core))
+		r.Get("/api/v1/ai/reports/{id}/preview", aireport.Preview(log, core))
+		r.Get("/api/v1/ai/usage", aireport.Usage(log, core))
+	})
 
 	router.Group(func(router chi.Router) {
 		router.Use(timeout.Timeout(apiTimeout))

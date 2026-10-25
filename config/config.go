@@ -59,6 +59,14 @@ type Config struct {
 		SenderMail string `yaml:"sender_email" env-default:"noreply@example.com"`
 		ApiUrl     string `yaml:"api_url" env-default:"https://api.brevo.com/v3/smtp/email"`
 	} `yaml:"brevo"`
+	// OpenAI serves the AI analysis. The key lives here only, never in the
+	// database; the analysis settings are edited in the admin UI.
+	OpenAI struct {
+		ApiKey string `yaml:"api_key" env-default:""`
+		ApiUrl string `yaml:"api_url" env-default:"https://api.openai.com/v1"`
+		// Timeout bounds one request, in seconds.
+		Timeout int `yaml:"timeout" env-default:"300"`
+	} `yaml:"openai"`
 	Mcp struct {
 		Enabled bool `yaml:"enabled" env-default:"false"`
 		// PublicUrl is the externally reachable origin of this backend, as MCP

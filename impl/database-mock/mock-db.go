@@ -30,6 +30,9 @@ type MockDB struct {
 	webhookSubscribers map[string]*entity.WebhookSubscriber // key: id
 	oauthClients       map[string]*entity.OAuthClient       // key: clientId
 	oauthTokens        map[string]*entity.OAuthToken        // key: hash
+	aiSettings         *entity.AIReportSettings
+	aiReports          map[string]*entity.AIReport // key: id
+	aiUsage            []*entity.AIUsage
 	lastOrderId        int
 	mux                sync.RWMutex
 }
@@ -62,6 +65,9 @@ func (db *MockDB) clear() {
 	db.webhookSubscribers = make(map[string]*entity.WebhookSubscriber)
 	db.oauthClients = make(map[string]*entity.OAuthClient)
 	db.oauthTokens = make(map[string]*entity.OAuthToken)
+	db.aiSettings = nil
+	db.aiReports = make(map[string]*entity.AIReport)
+	db.aiUsage = nil
 	db.lastOrderId = 0
 }
 
@@ -971,7 +977,7 @@ func (db *MockDB) ListMailSubscriptionsByPeriod(_ context.Context, period string
 	defer db.mux.RUnlock()
 	var result []*entity.MailSubscription
 	for _, s := range db.mailSubscriptions {
-		if s.Period == period && s.Enabled {
+		if s.Period == period && s.Enabled && !s.IsAIAnalysis() {
 			result = append(result, s)
 		}
 	}

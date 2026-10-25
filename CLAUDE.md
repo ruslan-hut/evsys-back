@@ -91,6 +91,8 @@ impl/                       Core implementations
 ├── redsys/                 Redsys payment gateway client (MIT payments, preauth, refunds)
 ├── brevo/                  Brevo (Sendinblue) transactional email client
 ├── mail/                   Scheduled report-mail service (daily/weekly/monthly)
+├── aireport/               Weekly AI analysis: snapshot → OpenAI → email (docs/ai-report.md)
+├── openai/                 OpenAI Responses API client
 ├── oauth/                  OAuth 2.1 authorization server guarding the MCP endpoint
 ├── reports/                Statistics generation
 ├── status-reader/          Transaction state management
@@ -211,13 +213,27 @@ Unauthenticated (Redsys webhook):
 
 Admin/operator only (`RequirePowerUser`):
 - `GET    /api/v1/mail/subscriptions`               — List all subscriptions
-- `POST   /api/v1/mail/subscriptions`               — Create subscription `{email, period, user_group, enabled}`
+- `POST   /api/v1/mail/subscriptions`               — Create subscription `{email, report, period, user_group, language, enabled}`
 - `PUT    /api/v1/mail/subscriptions/{id}`          — Update subscription
 - `DELETE /api/v1/mail/subscriptions/{id}`          — Delete subscription
 - `POST   /api/v1/mail/subscriptions/{id}/send-now` — Trigger an immediate report email
 - `POST   /api/v1/mail/test`                        — Send a minimal diagnostic email `{email}` to verify Brevo
 
 `period` is one of `daily | weekly | monthly`. `user_group` matches the same value the frontend statistic page sends as the `group` query param (e.g. `default`, `office`).
+
+`report` is `statistic` (default, and every document written before the field
+existed) or `ai_analysis`; `language` is `es` (default) or `en`. An
+`ai_analysis` subscription needs neither period nor group, and the statistic
+scheduler skips it. An update that omits `report`/`language` keeps them.
+
+## AI Analysis
+
+Weekly OpenAI report on the network's health, emailed to the `ai_analysis`
+subscribers. Admin-only API under `/api/v1/ai` (settings, test, run, reports,
+preview, usage); the OpenAI key is `openai.api_key` in the config and never
+stored in MongoDB. Collections `ai_settings`, `ai_reports`, `ai_usage`. Every
+request is recorded with its cost; model prices live in `entity.AIModels()` -
+update them when OpenAI reprices. See [docs/ai-report.md](docs/ai-report.md).
 
 ## Site Concurrency Report
 

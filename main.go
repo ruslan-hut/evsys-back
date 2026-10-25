@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"evsys-back/config"
+	"evsys-back/impl/aireport"
 	"evsys-back/impl/authenticator"
 	"evsys-back/impl/brevo"
 	"evsys-back/impl/central-system"
@@ -11,6 +12,7 @@ import (
 	databasemock "evsys-back/impl/database-mock"
 	"evsys-back/impl/mail"
 	"evsys-back/impl/oauth"
+	"evsys-back/impl/openai"
 	"evsys-back/impl/redsys"
 	"evsys-back/impl/reports"
 	statusreader "evsys-back/impl/status-reader"
@@ -121,6 +123,7 @@ func main() {
 	}
 
 	var mailService *mail.Service
+	var mailSender aireport.Sender
 	if conf.Brevo.Enabled {
 		log.With(
 			slog.String("sender", conf.Brevo.SenderMail),
@@ -141,7 +144,34 @@ func main() {
 		mailService = mail.New(mailRepo, rep, brevoClient, log)
 		coreHandler.SetMailService(mailService)
 		mailService.Start()
+		mailSender = brevoClient
 	}
+
+	// AI analysis: the settings page works without a key, the runs need one
+	log.With(
+		slog.Bool("openai_key", conf.OpenAI.ApiKey != ""),
+		slog.Bool("mail", mailSender != nil),
+	).Info("initializing ai report service")
+	openaiClient := openai.New(openai.Config{
+		ApiKey:  conf.OpenAI.ApiKey,
+		ApiUrl:  conf.OpenAI.ApiUrl,
+		Timeout: time.Duration(conf.OpenAI.Timeout) * time.Second,
+	}, log)
+	var aiRepo aireport.Repository
+	if conf.Mongo.Enabled {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err = mongo.EnsureAIReportIndexes(ctx)
+		cancel()
+		if err != nil {
+			log.Error("ai report indexes", sl.Err(err))
+		}
+		aiRepo = mongo
+	} else {
+		aiRepo = mockDb
+	}
+	aiReportService := aireport.New(aiRepo, openaiClient, mailSender, log)
+	coreHandler.SetAIReportService(aiReportService)
+	aiReportService.Start()
 
 	// MCP endpoint and the OAuth server guarding it; the interface stays nil
 	// when disabled, which keeps the routes out
@@ -207,6 +237,7 @@ func main() {
 	if mailService != nil {
 		mailService.Stop()
 	}
+	aiReportService.Stop()
 
 	// Create shutdown context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

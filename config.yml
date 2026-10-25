@@ -39,6 +39,10 @@ brevo:
   sender_name: "EVSys Reports"
   sender_email: "noreply@example.com"
   api_url: "https://api.brevo.com/v3/smtp/email"
+openai:
+  api_key: ""
+  api_url: "https://api.openai.com/v1"
+  timeout: 300
 mcp:
   enabled: false
   public_url: "http://localhost:5500"

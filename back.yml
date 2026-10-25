@@ -39,6 +39,8 @@ brevo:
   sender_name: ${BREVO_SENDER_NAME}
   sender_email: ${BREVO_SENDER_EMAIL}
   api_url: ${BREVO_API_URL}
+openai:
+  api_key: ${OPENAI_API_KEY}
 mcp:
   enabled: ${MCP_ENABLED}
   public_url: ${MCP_PUBLIC_URL}

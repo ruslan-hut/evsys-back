@@ -47,6 +47,7 @@ type Core struct {
 	reports              Reports
 	redsys               RedsysClient
 	mail                 MailService
+	aiReport             AIReportService
 	currency             string
 	disablePayment       bool
 	paymentLocks         sync.Map
@@ -191,7 +192,14 @@ func (c *Core) ListMailSubscriptions(ctx context.Context, author *entity.User) (
 	if err := c.requirePowerUser(author); err != nil {
 		return nil, err
 	}
-	return c.repo.ListMailSubscriptions(ctx)
+	subs, err := c.repo.ListMailSubscriptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, sub := range subs {
+		sub.Normalize()
+	}
+	return subs, nil
 }
 
 // GetPaymentRetryQueue returns all active payment retry records enriched with
@@ -229,10 +237,31 @@ func (c *Core) GetPaymentRetryQueue(ctx context.Context, author *entity.User) ([
 	return views, nil
 }
 
-// SaveMailSubscription creates or updates a mail subscription (admin only).
+// SaveMailSubscription creates or updates a mail subscription (admin only). An
+// update that omits the report type or language keeps the stored ones, so a
+// client unaware of them cannot turn an AI subscription into a statistic one.
 func (c *Core) SaveMailSubscription(ctx context.Context, author *entity.User, sub *entity.MailSubscription) (*entity.MailSubscription, error) {
 	if err := c.requirePowerUser(author); err != nil {
 		return nil, err
+	}
+	if sub.Id != "" && (sub.Report == "" || sub.Language == "") {
+		stored, err := c.repo.GetMailSubscription(ctx, sub.Id)
+		if err != nil {
+			return nil, err
+		}
+		if stored == nil {
+			return nil, fmt.Errorf("subscription %w", entity.ErrNotFound)
+		}
+		if sub.Report == "" {
+			sub.Report = stored.Report
+		}
+		if sub.Language == "" {
+			sub.Language = stored.Language
+		}
+	}
+	sub.Normalize()
+	if !sub.IsAIAnalysis() && (sub.Period == "" || sub.UserGroup == "") {
+		return nil, fmt.Errorf("a statistic report needs a period and a user group")
 	}
 	return c.repo.SaveMailSubscription(ctx, sub)
 }
@@ -336,6 +365,12 @@ func (c *Core) SendMailSubscriptionNow(ctx context.Context, author *entity.User,
 	}
 	if sub == nil {
 		return fmt.Errorf("subscription %w", entity.ErrNotFound)
+	}
+	if sub.IsAIAnalysis() {
+		if c.aiReport == nil {
+			return fmt.Errorf("ai report service not configured")
+		}
+		return c.aiReport.SendTo(ctx, author.Username, sub)
 	}
 	return c.mail.SendNow(ctx, sub)
 }

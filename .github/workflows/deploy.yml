@@ -43,6 +43,7 @@ jobs:
           sed -i 's|${BREVO_SENDER_NAME}|'"$BREVO_SENDER_NAME"'|g' back.yml
           sed -i 's|${BREVO_SENDER_EMAIL}|'"$BREVO_SENDER_EMAIL"'|g' back.yml
           sed -i 's|${BREVO_API_URL}|'"$BREVO_API_URL"'|g' back.yml
+          sed -i 's|${OPENAI_API_KEY}|'"$OPENAI_API_KEY"'|g' back.yml
           sed -i 's|${MCP_ENABLED}|'"$MCP_ENABLED"'|g' back.yml
           sed -i 's|${MCP_PUBLIC_URL}|'"$MCP_PUBLIC_URL"'|g' back.yml
           sed -i 's|${MCP_FRONTEND_URL}|'"$MCP_FRONTEND_URL"'|g' back.yml
@@ -76,6 +77,7 @@ jobs:
           BREVO_SENDER_NAME: ${{ vars.BREVO_SENDER_NAME }}
           BREVO_SENDER_EMAIL: ${{ vars.BREVO_SENDER_EMAIL }}
           BREVO_API_URL: ${{ vars.BREVO_API_URL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           MCP_ENABLED: ${{ vars.MCP_ENABLED }}
           MCP_PUBLIC_URL: ${{ vars.MCP_PUBLIC_URL }}
           MCP_FRONTEND_URL: ${{ vars.MCP_FRONTEND_URL }}
