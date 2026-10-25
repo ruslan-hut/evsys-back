@@ -92,6 +92,23 @@ func TestAIReportSettingsRoundTrip(t *testing.T) {
 	assert.NotContains(t, string(body), "api_key\":\"", "the key never leaves the server")
 }
 
+// The settings form sends every field; the model's default effort is "".
+func TestAIReportSettingsReasoningEffort(t *testing.T) {
+	srv := newAIReportTestServer(t)
+	for _, tt := range []struct {
+		body   string
+		status int
+	}{
+		{`{"reasoning_effort": ""}`, http.StatusOK},
+		{`{"reasoning_effort": "low"}`, http.StatusOK},
+		{`{"reasoning_effort": "turbo"}`, http.StatusBadRequest},
+		{`{"enabled": true, "model": "gpt-6.1-sol", "reasoning_effort": "", "max_output_tokens": 8000, "weekday": 1, "hour": 7, "time_zone": "Europe/Madrid", "period_days": 7, "monthly_budget_usd": 0, "system_prompt": ""}`, http.StatusOK},
+	} {
+		resp, body := do(t, http.MethodPut, srv.URL+"/api/v1/ai/settings", adminApiToken, "application/json", tt.body)
+		assert.Equal(t, tt.status, resp.StatusCode, "%s: %s", tt.body, string(body))
+	}
+}
+
 func TestMailSubscriptionAIAnalysis(t *testing.T) {
 	srv := newAIReportTestServer(t)
 

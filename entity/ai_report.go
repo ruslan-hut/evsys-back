@@ -2,6 +2,7 @@ package entity
 
 import (
 	"evsys-back/internal/lib/validate"
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -115,9 +116,11 @@ func DefaultAIReportSettings() *AIReportSettings {
 // AIReportSettingsUpdate is a partial update; a nil field keeps the stored
 // value. SystemPrompt "" restores the built-in prompt.
 type AIReportSettingsUpdate struct {
-	Enabled          *bool    `json:"enabled,omitempty"`
-	Model            *string  `json:"model,omitempty" validate:"omitempty,max=64"`
-	ReasoningEffort  *string  `json:"reasoning_effort,omitempty" validate:"omitempty,oneof=none minimal low medium high"`
+	Enabled *bool   `json:"enabled,omitempty"`
+	Model   *string `json:"model,omitempty" validate:"omitempty,max=64"`
+	// ReasoningEffort "" restores the model's default; checked by Bind, since
+	// a tag cannot accept the empty value behind a non-nil pointer.
+	ReasoningEffort  *string  `json:"reasoning_effort,omitempty" validate:"omitempty,max=16"`
 	MaxOutputTokens  *int     `json:"max_output_tokens,omitempty" validate:"omitempty,min=1000,max=64000"`
 	SystemPrompt     *string  `json:"system_prompt,omitempty" validate:"omitempty,max=20000"`
 	Weekday          *int     `json:"weekday,omitempty" validate:"omitempty,min=0,max=6"`
@@ -128,7 +131,23 @@ type AIReportSettingsUpdate struct {
 }
 
 func (u *AIReportSettingsUpdate) Bind(_ *http.Request) error {
-	return validate.Struct(u)
+	if err := validate.Struct(u); err != nil {
+		return err
+	}
+	if u.ReasoningEffort != nil && !IsAIReasoningEffort(*u.ReasoningEffort) {
+		return fmt.Errorf("unknown reasoning effort %q", *u.ReasoningEffort)
+	}
+	return nil
+}
+
+// IsAIReasoningEffort reports whether e is a reasoning effort the settings
+// accept; "" means the model's default.
+func IsAIReasoningEffort(e string) bool {
+	switch e {
+	case "", "none", "minimal", "low", "medium", "high":
+		return true
+	}
+	return false
 }
 
 // AIReportSettingsView is what the admin page reads: the settings with what it
