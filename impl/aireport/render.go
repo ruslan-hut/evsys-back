@@ -34,7 +34,7 @@ var i18n = map[string]texts{
 		sessions:       "Sesiones",
 		energy:         "Energía",
 		turnover:       "Facturación est.",
-		turnoverNote:   "Estimación: energía a clientes × tarifa por kWh.",
+		turnoverNote:   "Estimación: energía a clientes × tarifa de %.2f €/kWh",
 		uptime:         "Disponibilidad media",
 		online:         "En línea ahora",
 		findings:       "Hallazgos",
@@ -52,7 +52,7 @@ var i18n = map[string]texts{
 		sessions:       "Sessions",
 		energy:         "Energy",
 		turnover:       "Est. turnover",
-		turnoverNote:   "Estimate: energy delivered to clients × tariff per kWh.",
+		turnoverNote:   "Estimate: energy delivered to clients × tariff of %.2f €/kWh",
 		uptime:         "Average uptime",
 		online:         "Online now",
 		findings:       "Findings",
@@ -251,7 +251,7 @@ func renderFigures(b *strings.Builder, snap *Snapshot, t texts) {
 	b.WriteString(`</tr></table></td></tr>`)
 	if s := snap.Sessions; s != nil && s.TariffPricePerKWhEUR > 0 {
 		fmt.Fprintf(b, `<tr><td style="padding:6px 24px 0 24px;font-size:11px;color:%s;">%s</td></tr>`,
-			colLabel, html.EscapeString(fmt.Sprintf("%s (%.2f €/kWh)", t.turnoverNote, s.TariffPricePerKWhEUR)))
+			colLabel, html.EscapeString(fmt.Sprintf(t.turnoverNote, s.TariffPricePerKWhEUR)))
 	}
 }
 
