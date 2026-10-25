@@ -1,7 +1,9 @@
 package helper
 
 import (
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -82,4 +84,21 @@ func formatFilterTime(t *time.Time) string {
 		return ""
 	}
 	return t.Format(time.RFC3339)
+}
+
+func TestOptionsAllowsTheAdminMethods(t *testing.T) {
+	handler := Options()(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("a preflight must not reach the handler")
+	}))
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/mail/subscriptions/x", nil)
+	req.Header.Set("Origin", "https://app.wattbrews.me")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	allowed := rec.Header().Get("Access-Control-Allow-Methods")
+	for _, method := range []string{"GET", "POST", "PUT", "DELETE"} {
+		if !strings.Contains(allowed, method) {
+			t.Errorf("preflight allows %q, missing %s", allowed, method)
+		}
+	}
 }

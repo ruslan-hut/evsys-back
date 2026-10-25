@@ -100,7 +100,9 @@ func Options() func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 
 			w.Header().Add("Access-Control-Allow-Origin", r.Header.Get("Origin"))
-			w.Header().Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			// the admin pages update and delete with PUT and DELETE; a browser
+			// refuses those cross-origin unless they are listed here
+			w.Header().Add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			// the Mcp-* headers and the exposed WWW-Authenticate let browser-based
 			// MCP clients reach /api/v1/mcp and discover its OAuth server
 			w.Header().Add("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Protocol-Version, Mcp-Session-Id, Last-Event-ID")
