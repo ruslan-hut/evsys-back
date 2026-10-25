@@ -835,7 +835,8 @@ func (s *Service) UpdateSettings(ctx context.Context, author string, u *entity.A
 	if u.Enabled != nil {
 		settings.Enabled = *u.Enabled
 	}
-	if u.Model != nil {
+	// a stored model that left the price list may be kept, not chosen anew
+	if u.Model != nil && *u.Model != settings.Model {
 		if _, ok := entity.FindAIModel(*u.Model); !ok {
 			return nil, fmt.Errorf("unknown model %q", *u.Model)
 		}
