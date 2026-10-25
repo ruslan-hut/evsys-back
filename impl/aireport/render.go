@@ -147,31 +147,35 @@ func renderReport(report *entity.AIReport, analysis *entity.AIAnalysis, snap *Sn
 		colPage, html.EscapeString(result.Headline))
 
 	fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" border="0" style="background-color:%s;">`, colPage)
-	b.WriteString(`<tr><td align="center" style="padding:24px 12px;">`)
+	b.WriteString(`<tr><td align="center" style="padding:16px 8px;">`)
+	// fluid: a phone shows the email at its own width instead of shrinking a
+	// fixed 600px table, which made the text unreadably small; Outlook, which
+	// ignores max-width, gets a fixed table around it
+	b.WriteString(`<!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->`)
 	fmt.Fprintf(&b,
-		`<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" `+
-			`style="width:600px;max-width:600px;background-color:#ffffff;border:1px solid %s;border-radius:12px;overflow:hidden;font-family:%s;">`,
+		`<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" border="0" `+
+			`style="width:100%%;max-width:600px;background-color:#ffffff;border:1px solid %s;border-radius:12px;overflow:hidden;font-family:%s;">`,
 		colBorder, fontStack)
 
 	// header: title, period, status pill
-	fmt.Fprintf(&b, `<tr><td style="padding:20px 24px;border-bottom:1px solid %s;">`, colBorder)
+	fmt.Fprintf(&b, `<tr><td style="padding:18px 20px;border-bottom:1px solid %s;">`, colBorder)
 	b.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td valign="middle">`)
-	fmt.Fprintf(&b, `<div style="font-size:18px;font-weight:bold;color:%s;line-height:1.3;">%s</div>`, colText, html.EscapeString(t.title))
+	fmt.Fprintf(&b, `<div style="font-size:20px;font-weight:bold;color:%s;line-height:1.3;">%s</div>`, colText, html.EscapeString(t.title))
 	subline := from + " – " + to
 	if names := scopeNames(snap); names != "" {
 		subline += " · " + names
 	}
-	fmt.Fprintf(&b, `<div style="font-size:13px;color:%s;line-height:1.5;margin-top:2px;">%s</div>`, colMuted, html.EscapeString(subline))
+	fmt.Fprintf(&b, `<div style="font-size:14px;color:%s;line-height:1.5;margin-top:2px;">%s</div>`, colMuted, html.EscapeString(subline))
 	b.WriteString(`</td><td valign="middle" align="right" style="white-space:nowrap;">`)
 	fmt.Fprintf(&b,
-		`<span style="display:inline-block;font-size:12px;font-weight:bold;color:%s;background-color:%s;padding:5px 12px;border-radius:20px;">%s</span>`,
+		`<span style="display:inline-block;font-size:13px;font-weight:bold;color:%s;background-color:%s;padding:5px 12px;border-radius:20px;">%s</span>`,
 		status.fg, status.bg, html.EscapeString(t.status[result.Status]))
 	b.WriteString(`</td></tr></table></td></tr>`)
 
 	// headline and summary
-	fmt.Fprintf(&b, `<tr><td style="padding:18px 24px 6px 24px;">`)
-	fmt.Fprintf(&b, `<div style="font-size:15px;font-weight:bold;color:%s;line-height:1.4;">%s</div>`, colText, html.EscapeString(result.Headline))
-	fmt.Fprintf(&b, `<div style="font-size:13px;color:%s;line-height:1.6;margin-top:8px;">%s</div>`, colText, paragraphs(result.Summary))
+	fmt.Fprintf(&b, `<tr><td style="padding:18px 20px 12px 20px;">`)
+	fmt.Fprintf(&b, `<div style="font-size:17px;font-weight:bold;color:%s;line-height:1.4;">%s</div>`, colText, html.EscapeString(result.Headline))
+	fmt.Fprintf(&b, `<div style="font-size:15px;color:%s;line-height:1.6;margin-top:8px;">%s</div>`, colText, paragraphs(result.Summary))
 	b.WriteString(`</td></tr>`)
 
 	if snap != nil {
@@ -179,10 +183,10 @@ func renderReport(report *entity.AIReport, analysis *entity.AIAnalysis, snap *Sn
 	}
 
 	// findings
-	fmt.Fprintf(&b, `<tr><td style="padding:16px 24px 4px 24px;">`)
+	fmt.Fprintf(&b, `<tr><td style="padding:16px 20px 4px 20px;">`)
 	caption(&b, t.findings)
 	if len(result.Findings) == 0 {
-		fmt.Fprintf(&b, `<div style="font-size:13px;color:%s;padding:6px 0 10px 0;">%s</div>`, colMuted, html.EscapeString(t.noFindings))
+		fmt.Fprintf(&b, `<div style="font-size:15px;color:%s;padding:6px 0 10px 0;">%s</div>`, colMuted, html.EscapeString(t.noFindings))
 	}
 	for _, f := range result.Findings {
 		renderFinding(&b, f, t)
@@ -190,9 +194,9 @@ func renderReport(report *entity.AIReport, analysis *entity.AIAnalysis, snap *Sn
 	b.WriteString(`</td></tr>`)
 
 	if len(result.Trends) > 0 {
-		fmt.Fprintf(&b, `<tr><td style="padding:8px 24px 18px 24px;">`)
+		fmt.Fprintf(&b, `<tr><td style="padding:8px 20px 18px 20px;">`)
 		caption(&b, t.trends)
-		fmt.Fprintf(&b, `<ul style="margin:6px 0 0 0;padding-left:18px;font-size:13px;color:%s;line-height:1.6;">`, colText)
+		fmt.Fprintf(&b, `<ul style="margin:6px 0 0 0;padding-left:18px;font-size:15px;color:%s;line-height:1.6;">`, colText)
 		for _, tr := range result.Trends {
 			fmt.Fprintf(&b, `<li>%s</li>`, html.EscapeString(tr))
 		}
@@ -200,18 +204,18 @@ func renderReport(report *entity.AIReport, analysis *entity.AIAnalysis, snap *Sn
 	}
 
 	footer := fmt.Sprintf(t.generated, report.Model)
-	fmt.Fprintf(&b, `<tr><td style="padding:14px 24px;border-top:1px solid %s;background-color:%s;">`, colBorder, colFooterBg)
-	fmt.Fprintf(&b, `<div style="font-size:11px;color:%s;line-height:1.5;">%s · %s</div>`,
+	fmt.Fprintf(&b, `<tr><td style="padding:14px 20px;border-top:1px solid %s;background-color:%s;">`, colBorder, colFooterBg)
+	fmt.Fprintf(&b, `<div style="font-size:12px;color:%s;line-height:1.5;">%s · %s</div>`,
 		colLabel, html.EscapeString(footer), html.EscapeString(report.Id))
 	b.WriteString(`</td></tr>`)
 
-	b.WriteString(`</table></td></tr></table>` + "\n</body>\n</html>\n")
+	b.WriteString(`</table><!--[if mso]></td></tr></table><![endif]--></td></tr></table>` + "\n</body>\n</html>\n")
 	return b.String()
 }
 
 func caption(b *strings.Builder, text string) {
 	fmt.Fprintf(b,
-		`<div style="font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.4px;color:%s;padding-bottom:4px;">%s</div>`,
+		`<div style="font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:0.4px;color:%s;padding-bottom:4px;">%s</div>`,
 		colLabel, html.EscapeString(text))
 }
 
@@ -229,13 +233,16 @@ func paragraphs(text string) string {
 // renderFigures writes the row of figures computed from the data, not by the
 // model, so that the numbers in the email are exact.
 func renderFigures(b *strings.Builder, snap *Snapshot, t texts) {
-	b.WriteString(`<tr><td style="padding:12px 0 0 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>`)
+	// inline blocks wrap onto a second line on a narrow screen; font-size 0
+	// drops the whitespace between them
+	fmt.Fprintf(b, `<tr><td style="padding:8px 12px;border-top:1px solid %s;border-bottom:1px solid %s;background-color:%s;font-size:0;">`,
+		colBorder, colBorder, colStrip)
 	if s := snap.Sessions; s != nil {
-		figure(b, t.sessions, fmt.Sprintf("%d", s.Finished), "", change(float64(s.Finished), float64(s.PrevFinished)), true)
-		figure(b, t.energy, fmt.Sprintf("%.1f", s.EnergyKWh), "kWh", change(s.EnergyKWh, s.PrevEnergyKWh), true)
+		figure(b, t.sessions, fmt.Sprintf("%d", s.Finished), "", change(float64(s.Finished), float64(s.PrevFinished)))
+		figure(b, t.energy, fmt.Sprintf("%.1f", s.EnergyKWh), "kWh", change(s.EnergyKWh, s.PrevEnergyKWh))
 		if s.TariffPricePerKWhEUR > 0 {
 			figure(b, t.turnover, fmt.Sprintf("%.0f", s.TurnoverEstimateEUR), "€",
-				change(s.TurnoverEstimateEUR, s.PrevTurnoverEstimateEUR), true)
+				change(s.TurnoverEstimateEUR, s.PrevTurnoverEstimateEUR))
 		}
 	}
 	if avg, prev, ok := averageUptime(snap.Stations); ok {
@@ -243,36 +250,34 @@ func renderFigures(b *strings.Builder, snap *Snapshot, t texts) {
 		if prev > 0 {
 			diff = fmt.Sprintf("%+.1f p.p.", avg-prev)
 		}
-		figure(b, t.uptime, fmt.Sprintf("%.1f", avg), "%", diff, true)
+		figure(b, t.uptime, fmt.Sprintf("%.1f", avg), "%", diff)
 	}
 	if n := snap.Network; n != nil {
-		figure(b, t.online, fmt.Sprintf("%d/%d", n.Online, n.Enabled), "", "", false)
+		figure(b, t.online, fmt.Sprintf("%d/%d", n.Online, n.Enabled), "", "")
 	}
-	b.WriteString(`</tr></table></td></tr>`)
+	b.WriteString(`</td></tr>`)
 	if s := snap.Sessions; s != nil && s.TariffPricePerKWhEUR > 0 {
-		fmt.Fprintf(b, `<tr><td style="padding:6px 24px 0 24px;font-size:11px;color:%s;">%s</td></tr>`,
+		fmt.Fprintf(b, `<tr><td style="padding:6px 20px 0 20px;font-size:12px;color:%s;">%s</td></tr>`,
 			colLabel, html.EscapeString(fmt.Sprintf(t.turnoverNote, s.TariffPricePerKWhEUR)))
 	}
 }
 
-func figure(b *strings.Builder, label, value, unit, diff string, rightRule bool) {
-	rule := ""
-	if rightRule {
-		rule = fmt.Sprintf("border-right:1px solid %s;", colBorder)
-	}
+// figure is one block of the figures row: five fit the full width, two or
+// three a phone screen.
+func figure(b *strings.Builder, label, value, unit, diff string) {
 	unitSpan := ""
 	if unit != "" {
-		unitSpan = fmt.Sprintf(` <span style="font-size:12px;font-weight:normal;color:%s;">%s</span>`, colMuted, html.EscapeString(unit))
+		unitSpan = fmt.Sprintf(` <span style="font-size:13px;font-weight:normal;color:%s;">%s</span>`, colMuted, html.EscapeString(unit))
 	}
 	diffDiv := ""
 	if diff != "" {
-		diffDiv = fmt.Sprintf(`<div style="font-size:11px;color:%s;margin-top:2px;">%s</div>`, colMuted, html.EscapeString(diff))
+		diffDiv = fmt.Sprintf(`<div style="font-size:12px;color:%s;margin-top:2px;">%s</div>`, colMuted, html.EscapeString(diff))
 	}
 	fmt.Fprintf(b,
-		`<td valign="top" style="padding:12px 14px;border-top:1px solid %s;border-bottom:1px solid %s;background-color:%s;%s">`+
-			`<div style="font-size:11px;color:%s;">%s</div>`+
-			`<div style="font-size:20px;font-weight:bold;color:%s;line-height:1.2;margin-top:2px;">%s%s</div>%s</td>`,
-		colBorder, colBorder, colStrip, rule, colMuted, html.EscapeString(label), colText, html.EscapeString(value), unitSpan, diffDiv)
+		`<div style="display:inline-block;vertical-align:top;width:100px;padding:8px 6px;font-size:14px;">`+
+			`<div style="font-size:12px;color:%s;">%s</div>`+
+			`<div style="font-size:20px;font-weight:bold;color:%s;line-height:1.2;margin-top:2px;white-space:nowrap;">%s%s</div>%s</div>`,
+		colMuted, html.EscapeString(label), colText, html.EscapeString(value), unitSpan, diffDiv)
 }
 
 func change(cur, prev float64) string {
@@ -316,14 +321,14 @@ func renderFinding(b *strings.Builder, f *entity.AIFinding, t texts) {
 	}
 	fmt.Fprintf(b, `<div style="padding:10px 0 12px 0;border-bottom:1px solid %s;">`, colRule)
 	fmt.Fprintf(b,
-		`<div><span style="display:inline-block;font-size:11px;font-weight:bold;color:%s;background-color:%s;padding:2px 8px;border-radius:10px;">%s</span>`+
-			` <span style="font-size:12px;color:%s;">%s</span></div>`,
+		`<div><span style="display:inline-block;font-size:12px;font-weight:bold;color:%s;background-color:%s;padding:2px 8px;border-radius:10px;">%s</span>`+
+			` <span style="font-size:13px;color:%s;">%s</span></div>`,
 		p.fg, p.bg, html.EscapeString(t.severity[f.Severity]), colMuted, html.EscapeString(target))
-	fmt.Fprintf(b, `<div style="font-size:14px;font-weight:bold;color:%s;line-height:1.4;margin-top:6px;">%s</div>`, colText, html.EscapeString(f.Title))
-	fmt.Fprintf(b, `<div style="font-size:13px;color:%s;line-height:1.6;margin-top:4px;">%s</div>`, colText, paragraphs(f.Details))
+	fmt.Fprintf(b, `<div style="font-size:16px;font-weight:bold;color:%s;line-height:1.4;margin-top:6px;">%s</div>`, colText, html.EscapeString(f.Title))
+	fmt.Fprintf(b, `<div style="font-size:15px;color:%s;line-height:1.6;margin-top:4px;">%s</div>`, colText, paragraphs(f.Details))
 	if f.Recommendation != "" {
 		fmt.Fprintf(b,
-			`<div style="font-size:13px;color:%s;line-height:1.6;margin-top:6px;padding:8px 12px;background-color:%s;border-radius:6px;">`+
+			`<div style="font-size:15px;color:%s;line-height:1.6;margin-top:6px;padding:8px 12px;background-color:%s;border-radius:6px;">`+
 				`<strong style="color:%s;">%s:</strong> %s</div>`,
 			colText, colStrip, colText, html.EscapeString(t.recommendation), html.EscapeString(f.Recommendation))
 	}
