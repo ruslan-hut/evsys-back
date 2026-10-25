@@ -22,7 +22,7 @@ const (
 )
 
 type texts struct {
-	title, sessions, energy, uptime, online, findings, trends, recommendation,
+	title, sessions, energy, turnover, turnoverNote, uptime, online, findings, trends, recommendation,
 	noFindings, network, generated, subject string
 	status   map[string]string
 	severity map[string]string
@@ -30,9 +30,11 @@ type texts struct {
 
 var i18n = map[string]texts{
 	entity.MailLanguageES: {
-		title:          "Análisis semanal de EVSys",
+		title:          "Análisis semanal de WattBrews",
 		sessions:       "Sesiones",
 		energy:         "Energía",
+		turnover:       "Facturación est.",
+		turnoverNote:   "Estimación: energía a clientes × tarifa por kWh.",
 		uptime:         "Disponibilidad media",
 		online:         "En línea ahora",
 		findings:       "Hallazgos",
@@ -40,15 +42,17 @@ var i18n = map[string]texts{
 		recommendation: "Recomendación",
 		noFindings:     "No se han detectado problemas en este periodo.",
 		network:        "Toda la red",
-		generated:      "Generado automáticamente por IA (%s) a partir de los datos de EVSys. Compruebe los datos antes de actuar.",
-		subject:        "EVSys · análisis semanal %s – %s: %s",
+		generated:      "Generado automáticamente por IA (%s) a partir de los datos de WattBrews. Compruebe los datos antes de actuar.",
+		subject:        "WattBrews · análisis semanal %s – %s: %s",
 		status:         map[string]string{"ok": "Todo en orden", "attention": "Requiere atención", "critical": "Crítico"},
 		severity:       map[string]string{"critical": "Crítico", "warning": "Aviso", "info": "Info"},
 	},
 	entity.MailLanguageEN: {
-		title:          "EVSys weekly analysis",
+		title:          "WattBrews weekly analysis",
 		sessions:       "Sessions",
 		energy:         "Energy",
+		turnover:       "Est. turnover",
+		turnoverNote:   "Estimate: energy delivered to clients × tariff per kWh.",
 		uptime:         "Average uptime",
 		online:         "Online now",
 		findings:       "Findings",
@@ -56,8 +60,8 @@ var i18n = map[string]texts{
 		recommendation: "Recommendation",
 		noFindings:     "No problems were found in this period.",
 		network:        "Whole network",
-		generated:      "Generated automatically by AI (%s) from EVSys data. Check the data before acting.",
-		subject:        "EVSys · weekly analysis %s – %s: %s",
+		generated:      "Generated automatically by AI (%s) from WattBrews data. Check the data before acting.",
+		subject:        "WattBrews · weekly analysis %s – %s: %s",
 		status:         map[string]string{"ok": "All good", "attention": "Needs attention", "critical": "Critical"},
 		severity:       map[string]string{"critical": "Critical", "warning": "Warning", "info": "Info"},
 	},
@@ -229,6 +233,10 @@ func renderFigures(b *strings.Builder, snap *Snapshot, t texts) {
 	if s := snap.Sessions; s != nil {
 		figure(b, t.sessions, fmt.Sprintf("%d", s.Finished), "", change(float64(s.Finished), float64(s.PrevFinished)), true)
 		figure(b, t.energy, fmt.Sprintf("%.1f", s.EnergyKWh), "kWh", change(s.EnergyKWh, s.PrevEnergyKWh), true)
+		if s.TariffPricePerKWhEUR > 0 {
+			figure(b, t.turnover, fmt.Sprintf("%.0f", s.TurnoverEstimateEUR), "€",
+				change(s.TurnoverEstimateEUR, s.PrevTurnoverEstimateEUR), true)
+		}
 	}
 	if avg, prev, ok := averageUptime(snap.Stations); ok {
 		diff := ""
@@ -241,6 +249,10 @@ func renderFigures(b *strings.Builder, snap *Snapshot, t texts) {
 		figure(b, t.online, fmt.Sprintf("%d/%d", n.Online, n.Enabled), "", "", false)
 	}
 	b.WriteString(`</tr></table></td></tr>`)
+	if s := snap.Sessions; s != nil && s.TariffPricePerKWhEUR > 0 {
+		fmt.Fprintf(b, `<tr><td style="padding:6px 24px 0 24px;font-size:11px;color:%s;">%s</td></tr>`,
+			colLabel, html.EscapeString(fmt.Sprintf("%s (%.2f €/kWh)", t.turnoverNote, s.TariffPricePerKWhEUR)))
+	}
 }
 
 func figure(b *strings.Builder, label, value, unit, diff string, rightRule bool) {
@@ -257,7 +269,7 @@ func figure(b *strings.Builder, label, value, unit, diff string, rightRule bool)
 		diffDiv = fmt.Sprintf(`<div style="font-size:11px;color:%s;margin-top:2px;">%s</div>`, colMuted, html.EscapeString(diff))
 	}
 	fmt.Fprintf(b,
-		`<td width="25%%" valign="top" style="padding:12px 16px;border-top:1px solid %s;border-bottom:1px solid %s;background-color:%s;%s">`+
+		`<td valign="top" style="padding:12px 14px;border-top:1px solid %s;border-bottom:1px solid %s;background-color:%s;%s">`+
 			`<div style="font-size:11px;color:%s;">%s</div>`+
 			`<div style="font-size:20px;font-weight:bold;color:%s;line-height:1.2;margin-top:2px;">%s%s</div>%s</td>`,
 		colBorder, colBorder, colStrip, rule, colMuted, html.EscapeString(label), colText, html.EscapeString(value), unitSpan, diffDiv)

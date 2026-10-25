@@ -134,3 +134,7 @@ func (db *MockDB) ListMailSubscriptionsByReport(_ context.Context, report string
 	sort.Slice(list, func(i, j int) bool { return list[i].CreatedAt.Before(list[j].CreatedAt) })
 	return list, nil
 }
+
+func (db *MockDB) GetDefaultPaymentPlan(_ context.Context) (*entity.PaymentPlan, error) {
+	return &entity.PaymentPlan{PlanId: "default", IsDefault: true, IsActive: true, PricePerKwh: 45}, nil
+}

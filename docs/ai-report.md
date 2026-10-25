@@ -1,6 +1,6 @@
 # AI analysis
 
-A weekly report on the health of the network, written by an OpenAI model from
+A weekly report on the health of the WattBrews network, written by an OpenAI model from
 the system's own data and emailed to the subscribers of the `ai_analysis`
 report, each in their language (Spanish by default, or English).
 
@@ -16,14 +16,23 @@ report, each in their language (Spanish by default, or English).
    (`template.go`), so a week of journal fits in about 50-150 KB and no
    personal data reaches OpenAI. The JSON is capped at 160 KB; lists are cut
    and the cut is noted in the snapshot.
+   Money: the system takes payments only in the app; terminal (bank card at
+   the charger, tag source `CC`) and roaming (`OCPI`) sessions are settled
+   outside it, so their amounts are unknown. The snapshot therefore estimates
+   turnover as the energy delivered to clients - every session except those
+   of users outside the `default` group ("Cliente"), i.e. internal `office`
+   users - at the tariff price per kWh: the session's own payment plan, else
+   the default plan (`payment_plans`, `is_default`). `by_channel` splits
+   sessions into app / terminal / roaming / internal / other, and
+   `app_billed_eur` keeps what the app actually charged.
 2. **Analysis** - one request to the Responses API per language, with a strict
    JSON schema (`prompt.go`). The snapshot comes first and the language last,
    so the second language reads the snapshot from OpenAI's prompt cache.
    Responses are not stored at OpenAI (`store: false`).
 3. **Email** (`render.go`) - status, headline, summary, findings by severity
-   with recommendations, trends. The figures row (sessions, energy, average
-   uptime, charge points online) is computed from the snapshot, not by the
-   model.
+   with recommendations, trends. The figures row (sessions, energy,
+   estimated turnover, average uptime, charge points online) is computed from
+   the snapshot, not by the model.
 
 Every request, failed ones included, is stored in `ai_usage` with its tokens
 and its cost at the list prices of `entity.AIModels()` (a model missing from

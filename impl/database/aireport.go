@@ -121,6 +121,13 @@ func (m *MongoDB) EnsureAIReportIndexes(ctx context.Context) error {
 	return err
 }
 
+// GetDefaultPaymentPlan returns the active plan every user gets unless they
+// have their own, or nil.
+func (m *MongoDB) GetDefaultPaymentPlan(ctx context.Context) (*entity.PaymentPlan, error) {
+	filter := bson.D{{Key: "is_default", Value: true}, {Key: "is_active", Value: true}}
+	return findOne[entity.PaymentPlan](m, ctx, collectionPaymentPlans, filter)
+}
+
 // ListMailSubscriptionsByReport returns the subscriptions of one report type.
 // Documents written before the report field existed are statistic ones.
 func (m *MongoDB) ListMailSubscriptionsByReport(ctx context.Context, report string) ([]*entity.MailSubscription, error) {

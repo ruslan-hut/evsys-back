@@ -237,28 +237,47 @@ type LogEvent struct {
 }
 
 type SessionsSummary struct {
-	Finished        int            `json:"finished"`
-	PrevFinished    int            `json:"prev_finished"`
-	EnergyKWh       float64        `json:"energy_kwh"`
-	PrevEnergyKWh   float64        `json:"prev_energy_kwh"`
-	BilledEUR       float64        `json:"billed_eur"`
-	PrevBilledEUR   float64        `json:"prev_billed_eur"`
-	ZeroEnergy      int            `json:"zero_energy"`
-	Short           int            `json:"shorter_than_2_min"`
-	PaymentErrors   int            `json:"payment_errors"`
-	StopReasons     map[string]int `json:"stop_reasons"`
-	ActiveNow       int            `json:"active_now"`
-	ByChargePoint   []*SessionsRow `json:"by_charge_point"`
-	PaymentErrorsBy map[string]int `json:"payment_errors_by_message,omitempty"`
+	Finished      int     `json:"finished"`
+	PrevFinished  int     `json:"prev_finished"`
+	EnergyKWh     float64 `json:"energy_kwh"`
+	PrevEnergyKWh float64 `json:"prev_energy_kwh"`
+	// Money: only app sessions are paid through the system; terminal and
+	// roaming sessions are settled outside it. Turnover is therefore the
+	// energy delivered to clients (every session but those of internal users)
+	// at the tariff price per kWh: the session's own plan, else the default.
+	TariffPricePerKWhEUR    float64                  `json:"tariff_price_per_kwh_eur"`
+	ClientEnergyKWh         float64                  `json:"client_energy_kwh"`
+	PrevClientEnergyKWh     float64                  `json:"prev_client_energy_kwh"`
+	TurnoverEstimateEUR     float64                  `json:"turnover_estimate_eur"`
+	PrevTurnoverEstimateEUR float64                  `json:"prev_turnover_estimate_eur"`
+	AppBilledEUR            float64                  `json:"app_billed_eur"`
+	ByChannel               map[string]*ChannelUsage `json:"by_channel"`
+	ZeroEnergy              int                      `json:"zero_energy"`
+	Short                   int                      `json:"shorter_than_2_min"`
+	PaymentErrors           int                      `json:"payment_errors"`
+	StopReasons             map[string]int           `json:"stop_reasons"`
+	ActiveNow               int                      `json:"active_now"`
+	ByChargePoint           []*SessionsRow           `json:"by_charge_point"`
+	PaymentErrorsBy         map[string]int           `json:"payment_errors_by_message,omitempty"`
+}
+
+// ChannelUsage sums the sessions of one way of paying: app, terminal (bank
+// card at the charger), roaming, internal (users outside the client group),
+// other (no tag information).
+type ChannelUsage struct {
+	Sessions            int     `json:"sessions"`
+	EnergyKWh           float64 `json:"energy_kwh"`
+	TurnoverEstimateEUR float64 `json:"turnover_estimate_eur"`
 }
 
 type SessionsRow struct {
-	ChargePointId string  `json:"charge_point_id"`
-	Sessions      int     `json:"sessions"`
-	EnergyKWh     float64 `json:"energy_kwh"`
-	ZeroEnergy    int     `json:"zero_energy"`
-	Short         int     `json:"shorter_than_2_min"`
-	PaymentErrors int     `json:"payment_errors"`
+	ChargePointId       string  `json:"charge_point_id"`
+	Sessions            int     `json:"sessions"`
+	EnergyKWh           float64 `json:"energy_kwh"`
+	TurnoverEstimateEUR float64 `json:"turnover_estimate_eur"`
+	ZeroEnergy          int     `json:"zero_energy"`
+	Short               int     `json:"shorter_than_2_min"`
+	PaymentErrors       int     `json:"payment_errors"`
 }
 
 type PaymentsState struct {
@@ -768,7 +787,13 @@ func (e *eventSet) top(n int) ([]*LogEvent, int) {
 
 func (s *Service) sessions(ctx context.Context, from, to, prevFrom, prevTo time.Time, sc *scope,
 	station func(string) *StationWeek, note func(string, error)) *SessionsSummary {
-	sum := &SessionsSummary{StopReasons: make(map[string]int), PaymentErrorsBy: make(map[string]int)}
+	sum := &SessionsSummary{
+		StopReasons:     make(map[string]int),
+		PaymentErrorsBy: make(map[string]int),
+		ByChannel:       make(map[string]*ChannelUsage),
+	}
+	pricing := s.pricing(ctx, note)
+	sum.TariffPricePerKWhEUR = pricing.defaultPrice
 
 	txs, err := s.repo.GetFilteredTransactions(ctx, &entity.TransactionFilter{From: &from, To: &to, SkipMeterValues: true})
 	if err != nil {
@@ -780,9 +805,22 @@ func (s *Service) sessions(ctx context.Context, from, to, prevFrom, prevTo time.
 			continue
 		}
 		energy := sessionEnergy(tx)
+		channel, turnover := pricing.value(tx, energy)
 		sum.Finished++
 		sum.EnergyKWh += energy
-		sum.BilledEUR += float64(tx.PaymentBilled) / 100
+		sum.AppBilledEUR += float64(tx.PaymentBilled) / 100
+		usage, ok := sum.ByChannel[channel]
+		if !ok {
+			usage = &ChannelUsage{}
+			sum.ByChannel[channel] = usage
+		}
+		usage.Sessions++
+		usage.EnergyKWh += energy
+		usage.TurnoverEstimateEUR += turnover
+		if channel != channelInternal {
+			sum.ClientEnergyKWh += energy
+			sum.TurnoverEstimateEUR += turnover
+		}
 		if tx.Reason != "" {
 			sum.StopReasons[tx.Reason]++
 		}
@@ -793,6 +831,7 @@ func (s *Service) sessions(ctx context.Context, from, to, prevFrom, prevTo time.
 		}
 		row.Sessions++
 		row.EnergyKWh += energy
+		row.TurnoverEstimateEUR += turnover
 		if energy <= 0 {
 			sum.ZeroEnergy++
 			row.ZeroEnergy++
@@ -812,7 +851,12 @@ func (s *Service) sessions(ctx context.Context, from, to, prevFrom, prevTo time.
 	}
 	for _, row := range rows {
 		row.EnergyKWh = round1(row.EnergyKWh)
+		row.TurnoverEstimateEUR = round2(row.TurnoverEstimateEUR)
 		sum.ByChargePoint = append(sum.ByChargePoint, row)
+	}
+	for _, usage := range sum.ByChannel {
+		usage.EnergyKWh = round1(usage.EnergyKWh)
+		usage.TurnoverEstimateEUR = round2(usage.TurnoverEstimateEUR)
 	}
 	sort.Slice(sum.ByChargePoint, func(i, j int) bool {
 		return sum.ByChargePoint[i].ChargePointId < sum.ByChargePoint[j].ChargePointId
@@ -826,16 +870,100 @@ func (s *Service) sessions(ctx context.Context, from, to, prevFrom, prevTo time.
 		if !sc.allows(tx.ChargePointId) {
 			continue
 		}
+		energy := sessionEnergy(tx)
+		channel, turnover := pricing.value(tx, energy)
 		sum.PrevFinished++
-		sum.PrevEnergyKWh += sessionEnergy(tx)
-		sum.PrevBilledEUR += float64(tx.PaymentBilled) / 100
+		sum.PrevEnergyKWh += energy
+		if channel != channelInternal {
+			sum.PrevClientEnergyKWh += energy
+			sum.PrevTurnoverEstimateEUR += turnover
+		}
 	}
 
 	sum.EnergyKWh = round1(sum.EnergyKWh)
 	sum.PrevEnergyKWh = round1(sum.PrevEnergyKWh)
-	sum.BilledEUR = round2(sum.BilledEUR)
-	sum.PrevBilledEUR = round2(sum.PrevBilledEUR)
+	sum.ClientEnergyKWh = round1(sum.ClientEnergyKWh)
+	sum.PrevClientEnergyKWh = round1(sum.PrevClientEnergyKWh)
+	sum.TurnoverEstimateEUR = round2(sum.TurnoverEstimateEUR)
+	sum.PrevTurnoverEstimateEUR = round2(sum.PrevTurnoverEstimateEUR)
+	sum.AppBilledEUR = round2(sum.AppBilledEUR)
 	return sum
+}
+
+// Ways a session is paid, as the snapshot names them.
+const (
+	channelApp      = "app"
+	channelTerminal = "terminal"
+	channelRoaming  = "roaming"
+	channelInternal = "internal"
+	channelOther    = "other"
+
+	// clientGroup is the user group of paying clients ("Cliente" in the web
+	// statistics); users of any other group are internal.
+	clientGroup = "default"
+)
+
+// pricing values sessions at the tariff price per kWh.
+type pricing struct {
+	defaultPrice float64
+	groups       map[string]string
+}
+
+func (s *Service) pricing(ctx context.Context, note func(string, error)) *pricing {
+	p := &pricing{groups: make(map[string]string)}
+	if plan, err := s.repo.GetDefaultPaymentPlan(ctx); err != nil {
+		note("default tariff", err)
+	} else if plan != nil {
+		p.defaultPrice = float64(plan.PricePerKwh) / 100
+	}
+	users, err := s.repo.GetUsers(ctx)
+	if err != nil {
+		note("user groups", err)
+	}
+	for _, u := range users {
+		p.groups[u.Username] = u.Group
+	}
+	return p
+}
+
+// value returns how a session was paid and its turnover: the energy at the
+// price per kWh of the session's own plan, else of the default plan;
+// nothing for internal users.
+func (p *pricing) value(tx *entity.Transaction, energyKWh float64) (string, float64) {
+	channel := p.channel(tx)
+	if channel == channelInternal {
+		return channel, 0
+	}
+	price := p.defaultPrice
+	if tx.Plan != nil {
+		price = float64(tx.Plan.PricePerKwh) / 100
+	}
+	return channel, energyKWh * price
+}
+
+func (p *pricing) channel(tx *entity.Transaction) string {
+	username := tx.Username
+	if username == "" && tx.UserTag != nil {
+		username = tx.UserTag.Username
+	}
+	if username != "" {
+		// only a group named otherwise is internal; no group is a client
+		if group := p.groups[username]; group != "" && group != clientGroup {
+			return channelInternal
+		}
+		return channelApp
+	}
+	if tx.UserTag != nil {
+		switch tx.UserTag.Source {
+		case "CC":
+			return channelTerminal
+		case "OCPI":
+			return channelRoaming
+		case "AP":
+			return channelApp
+		}
+	}
+	return channelOther
 }
 
 func sessionEnergy(tx *entity.Transaction) float64 {

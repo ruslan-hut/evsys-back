@@ -16,7 +16,8 @@ import (
 // their charge points, a week of sys_log and sessions.
 type networkRepo struct {
 	*databasemock.MockDB
-	at time.Time
+	at  time.Time
+	txs []*entity.Transaction
 }
 
 func (r *networkRepo) GetAllLocations(context.Context) ([]*entity.Location, error) {
@@ -47,6 +48,9 @@ func (r *networkRepo) ReadLog(_ context.Context, name string, _ *entity.LogFilte
 }
 
 func (r *networkRepo) GetFilteredTransactions(context.Context, *entity.TransactionFilter) ([]*entity.Transaction, error) {
+	if r.txs != nil {
+		return r.txs, nil
+	}
 	return []*entity.Transaction{
 		{TransactionId: 1, ChargePointId: "Wallbox2", MeterStart: 0, MeterStop: 5000, TimeStart: r.at, TimeStop: r.at.Add(time.Hour)},
 		{TransactionId: 2, ChargePointId: "PE00004", MeterStart: 0, MeterStop: 9000, TimeStart: r.at, TimeStop: r.at.Add(time.Hour)},
@@ -179,5 +183,59 @@ func TestDeliverNeverCrossesScopes(t *testing.T) {
 	report.Analyses = append(report.Analyses, &entity.AIAnalysis{Scope: "ALP", Language: "en", Result: &entity.AIAnalysisResult{Status: "ok"}})
 	if a := analysisFor(report, "ALP", "es"); a == nil || a.Language != "en" {
 		t.Error("another language of the same locations is a valid fallback")
+	}
+}
+
+func TestTurnoverEstimate(t *testing.T) {
+	p := &pricing{defaultPrice: 0.45, groups: map[string]string{"ana": "default", "staff": "office", "nogroup": ""}}
+	tests := []struct {
+		name     string
+		tx       *entity.Transaction
+		channel  string
+		turnover float64
+	}{
+		{"app session at its own plan", &entity.Transaction{Username: "ana", Plan: &entity.PaymentPlan{PricePerKwh: 50}},
+			channelApp, 5.0},
+		{"terminal session at the default tariff", &entity.Transaction{UserTag: &entity.UserTag{Source: "CC"}},
+			channelTerminal, 4.5},
+		{"roaming session at the default tariff", &entity.Transaction{UserTag: &entity.UserTag{Source: "OCPI"}},
+			channelRoaming, 4.5},
+		{"internal user", &entity.Transaction{Username: "staff", Plan: &entity.PaymentPlan{PricePerKwh: 45}},
+			channelInternal, 0},
+		{"user unknown to the users list is a client", &entity.Transaction{UserTag: &entity.UserTag{Username: "gone", Source: "AP"}},
+			channelApp, 4.5},
+		{"no tag information", &entity.Transaction{}, channelOther, 4.5},
+		{"user without a group is a client", &entity.Transaction{Username: "nogroup"}, channelApp, 4.5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			channel, turnover := p.value(tt.tx, 10)
+			if channel != tt.channel || turnover < tt.turnover-1e-9 || turnover > tt.turnover+1e-9 {
+				t.Errorf("value = %s, %.2f; want %s, %.2f", channel, turnover, tt.channel, tt.turnover)
+			}
+		})
+	}
+}
+
+func TestSessionsTurnoverLeavesInternalOut(t *testing.T) {
+	now := mustUTC(t, "2026-11-02T06:20:00Z")
+	s, repo, _, _ := newNetworkService(t, now)
+	repo.SeedUser(&entity.User{Username: "staff", Group: "office"})
+	from, to := periodRange(now, 7, time.UTC)
+	repo.txs = []*entity.Transaction{
+		{ChargePointId: "Wallbox2", MeterStop: 10000, Username: "staff", TimeStop: repo.at},
+		{ChargePointId: "PE00004", MeterStop: 20000, UserTag: &entity.UserTag{Source: "CC"}, TimeStop: repo.at},
+		{ChargePointId: "PE00004", MeterStop: 4000, PaymentBilled: 180, Username: "ana", Plan: &entity.PaymentPlan{PricePerKwh: 45}, TimeStop: repo.at},
+	}
+	all, _ := s.resolveScope(context.Background(), nil)
+	snap := s.collect(context.Background(), from, to, from.AddDate(0, 0, -7), "UTC", all)
+	sum := snap.Sessions
+	// clients: 20 kWh terminal + 4 kWh app at 0.45 €/kWh
+	if sum.ClientEnergyKWh != 24 || sum.TurnoverEstimateEUR != 10.8 || sum.AppBilledEUR != 1.8 || sum.TariffPricePerKWhEUR != 0.45 {
+		t.Errorf("client energy %.1f, turnover %.2f, app billed %.2f, price %.2f",
+			sum.ClientEnergyKWh, sum.TurnoverEstimateEUR, sum.AppBilledEUR, sum.TariffPricePerKWhEUR)
+	}
+	if sum.ByChannel[channelInternal].EnergyKWh != 10 || sum.ByChannel[channelTerminal].Sessions != 1 {
+		t.Errorf("by channel %+v", sum.ByChannel)
 	}
 }

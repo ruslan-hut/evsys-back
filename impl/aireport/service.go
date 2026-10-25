@@ -56,6 +56,8 @@ type Repository interface {
 
 	GetChargePoints(ctx context.Context, level int, searchTerm string) ([]*entity.ChargePoint, error)
 	GetAllLocations(ctx context.Context) ([]*entity.Location, error)
+	GetUsers(ctx context.Context) ([]*entity.User, error)
+	GetDefaultPaymentPlan(ctx context.Context) (*entity.PaymentPlan, error)
 	StationUptime(ctx context.Context, from, to time.Time, chargePointId string) ([]*entity.StationUptime, error)
 	ErrorSummary(ctx context.Context, from, to time.Time, chargePointId string) ([]*entity.ErrorSummary, error)
 	ReadLog(ctx context.Context, name string, filter *entity.LogFilter) (any, error)
