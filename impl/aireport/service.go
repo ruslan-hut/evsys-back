@@ -543,6 +543,7 @@ func (s *Service) analyse(ctx context.Context, settings *entity.AIReportSettings
 		return analysis
 	}
 	sortFindings(result.Findings)
+	sortActions(result.Actions)
 	analysis.Result = &result
 	return analysis
 }
@@ -552,6 +553,14 @@ var severityRank = map[string]int{"critical": 0, "warning": 1, "info": 2}
 func sortFindings(findings []*entity.AIFinding) {
 	sort.SliceStable(findings, func(i, j int) bool {
 		return severityRank[findings[i].Severity] < severityRank[findings[j].Severity]
+	})
+}
+
+var priorityRank = map[string]int{entity.AIPriorityUrgent: 0, entity.AIPriorityHigh: 1, entity.AIPriorityPlanned: 2}
+
+func sortActions(actions []*entity.AIAction) {
+	sort.SliceStable(actions, func(i, j int) bool {
+		return priorityRank[actions[i].Priority] < priorityRank[actions[j].Priority]
 	})
 }
 

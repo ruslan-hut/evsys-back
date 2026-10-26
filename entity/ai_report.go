@@ -236,11 +236,40 @@ type AIAnalysis struct {
 // AIAnalysisResult is the structured answer the model must give.
 type AIAnalysisResult struct {
 	// Status is ok, attention or critical.
-	Status   string       `json:"status" bson:"status"`
-	Headline string       `json:"headline" bson:"headline"`
-	Summary  string       `json:"summary" bson:"summary"`
-	Findings []*AIFinding `json:"findings" bson:"findings"`
-	Trends   []string     `json:"trends" bson:"trends"`
+	Status   string `json:"status" bson:"status"`
+	Headline string `json:"headline" bson:"headline"`
+	// Diagnosis, Actions and ClosingNote are the compact report; reports
+	// written before it carry Summary, Findings and Trends instead, which the
+	// email turns into the same layout.
+	Diagnosis   []*AIDiagnosis `json:"diagnosis,omitempty" bson:"diagnosis,omitempty"`
+	Actions     []*AIAction    `json:"actions,omitempty" bson:"actions,omitempty"`
+	ClosingNote string         `json:"closing_note,omitempty" bson:"closing_note,omitempty"`
+	Summary     string         `json:"summary" bson:"summary"`
+	Findings    []*AIFinding   `json:"findings" bson:"findings"`
+	Trends      []string       `json:"trends" bson:"trends"`
+}
+
+// AIDiagnosis is one line of the executive diagnosis: a charge point or an
+// area of the network and one sentence about its state.
+type AIDiagnosis struct {
+	Subject string `json:"subject" bson:"subject"`
+	Text    string `json:"text" bson:"text"`
+}
+
+// Priorities of an AIAction, most pressing first.
+const (
+	AIPriorityUrgent  = "urgent"
+	AIPriorityHigh    = "priority"
+	AIPriorityPlanned = "planned"
+)
+
+// AIAction is one row of the action plan.
+type AIAction struct {
+	// Priority is urgent, priority or planned.
+	Priority string `json:"priority" bson:"priority"`
+	// Target names the equipment: charge point ids, or an area.
+	Target string `json:"target" bson:"target"`
+	Action string `json:"action" bson:"action"`
 }
 
 // AIFinding is one problem or observation, ranked by severity.

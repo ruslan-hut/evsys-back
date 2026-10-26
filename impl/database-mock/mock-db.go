@@ -11,6 +11,9 @@ import (
 
 // MockDB provides an in-memory database implementation for testing
 type MockDB struct {
+	// seq makes generated ids unique: the clock alone repeats on systems
+	// whose time resolution is coarser than a nanosecond
+	seq                int
 	users              map[string]*entity.User              // key: username
 	usersById          map[string]*entity.User              // key: userId
 	tokens             map[string]*entity.User              // key: token
@@ -999,7 +1002,8 @@ func (db *MockDB) SaveMailSubscription(_ context.Context, sub *entity.MailSubscr
 	now := time.Now().UTC()
 	sub.UpdatedAt = now
 	if sub.Id == "" {
-		sub.Id = fmt.Sprintf("mock-%d", now.UnixNano())
+		db.seq++
+		sub.Id = fmt.Sprintf("mock-%d-%d", now.UnixNano(), db.seq)
 		sub.CreatedAt = now
 	} else if existing, ok := db.mailSubscriptions[sub.Id]; ok {
 		sub.CreatedAt = existing.CreatedAt
@@ -1036,7 +1040,8 @@ func (db *MockDB) SaveWebhookSubscriber(_ context.Context, sub *entity.WebhookSu
 	now := time.Now().UTC()
 	sub.UpdatedAt = now
 	if sub.Id == "" {
-		sub.Id = fmt.Sprintf("mock-%d", now.UnixNano())
+		db.seq++
+		sub.Id = fmt.Sprintf("mock-%d-%d", now.UnixNano(), db.seq)
 		sub.CreatedAt = now
 	} else if existing, ok := db.webhookSubscribers[sub.Id]; ok {
 		sub.CreatedAt = existing.CreatedAt

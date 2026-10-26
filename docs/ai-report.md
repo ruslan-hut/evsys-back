@@ -29,10 +29,16 @@ report, each in their language (Spanish by default, or English).
    JSON schema (`prompt.go`). The snapshot comes first and the language last,
    so the second language reads the snapshot from OpenAI's prompt cache.
    Responses are not stored at OpenAI (`store: false`).
-3. **Email** (`render.go`) - status, headline, summary, findings by severity
-   with recommendations, trends. The figures row (sessions, energy,
-   estimated turnover, average uptime, charge points online) is computed from
-   the snapshot, not by the model.
+3. **Email** (`render.go`) - a compact one-page report: title, locations,
+   period and status; four figure tiles (completed sessions, energy,
+   estimated turnover, connector fault reports, each against the previous
+   period) computed from the snapshot, not by the model; the executive
+   diagnosis (`diagnosis`: up to 5 rows of subject - a charge point or an area
+   - and one sentence); the action plan (`actions`: priority `urgent` /
+   `priority` / `planned` shown as P1 / P2 / P3, equipment, action) and the
+   closing criterion (`closing_note`). Reports generated before this layout
+   carry `summary` / `findings` / `trends` instead; their findings are shown
+   in the same two tables (title as diagnosis, recommendation as action).
 
 Every request, failed ones included, is stored in `ai_usage` with its tokens
 and its cost at the list prices of `entity.AIModels()` (a model missing from

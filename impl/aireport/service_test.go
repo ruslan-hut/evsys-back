@@ -44,12 +44,14 @@ func (m *fakeModel) Respond(_ context.Context, req openai.Request) (*openai.Resp
 	data, _ := json.Marshal(entity.AIAnalysisResult{
 		Status:   "attention",
 		Headline: "headline " + lang,
-		Summary:  "summary " + lang,
-		Findings: []*entity.AIFinding{
-			{Severity: "info", Area: "other", Title: "minor"},
-			{Severity: "critical", Area: "hardware", ChargePointId: "PE00004", Title: "faulted"},
+		Diagnosis: []*entity.AIDiagnosis{
+			{Subject: "PE00004", Text: "faulted " + lang},
 		},
-		Trends: []string{"trend"},
+		Actions: []*entity.AIAction{
+			{Priority: entity.AIPriorityPlanned, Target: "PE00001", Action: "follow up"},
+			{Priority: entity.AIPriorityUrgent, Target: "PE00004", Action: "diagnose"},
+		},
+		ClosingNote: "closing " + lang,
 	})
 	resp.Text = string(data)
 	return resp, nil
@@ -133,11 +135,11 @@ func TestTickRunsScheduledSlotOnce(t *testing.T) {
 	for _, m := range mails {
 		switch m.to {
 		case "es@example.com":
-			if !strings.Contains(m.subject, "análisis semanal 26.10 – 01.11.2026") || !strings.Contains(m.body, "headline es") {
+			if !strings.Contains(m.subject, "informe semanal 26 octubre – 1 noviembre 2026") || !strings.Contains(m.body, "headline es") {
 				t.Errorf("spanish mail: subject %q", m.subject)
 			}
 		case "en@example.com":
-			if !strings.Contains(m.subject, "weekly analysis") || !strings.Contains(m.body, "headline en") {
+			if !strings.Contains(m.subject, "weekly report") || !strings.Contains(m.body, "headline en") {
 				t.Errorf("english mail: subject %q", m.subject)
 			}
 		default:
@@ -156,8 +158,8 @@ func TestTickRunsScheduledSlotOnce(t *testing.T) {
 	if !r.PeriodFrom.Equal(mustUTC(t, "2026-10-25T23:00:00Z")) || !r.PeriodTo.Equal(mustUTC(t, "2026-11-01T23:00:00Z")) {
 		t.Errorf("period [%s, %s)", r.PeriodFrom, r.PeriodTo)
 	}
-	if r.Analyses[0].Result.Findings[0].Severity != "critical" {
-		t.Error("findings must be sorted by severity")
+	if r.Analyses[0].Result.Actions[0].Priority != entity.AIPriorityUrgent {
+		t.Error("actions must be sorted by priority")
 	}
 	// 30k uncached * 2 + 10k cached * 0.10 + 3k out * 10, per million, twice
 	wantCost := 2 * (30_000*2.00 + 10_000*0.10 + 3_000*10.00) / 1_000_000

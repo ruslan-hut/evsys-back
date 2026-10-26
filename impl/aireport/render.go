@@ -4,66 +4,97 @@ import (
 	"evsys-back/entity"
 	"fmt"
 	"html"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// palette of impl/mail, so that the system's emails look alike
+// palette of the compact report: a dark header row for the plan, soft tiles
+// for the figures
 const (
-	colText     = "#1a1a1a"
-	colMuted    = "#6b6f76"
-	colLabel    = "#9a9ea6"
-	colBorder   = "#e3e5e8"
-	colRule     = "#eeeff1"
-	colPage     = "#f2f3f5"
-	colStrip    = "#f7f8f9"
-	colFooterBg = "#fafafb"
-	fontStack   = "Arial,Helvetica,sans-serif"
+	colText      = "#1f2933"
+	colMuted     = "#5f6b7a"
+	colLabel     = "#8a94a3"
+	colBorder    = "#e3e6ea"
+	colPage      = "#f2f3f5"
+	colTile      = "#eef1f5"
+	colTileGood  = "#e8f3ea"
+	colTileBad   = "#fbeae8"
+	colSubject   = "#e6eaef"
+	colCell      = "#f5f7f9"
+	colPlanHead  = "#263445"
+	colRowAlt    = "#f3f5f7"
+	fontStack    = "Arial,Helvetica,sans-serif"
+	fontHeadings = "'Roboto Slab',Rockwell,'Trebuchet MS',Arial,sans-serif"
 )
 
 type texts struct {
-	title, sessions, energy, turnover, turnoverNote, uptime, online, findings, trends, recommendation,
-	noFindings, network, generated, subject string
-	status   map[string]string
-	severity map[string]string
+	title, sessions, energy, turnover, turnoverNote, faults, before, vsWeek, vsPeriod,
+	diagnosis, plan, priority, target, action, noActions, closing, network, generated, brand, subject string
+	months      [12]string
+	status      map[string]string
+	priorityLbl map[string]string
+	// thousands and decimal separators; euroFirst puts € before the amount
+	thousands, decimal string
+	euroFirst          bool
 }
 
 var i18n = map[string]texts{
 	entity.MailLanguageES: {
-		title:          "Análisis semanal de WattBrews",
-		sessions:       "Sesiones",
-		energy:         "Energía",
-		turnover:       "Facturación est.",
-		turnoverNote:   "Estimación: energía a clientes × tarifa de %.2f €/kWh",
-		uptime:         "Disponibilidad media",
-		online:         "En línea ahora",
-		findings:       "Hallazgos",
-		trends:         "Tendencias",
-		recommendation: "Recomendación",
-		noFindings:     "No se han detectado problemas en este periodo.",
-		network:        "Toda la red",
-		generated:      "Generado automáticamente por IA (%s) a partir de los datos de WattBrews. Compruebe los datos antes de actuar.",
-		subject:        "WattBrews · análisis semanal %s – %s: %s",
-		status:         map[string]string{"ok": "Todo en orden", "attention": "Requiere atención", "critical": "Crítico"},
-		severity:       map[string]string{"critical": "Crítico", "warning": "Aviso", "info": "Info"},
+		title:        "WattBrews | Informe semanal",
+		sessions:     "Sesiones completadas",
+		energy:       "Energía suministrada",
+		turnover:     "Facturación estimada",
+		turnoverNote: "A %s/kWh de energía de clientes",
+		faults:       "Avisos de fallo",
+		before:       "antes: %d",
+		vsWeek:       "vs. semana anterior",
+		vsPeriod:     "vs. periodo anterior",
+		diagnosis:    "Diagnóstico ejecutivo",
+		plan:         "Plan de actuación",
+		priority:     "Prioridad",
+		target:       "Equipo",
+		action:       "Acción requerida",
+		noActions:    "No se requieren acciones en este periodo.",
+		closing:      "Criterio de cierre:",
+		network:      "Toda la red",
+		generated:    "Generado por IA (%s) a partir de los datos de WattBrews. Compruebe los datos antes de actuar.",
+		brand:        "WattBrews · Seguimiento operativo",
+		subject:      "WattBrews · informe semanal %s: %s",
+		months:       [12]string{"enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"},
+		status:       map[string]string{"ok": "Sin incidencias", "attention": "Requiere atención", "critical": "Intervención urgente"},
+		priorityLbl:  map[string]string{entity.AIPriorityUrgent: "P1 · Urgente", entity.AIPriorityHigh: "P2 · Prioritario", entity.AIPriorityPlanned: "P3 · Planificado"},
+		thousands:    ".",
+		decimal:      ",",
 	},
 	entity.MailLanguageEN: {
-		title:          "WattBrews weekly analysis",
-		sessions:       "Sessions",
-		energy:         "Energy",
-		turnover:       "Est. turnover",
-		turnoverNote:   "Estimate: energy delivered to clients × tariff of %.2f €/kWh",
-		uptime:         "Average uptime",
-		online:         "Online now",
-		findings:       "Findings",
-		trends:         "Trends",
-		recommendation: "Recommendation",
-		noFindings:     "No problems were found in this period.",
-		network:        "Whole network",
-		generated:      "Generated automatically by AI (%s) from WattBrews data. Check the data before acting.",
-		subject:        "WattBrews · weekly analysis %s – %s: %s",
-		status:         map[string]string{"ok": "All good", "attention": "Needs attention", "critical": "Critical"},
-		severity:       map[string]string{"critical": "Critical", "warning": "Warning", "info": "Info"},
+		title:        "WattBrews | Weekly report",
+		sessions:     "Completed sessions",
+		energy:       "Energy delivered",
+		turnover:     "Estimated turnover",
+		turnoverNote: "At %s/kWh of client energy",
+		faults:       "Fault reports",
+		before:       "before: %d",
+		vsWeek:       "vs. previous week",
+		vsPeriod:     "vs. previous period",
+		diagnosis:    "Executive diagnosis",
+		plan:         "Action plan",
+		priority:     "Priority",
+		target:       "Equipment",
+		action:       "Required action",
+		noActions:    "No actions are required for this period.",
+		closing:      "Closing criterion:",
+		network:      "Whole network",
+		generated:    "Generated by AI (%s) from WattBrews data. Check the data before acting.",
+		brand:        "WattBrews · Operations follow-up",
+		subject:      "WattBrews · weekly report %s: %s",
+		months:       [12]string{"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"},
+		status:       map[string]string{"ok": "No issues", "attention": "Needs attention", "critical": "Urgent intervention"},
+		priorityLbl:  map[string]string{entity.AIPriorityUrgent: "P1 · Urgent", entity.AIPriorityHigh: "P2 · High", entity.AIPriorityPlanned: "P3 · Planned"},
+		thousands:    ",",
+		decimal:      ".",
+		euroFirst:    true,
 	},
 }
 
@@ -74,36 +105,44 @@ func textsFor(language string) texts {
 	return i18n[entity.MailLanguageES]
 }
 
-type pill struct{ fg, bg string }
-
-var statusPills = map[string]pill{
-	"ok":        {"#0f6e56", "#e1f5ee"},
-	"attention": {"#8a5a00", "#fdf3dc"},
-	"critical":  {"#b00020", "#fdecef"},
+var statusColors = map[string]string{
+	"ok":        "#0f6e56",
+	"attention": "#a86b00",
+	"critical":  "#b3261e",
 }
 
-var severityPills = map[string]pill{
-	"critical": {"#b00020", "#fdecef"},
-	"warning":  {"#8a5a00", "#fdf3dc"},
-	"info":     {"#0b5cad", "#e3f0fb"},
+var priorityColors = map[string]string{
+	entity.AIPriorityUrgent:  "#b3261e",
+	entity.AIPriorityHigh:    "#a86b00",
+	entity.AIPriorityPlanned: "#3a5a8c",
 }
 
-// periodLabels formats the period as the days it covers, in the report's time
+// periodLabel formats the period as the days it covers, in the report's time
 // zone: the end is exclusive, so the last day shown is the one before it.
-func periodLabels(report *entity.AIReport) (string, string) {
+// "19–25 octubre 2026", "28 septiembre – 4 octubre 2026".
+func periodLabel(report *entity.AIReport, t texts) string {
 	loc, err := time.LoadLocation(report.TimeZone)
 	if err != nil {
 		loc = time.UTC
 	}
 	from := report.PeriodFrom.In(loc)
 	last := report.PeriodTo.In(loc).Add(-time.Second)
-	return from.Format("02.01"), last.Format("02.01.2006")
+	month := func(d time.Time) string { return t.months[d.Month()-1] }
+	switch {
+	case from.Year() != last.Year():
+		return fmt.Sprintf("%d %s %d – %d %s %d", from.Day(), month(from), from.Year(), last.Day(), month(last), last.Year())
+	case from.Month() != last.Month():
+		return fmt.Sprintf("%d %s – %d %s %d", from.Day(), month(from), last.Day(), month(last), last.Year())
+	case from.Day() != last.Day():
+		return fmt.Sprintf("%d–%d %s %d", from.Day(), last.Day(), month(last), last.Year())
+	default:
+		return fmt.Sprintf("%d %s %d", last.Day(), month(last), last.Year())
+	}
 }
 
 func subjectOf(report *entity.AIReport, result *entity.AIAnalysisResult, language string, snap *Snapshot) string {
 	t := textsFor(language)
-	from, to := periodLabels(report)
-	subject := fmt.Sprintf(t.subject, from, to, t.status[result.Status])
+	subject := fmt.Sprintf(t.subject, periodLabel(report, t), t.status[result.Status])
 	if names := scopeNames(snap); names != "" {
 		subject += " · " + names
 	}
@@ -123,15 +162,15 @@ func scopeNames(snap *Snapshot) string {
 }
 
 // renderReport builds the email of one analysis. snap may be nil when the
-// stored snapshot cannot be read; the figures row is then left out.
+// stored snapshot cannot be read; the figures are then left out.
 func renderReport(report *entity.AIReport, analysis *entity.AIAnalysis, snap *Snapshot) string {
 	t := textsFor(analysis.Language)
 	result := analysis.Result
-	status, ok := statusPills[result.Status]
+	diagnosis, actions := compactOf(result, t)
+	statusColor, ok := statusColors[result.Status]
 	if !ok {
-		status = statusPills["attention"]
+		statusColor = statusColors["attention"]
 	}
-	from, to := periodLabels(report)
 
 	var b strings.Builder
 	b.WriteString("<!DOCTYPE html>\n")
@@ -142,195 +181,255 @@ func renderReport(report *entity.AIReport, analysis *entity.AIAnalysis, snap *Sn
 	b.WriteString("<!--[if mso]>\n<style>table,td,div,p{font-family:Arial,Helvetica,sans-serif !important;}</style>\n<![endif]-->\n")
 	fmt.Fprintf(&b, "</head>\n<body style=\"margin:0;padding:0;background-color:%s;-webkit-text-size-adjust:100%%;-ms-text-size-adjust:100%%;\">\n", colPage)
 
+	// preheader: the line a mail client shows next to the subject
 	fmt.Fprintf(&b,
 		`<div style="display:none;max-height:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:%s;">%s</div>`+"\n",
 		colPage, html.EscapeString(result.Headline))
 
 	fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" border="0" style="background-color:%s;">`, colPage)
 	b.WriteString(`<tr><td align="center" style="padding:16px 8px;">`)
-	// fluid: a phone shows the email at its own width instead of shrinking a
-	// fixed 600px table, which made the text unreadably small; Outlook, which
-	// ignores max-width, gets a fixed table around it
-	b.WriteString(`<!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->`)
+	// fluid: a phone shows the email at its own width; Outlook, which ignores
+	// max-width, gets a fixed table around it
+	b.WriteString(`<!--[if mso]><table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->`)
 	fmt.Fprintf(&b,
 		`<table role="presentation" width="100%%" cellpadding="0" cellspacing="0" border="0" `+
-			`style="width:100%%;max-width:600px;background-color:#ffffff;border:1px solid %s;border-radius:12px;overflow:hidden;font-family:%s;">`,
-		colBorder, fontStack)
+			`style="width:100%%;max-width:640px;background-color:#ffffff;border:1px solid %s;border-radius:8px;font-family:%s;color:%s;">`,
+		colBorder, fontStack, colText)
 
-	// header: title, period, status pill
-	fmt.Fprintf(&b, `<tr><td style="padding:18px 20px;border-bottom:1px solid %s;">`, colBorder)
-	b.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td valign="middle">`)
-	fmt.Fprintf(&b, `<div style="font-size:20px;font-weight:bold;color:%s;line-height:1.3;">%s</div>`, colText, html.EscapeString(t.title))
-	subline := from + " – " + to
-	if names := scopeNames(snap); names != "" {
-		subline += " · " + names
+	// header: title; scope · period · status
+	b.WriteString(`<tr><td style="padding:22px 22px 14px 22px;">`)
+	fmt.Fprintf(&b, `<div style="font-family:%s;font-size:24px;font-weight:bold;line-height:1.25;color:%s;">%s</div>`,
+		fontHeadings, colText, html.EscapeString(t.title))
+	scopeName := scopeNames(snap)
+	if scopeName == "" {
+		scopeName = t.network
 	}
-	fmt.Fprintf(&b, `<div style="font-size:14px;color:%s;line-height:1.5;margin-top:2px;">%s</div>`, colMuted, html.EscapeString(subline))
-	b.WriteString(`</td><td valign="middle" align="right" style="white-space:nowrap;">`)
-	fmt.Fprintf(&b,
-		`<span style="display:inline-block;font-size:13px;font-weight:bold;color:%s;background-color:%s;padding:5px 12px;border-radius:20px;">%s</span>`,
-		status.fg, status.bg, html.EscapeString(t.status[result.Status]))
-	b.WriteString(`</td></tr></table></td></tr>`)
-
-	// headline and summary
-	fmt.Fprintf(&b, `<tr><td style="padding:18px 20px 12px 20px;">`)
-	fmt.Fprintf(&b, `<div style="font-size:17px;font-weight:bold;color:%s;line-height:1.4;">%s</div>`, colText, html.EscapeString(result.Headline))
-	fmt.Fprintf(&b, `<div style="font-size:15px;color:%s;line-height:1.6;margin-top:8px;">%s</div>`, colText, paragraphs(result.Summary))
+	fmt.Fprintf(&b, `<div style="font-size:14px;line-height:1.5;margin-top:4px;color:%s;">%s · %s`+
+		`&nbsp;&nbsp; <span style="font-size:13px;font-weight:bold;text-transform:uppercase;letter-spacing:0.3px;color:%s;">%s</span></div>`,
+		colMuted, html.EscapeString(scopeName), html.EscapeString(periodLabel(report, t)), statusColor, html.EscapeString(t.status[result.Status]))
 	b.WriteString(`</td></tr>`)
 
 	if snap != nil {
-		renderFigures(&b, snap, t)
+		renderFigures(&b, report, snap, t)
 	}
 
-	// findings
-	fmt.Fprintf(&b, `<tr><td style="padding:16px 20px 4px 20px;">`)
-	caption(&b, t.findings)
-	if len(result.Findings) == 0 {
-		fmt.Fprintf(&b, `<div style="font-size:15px;color:%s;padding:6px 0 10px 0;">%s</div>`, colMuted, html.EscapeString(t.noFindings))
+	// executive diagnosis
+	if len(diagnosis) > 0 {
+		section(&b, t.diagnosis)
+		b.WriteString(`<tr><td style="padding:0 22px 4px 22px;">`)
+		b.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">`)
+		for _, d := range diagnosis {
+			fmt.Fprintf(&b,
+				`<tr><td valign="middle" style="width:26%%;padding:7px 10px;background-color:%s;border-bottom:2px solid #ffffff;font-size:14px;font-weight:bold;line-height:1.4;">%s</td>`+
+					`<td valign="middle" style="padding:7px 10px;background-color:%s;border-bottom:2px solid #ffffff;font-size:14px;line-height:1.5;">%s</td></tr>`,
+				colSubject, html.EscapeString(d.Subject), colCell, html.EscapeString(d.Text))
+		}
+		b.WriteString(`</table></td></tr>`)
 	}
-	for _, f := range result.Findings {
-		renderFinding(&b, f, t)
+
+	// action plan
+	section(&b, t.plan)
+	b.WriteString(`<tr><td style="padding:0 22px 6px 22px;">`)
+	if len(actions) == 0 {
+		fmt.Fprintf(&b, `<div style="font-size:14px;color:%s;padding:4px 0;">%s</div>`, colMuted, html.EscapeString(t.noActions))
+	} else {
+		b.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">`)
+		head := `<td style="%spadding:8px 10px;background-color:%s;color:#ffffff;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:0.3px;">%s</td>`
+		b.WriteString(`<tr>`)
+		fmt.Fprintf(&b, head, "width:24%;", colPlanHead, html.EscapeString(t.priority))
+		fmt.Fprintf(&b, head, "width:24%;", colPlanHead, html.EscapeString(t.target))
+		fmt.Fprintf(&b, head, "", colPlanHead, html.EscapeString(t.action))
+		b.WriteString(`</tr>`)
+		for i, a := range actions {
+			bg := "#ffffff"
+			if i%2 == 0 {
+				bg = colRowAlt
+			}
+			color, ok := priorityColors[a.Priority]
+			if !ok {
+				color = priorityColors[entity.AIPriorityPlanned]
+			}
+			label := t.priorityLbl[a.Priority]
+			if label == "" {
+				label = a.Priority
+			}
+			fmt.Fprintf(&b,
+				`<tr><td valign="middle" style="padding:8px 10px;background-color:%s;font-size:13px;font-weight:bold;text-transform:uppercase;line-height:1.35;color:%s;">%s</td>`+
+					`<td valign="middle" style="padding:8px 10px;background-color:%s;font-size:14px;font-weight:bold;line-height:1.4;">%s</td>`+
+					`<td valign="middle" style="padding:8px 10px;background-color:%s;font-size:14px;line-height:1.5;">%s</td></tr>`,
+				bg, color, html.EscapeString(label), bg, html.EscapeString(a.Target), bg, html.EscapeString(a.Action))
+		}
+		b.WriteString(`</table>`)
 	}
 	b.WriteString(`</td></tr>`)
 
-	if len(result.Trends) > 0 {
-		fmt.Fprintf(&b, `<tr><td style="padding:8px 20px 18px 20px;">`)
-		caption(&b, t.trends)
-		fmt.Fprintf(&b, `<ul style="margin:6px 0 0 0;padding-left:18px;font-size:15px;color:%s;line-height:1.6;">`, colText)
-		for _, tr := range result.Trends {
-			fmt.Fprintf(&b, `<li>%s</li>`, html.EscapeString(tr))
-		}
-		b.WriteString(`</ul></td></tr>`)
+	if note := strings.TrimSpace(result.ClosingNote); note != "" && len(actions) > 0 {
+		fmt.Fprintf(&b, `<tr><td style="padding:2px 22px 0 22px;font-size:12px;line-height:1.5;color:%s;"><strong style="color:%s;">%s</strong> %s</td></tr>`,
+			colMuted, colText, html.EscapeString(t.closing), html.EscapeString(note))
 	}
 
-	footer := fmt.Sprintf(t.generated, report.Model)
-	fmt.Fprintf(&b, `<tr><td style="padding:14px 20px;border-top:1px solid %s;background-color:%s;">`, colBorder, colFooterBg)
-	fmt.Fprintf(&b, `<div style="font-size:12px;color:%s;line-height:1.5;">%s · %s</div>`,
-		colLabel, html.EscapeString(footer), html.EscapeString(report.Id))
+	// footer
+	fmt.Fprintf(&b, `<tr><td style="padding:18px 22px 16px 22px;font-size:11px;line-height:1.45;color:%s;">`, colLabel)
+	fmt.Fprintf(&b, `<div>%s · %s</div>`,
+		html.EscapeString(fmt.Sprintf(t.generated, report.Model)), html.EscapeString(report.Id))
+	fmt.Fprintf(&b, `<div style="text-align:right;margin-top:6px;">%s</div>`, html.EscapeString(t.brand))
 	b.WriteString(`</td></tr>`)
 
 	b.WriteString(`</table><!--[if mso]></td></tr></table><![endif]--></td></tr></table>` + "\n</body>\n</html>\n")
 	return b.String()
 }
 
-func caption(b *strings.Builder, text string) {
+func section(b *strings.Builder, text string) {
 	fmt.Fprintf(b,
-		`<div style="font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:0.4px;color:%s;padding-bottom:4px;">%s</div>`,
-		colLabel, html.EscapeString(text))
+		`<tr><td style="padding:14px 22px 6px 22px;font-family:%s;font-size:14px;font-weight:bold;text-transform:uppercase;letter-spacing:0.3px;color:%s;">%s</td></tr>`,
+		fontHeadings, colText, html.EscapeString(text))
 }
 
-func paragraphs(text string) string {
-	parts := strings.Split(strings.TrimSpace(text), "\n")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, html.EscapeString(p))
+// compactOf returns the diagnosis and the plan of a result. Reports written
+// before the compact layout only carry findings; those are turned into the
+// same two tables, a finding's title as the diagnosis and its recommendation
+// as the action.
+func compactOf(result *entity.AIAnalysisResult, t texts) ([]*entity.AIDiagnosis, []*entity.AIAction) {
+	if len(result.Diagnosis) > 0 || len(result.Actions) > 0 {
+		return result.Diagnosis, result.Actions
+	}
+	var diagnosis []*entity.AIDiagnosis
+	var actions []*entity.AIAction
+	for _, f := range result.Findings {
+		subject := f.ChargePointId
+		if subject == "" {
+			subject = t.network
+		}
+		diagnosis = append(diagnosis, &entity.AIDiagnosis{Subject: subject, Text: f.Title})
+		if f.Recommendation != "" {
+			actions = append(actions, &entity.AIAction{Priority: legacyPriority[f.Severity], Target: subject, Action: f.Recommendation})
 		}
 	}
-	return strings.Join(out, "<br>")
+	if len(diagnosis) == 0 && strings.TrimSpace(result.Summary) != "" {
+		diagnosis = append(diagnosis, &entity.AIDiagnosis{Subject: t.network, Text: strings.TrimSpace(result.Summary)})
+	}
+	return diagnosis, actions
 }
 
-// renderFigures writes the row of figures computed from the data, not by the
-// model, so that the numbers in the email are exact.
-func renderFigures(b *strings.Builder, snap *Snapshot, t texts) {
-	// inline blocks wrap onto a second line on a narrow screen; font-size 0
-	// drops the whitespace between them
-	fmt.Fprintf(b, `<tr><td style="padding:8px 12px;border-top:1px solid %s;border-bottom:1px solid %s;background-color:%s;font-size:0;">`,
-		colBorder, colBorder, colStrip)
+var legacyPriority = map[string]string{
+	"critical": entity.AIPriorityUrgent,
+	"warning":  entity.AIPriorityHigh,
+	"info":     entity.AIPriorityPlanned,
+}
+
+type tile struct {
+	label, value, note, bg string
+}
+
+// renderFigures writes the tiles of figures computed from the data, not by
+// the model, so that the numbers in the email are exact. Two per row; an odd
+// last one takes the whole row.
+func renderFigures(b *strings.Builder, report *entity.AIReport, snap *Snapshot, t texts) {
+	vs := t.vsPeriod
+	if days := report.PeriodTo.Sub(report.PeriodFrom).Hours() / 24; days > 6.5 && days < 7.5 {
+		vs = t.vsWeek
+	}
+	var tiles []tile
 	if s := snap.Sessions; s != nil {
-		figure(b, t.sessions, fmt.Sprintf("%d", s.Finished), "", change(float64(s.Finished), float64(s.PrevFinished)))
-		figure(b, t.energy, fmt.Sprintf("%.1f", s.EnergyKWh), "kWh", change(s.EnergyKWh, s.PrevEnergyKWh))
+		note := ""
+		if c := change(float64(s.Finished), float64(s.PrevFinished), t); c != "" {
+			note = c + " " + vs
+		}
+		tiles = append(tiles, tile{t.sessions, number(float64(s.Finished), 0, t), note, colTile})
+		bg := colTileGood
+		if s.EnergyKWh < s.PrevEnergyKWh {
+			bg = colTile
+		}
+		tiles = append(tiles, tile{t.energy, number(s.EnergyKWh, 1, t) + " kWh", change(s.EnergyKWh, s.PrevEnergyKWh, t), bg})
 		if s.TariffPricePerKWhEUR > 0 {
-			figure(b, t.turnover, fmt.Sprintf("%.0f", s.TurnoverEstimateEUR), "€",
-				change(s.TurnoverEstimateEUR, s.PrevTurnoverEstimateEUR))
+			tiles = append(tiles, tile{t.turnover, euro(s.TurnoverEstimateEUR, t),
+				fmt.Sprintf(t.turnoverNote, euro(s.TariffPricePerKWhEUR, t)), colTile})
 		}
 	}
-	if avg, prev, ok := averageUptime(snap.Stations); ok {
-		diff := ""
-		if prev > 0 {
-			diff = fmt.Sprintf("%+.1f p.p.", avg-prev)
+	if len(snap.Stations) > 0 {
+		var faults, prev int
+		for _, st := range snap.Stations {
+			faults += st.ConnectorErrors
+			prev += st.PrevConnectorErrs
 		}
-		figure(b, t.uptime, fmt.Sprintf("%.1f", avg), "%", diff)
+		note := fmt.Sprintf(t.before, prev)
+		if c := change(float64(faults), float64(prev), t); c != "" {
+			note = c + " · " + note
+		}
+		bg := colTileGood
+		if faults > 0 {
+			bg = colTileBad
+		}
+		tiles = append(tiles, tile{t.faults, number(float64(faults), 0, t), note, bg})
 	}
-	if n := snap.Network; n != nil {
-		figure(b, t.online, fmt.Sprintf("%d/%d", n.Online, n.Enabled), "", "")
+	if len(tiles) == 0 {
+		return
 	}
-	b.WriteString(`</td></tr>`)
-	if s := snap.Sessions; s != nil && s.TariffPricePerKWhEUR > 0 {
-		fmt.Fprintf(b, `<tr><td style="padding:6px 20px 0 20px;font-size:12px;color:%s;">%s</td></tr>`,
-			colLabel, html.EscapeString(fmt.Sprintf(t.turnoverNote, s.TariffPricePerKWhEUR)))
+	b.WriteString(`<tr><td style="padding:0 22px 4px 22px;">`)
+	b.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">`)
+	for i := 0; i < len(tiles); i += 2 {
+		b.WriteString(`<tr>`)
+		if i+1 < len(tiles) {
+			writeTile(b, tiles[i], `width="50%"`)
+			writeTile(b, tiles[i+1], `width="50%"`)
+		} else {
+			writeTile(b, tiles[i], `colspan="2"`)
+		}
+		b.WriteString(`</tr>`)
 	}
+	b.WriteString(`</table></td></tr>`)
 }
 
-// figure is one block of the figures row: five fit the full width, two or
-// three a phone screen.
-func figure(b *strings.Builder, label, value, unit, diff string) {
-	unitSpan := ""
-	if unit != "" {
-		unitSpan = fmt.Sprintf(` <span style="font-size:13px;font-weight:normal;color:%s;">%s</span>`, colMuted, html.EscapeString(unit))
-	}
-	diffDiv := ""
-	if diff != "" {
-		diffDiv = fmt.Sprintf(`<div style="font-size:12px;color:%s;margin-top:2px;">%s</div>`, colMuted, html.EscapeString(diff))
+func writeTile(b *strings.Builder, tl tile, attr string) {
+	note := ""
+	if tl.note != "" {
+		note = fmt.Sprintf(`<div style="font-size:12px;line-height:1.4;margin-top:4px;color:%s;">%s</div>`, colMuted, html.EscapeString(tl.note))
 	}
 	fmt.Fprintf(b,
-		`<div style="display:inline-block;vertical-align:top;width:100px;padding:8px 6px;font-size:14px;">`+
-			`<div style="font-size:12px;color:%s;">%s</div>`+
-			`<div style="font-size:20px;font-weight:bold;color:%s;line-height:1.2;margin-top:2px;white-space:nowrap;">%s%s</div>%s</div>`,
-		colMuted, html.EscapeString(label), colText, html.EscapeString(value), unitSpan, diffDiv)
+		`<td %s valign="top" style="padding:10px 12px;background-color:%s;">`+
+			`<div style="font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.3px;line-height:1.3;color:%s;">%s</div>`+
+			`<div style="font-family:%s;font-size:22px;font-weight:bold;line-height:1.25;margin-top:4px;color:%s;">%s</div>%s</td>`,
+		attr, tl.bg, colMuted, html.EscapeString(tl.label), fontHeadings, colText, html.EscapeString(tl.value), note)
 }
 
-func change(cur, prev float64) string {
+// number formats v with the language's separators: 1.007,6 or 1,007.6.
+func number(v float64, decimals int, t texts) string {
+	s := strconv.FormatFloat(math.Abs(v), 'f', decimals, 64)
+	intPart, frac, _ := strings.Cut(s, ".")
+	var g strings.Builder
+	for i, r := range intPart {
+		if i > 0 && (len(intPart)-i)%3 == 0 {
+			g.WriteString(t.thousands)
+		}
+		g.WriteRune(r)
+	}
+	out := g.String()
+	if frac != "" {
+		out += t.decimal + frac
+	}
+	if v < 0 && strings.Trim(out, "0.,") != "" {
+		out = "−" + out
+	}
+	return out
+}
+
+func euro(v float64, t texts) string {
+	if t.euroFirst {
+		return "€" + number(v, 2, t)
+	}
+	return number(v, 2, t) + " €"
+}
+
+// change is the relative change against the previous period, "+12,4 %", or
+// "" when there is nothing to compare with.
+func change(cur, prev float64, t texts) string {
 	if prev <= 0 {
 		return ""
 	}
-	return fmt.Sprintf("%+.0f %%", (cur-prev)/prev*100)
-}
-
-func averageUptime(stations []*StationWeek) (float64, float64, bool) {
-	var sum, prevSum float64
-	var n, prevN int
-	for _, st := range stations {
-		if st.UptimePercent != nil {
-			sum += *st.UptimePercent
-			n++
-		}
-		if st.PrevUptimePercent != nil {
-			prevSum += *st.PrevUptimePercent
-			prevN++
-		}
+	pct := (cur - prev) / prev * 100
+	sign := "+"
+	if math.Round(pct*10) < 0 {
+		sign = "−"
 	}
-	if n == 0 {
-		return 0, 0, false
-	}
-	prev := 0.0
-	if prevN > 0 {
-		prev = prevSum / float64(prevN)
-	}
-	return sum / float64(n), prev, true
-}
-
-func renderFinding(b *strings.Builder, f *entity.AIFinding, t texts) {
-	p, ok := severityPills[f.Severity]
-	if !ok {
-		p = severityPills["info"]
-	}
-	target := f.ChargePointId
-	if target == "" {
-		target = t.network
-	}
-	fmt.Fprintf(b, `<div style="padding:10px 0 12px 0;border-bottom:1px solid %s;">`, colRule)
-	fmt.Fprintf(b,
-		`<div><span style="display:inline-block;font-size:12px;font-weight:bold;color:%s;background-color:%s;padding:2px 8px;border-radius:10px;">%s</span>`+
-			` <span style="font-size:13px;color:%s;">%s</span></div>`,
-		p.fg, p.bg, html.EscapeString(t.severity[f.Severity]), colMuted, html.EscapeString(target))
-	fmt.Fprintf(b, `<div style="font-size:16px;font-weight:bold;color:%s;line-height:1.4;margin-top:6px;">%s</div>`, colText, html.EscapeString(f.Title))
-	fmt.Fprintf(b, `<div style="font-size:15px;color:%s;line-height:1.6;margin-top:4px;">%s</div>`, colText, paragraphs(f.Details))
-	if f.Recommendation != "" {
-		fmt.Fprintf(b,
-			`<div style="font-size:15px;color:%s;line-height:1.6;margin-top:6px;padding:8px 12px;background-color:%s;border-radius:6px;">`+
-				`<strong style="color:%s;">%s:</strong> %s</div>`,
-			colText, colStrip, colText, html.EscapeString(t.recommendation), html.EscapeString(f.Recommendation))
-	}
-	b.WriteString(`</div>`)
+	return sign + number(math.Abs(pct), 1, t) + " %"
 }
