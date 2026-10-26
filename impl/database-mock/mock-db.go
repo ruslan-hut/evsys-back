@@ -748,6 +748,22 @@ func (db *MockDB) UpdatePaymentMethodFailCount(_ context.Context, identifier str
 	return nil
 }
 
+func (db *MockDB) RenewPaymentMethod(_ context.Context, paymentMethod *entity.PaymentMethod) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	for _, m := range db.paymentMethods[paymentMethod.UserId] {
+		if m.Identifier == paymentMethod.Identifier {
+			m.CofTid = paymentMethod.CofTid
+			m.CardBrand = paymentMethod.CardBrand
+			m.CardCountry = paymentMethod.CardCountry
+			m.ExpiryDate = paymentMethod.ExpiryDate
+			m.FailCount = 0
+			return nil
+		}
+	}
+	return fmt.Errorf("payment method %w", entity.ErrNotFound)
+}
+
 func (db *MockDB) GetPaymentParameters(orderId string) (*entity.PaymentParameters, error) {
 	return nil, nil
 }

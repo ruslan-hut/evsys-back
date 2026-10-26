@@ -1238,6 +1238,28 @@ func (m *MongoDB) UpdatePaymentMethodFailCount(ctx context.Context, identifier s
 	return err
 }
 
+// RenewPaymentMethod stores the card data Redsys returns when a saved card is
+// enrolled again and clears its fail count; description and default flag stay.
+func (m *MongoDB) RenewPaymentMethod(ctx context.Context, paymentMethod *entity.PaymentMethod) error {
+	collection := m.col(collectionPaymentMethods)
+	filter := bson.D{{Key: "identifier", Value: paymentMethod.Identifier}, {Key: "user_id", Value: paymentMethod.UserId}}
+	update := bson.M{"$set": bson.D{
+		{Key: "merchant_cof_txnid", Value: paymentMethod.CofTid},
+		{Key: "card_brand", Value: paymentMethod.CardBrand},
+		{Key: "card_country", Value: paymentMethod.CardCountry},
+		{Key: "expiry_date", Value: paymentMethod.ExpiryDate},
+		{Key: "fail_count", Value: 0},
+	}}
+	result, err := collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("payment method %w", entity.ErrNotFound)
+	}
+	return nil
+}
+
 // SavePaymentOrder insert or update order
 func (m *MongoDB) SavePaymentOrder(ctx context.Context, order *entity.PaymentOrder) error {
 	filter := bson.D{{Key: "order", Value: order.Order}}

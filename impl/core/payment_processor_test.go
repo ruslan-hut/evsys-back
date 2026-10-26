@@ -309,3 +309,46 @@ func TestPaymentInFlightIsNotSentTwice(t *testing.T) {
 	require.NoError(t, c.PayTransaction(ctx, 5092))
 	waitForPayments(t, redsys, 1)
 }
+
+func TestEnrollmentSavesCard(t *testing.T) {
+	tests := []struct {
+		name  string
+		saved *entity.PaymentMethod
+	}{
+		{name: "new card"},
+		{
+			name: "card already on file",
+			saved: &entity.PaymentMethod{Identifier: "card", Description: "mine", IsDefault: true,
+				CofTid: "cof-old", ExpiryDate: "2611", FailCount: 3},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := database_mock.NewMockDB()
+			c := New(newTestLogger(), db)
+			ctx := context.Background()
+			if tt.saved != nil {
+				tt.saved.UserId = "uid-158c0"
+				require.NoError(t, db.SavePaymentMethod(ctx, tt.saved))
+			}
+			require.NoError(t, db.SavePaymentOrder(ctx, &entity.PaymentOrder{Order: 3184, UserId: "uid-158c0", UserName: "user_158c0"}))
+
+			c.processPaymentResponse(ctx, &CaptureResponse{
+				Success: true, ResponseCode: "0000", Amount: "0",
+				MerchantIdentifier: "card", CofTxnid: "cof-new", CardBrand: "1", ExpiryDate: "3012",
+			}, 3184)
+
+			methods, _ := db.GetPaymentMethods(ctx, "uid-158c0")
+			require.Len(t, methods, 1)
+			pm := methods[0]
+			assert.Equal(t, "cof-new", pm.CofTid)
+			assert.Equal(t, "3012", pm.ExpiryDate)
+			assert.Zero(t, pm.FailCount)
+			if tt.saved != nil {
+				assert.Equal(t, "mine", pm.Description)
+				assert.True(t, pm.IsDefault)
+			}
+			assert.Equal(t, pm, c.pickFreshPaymentMethod(ctx, "uid-158c0", ""))
+		})
+	}
+}

@@ -42,6 +42,7 @@ type Repository interface {
 	GetDefaultPaymentMethod(ctx context.Context, userId string) (*entity.PaymentMethod, error)
 	GetPaymentMethodByIdentifier(ctx context.Context, identifier string) (*entity.PaymentMethod, error)
 	UpdatePaymentMethodFailCount(ctx context.Context, identifier string, count int) error
+	RenewPaymentMethod(ctx context.Context, paymentMethod *entity.PaymentMethod) error
 	GetPaymentOrder(ctx context.Context, id int) (*entity.PaymentOrder, error)
 	SavePaymentResult(ctx context.Context, paymentParameters *entity.PaymentParameters) error
 

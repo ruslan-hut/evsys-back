@@ -1823,7 +1823,19 @@ func (c *Core) processPaymentResponse(ctx context.Context, resp *CaptureResponse
 			UserName:    order.UserName,
 		}
 		if pm.Identifier != "" && pm.UserId != "" {
-			if e := c.repo.SavePaymentMethod(ctx, &pm); e != nil {
+			if c.hasPaymentMethod(ctx, pm.UserId, pm.Identifier) {
+				// the user enrolled a card already on file: take the fresh COF data
+				// so a card shut out by failed payments can be charged again
+				if e := c.repo.RenewPaymentMethod(ctx, &pm); e != nil {
+					log.With(sl.Err(e)).Error("failed to renew payment method from response")
+					c.payLog(ctx, "error", "method",
+						"enrollment: failed to renew card for user %s: %v", pm.UserName, e)
+				} else {
+					log.With(sl.Secret("identifier", pm.Identifier)).Info("payment method renewed")
+					c.payLog(ctx, "info", "method",
+						"enrollment: card renewed for user %s (expiry %s)", pm.UserName, pm.ExpiryDate)
+				}
+			} else if e := c.repo.SavePaymentMethod(ctx, &pm); e != nil {
 				log.With(sl.Err(e)).Error("failed to save payment method from response")
 				c.payLog(ctx, "error", "method",
 					"enrollment: failed to save card for user %s: %v", pm.UserName, e)
@@ -2239,6 +2251,20 @@ func (c *Core) pickFreshPaymentMethod(ctx context.Context, userId, skipIdentifie
 		}
 	}
 	return fallback
+}
+
+// hasPaymentMethod reports whether the user already has the card on file.
+func (c *Core) hasPaymentMethod(ctx context.Context, userId, identifier string) bool {
+	methods, err := c.repo.GetPaymentMethods(ctx, userId)
+	if err != nil {
+		return false
+	}
+	for _, pm := range methods {
+		if pm != nil && pm.Identifier == identifier {
+			return true
+		}
+	}
+	return false
 }
 
 // pickKnownPaymentMethod returns the user's card most likely to work when none
