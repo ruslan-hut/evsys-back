@@ -45,3 +45,43 @@ func TestRenewPaymentMethod(t *testing.T) {
 		t.Errorf("renew of a card not on file: %v, want ErrNotFound", err)
 	}
 }
+
+func TestReopenFailedPayment(t *testing.T) {
+	m := testMongo(t)
+	ctx := context.Background()
+	seed(t, m, collectionTransactions,
+		entity.Transaction{TransactionId: 3709, IsFinished: true, PaymentAmount: 276, PaymentBilled: 276, PaymentError: "0190"},
+		entity.Transaction{TransactionId: 5293, IsFinished: true, PaymentAmount: 414, PaymentBilled: 414},
+		entity.Transaction{TransactionId: 5300, IsFinished: true, PaymentAmount: 300, PaymentBilled: 0, PaymentError: "0190"},
+	)
+
+	tests := []struct {
+		name  string
+		id    int
+		error string
+		want  bool
+	}{
+		{"error changed since the lookup", 3709, "SIS0334", false},
+		{"paid", 5293, "", false},
+		{"already reopened", 5300, "0190", false},
+		{"failed payment", 3709, "0190", true},
+		{"second time: it is reopened already", 3709, "0190", false},
+	}
+	for _, tt := range tests {
+		got, err := m.ReopenFailedPayment(ctx, tt.id, tt.error)
+		if err != nil {
+			t.Fatalf("%s: %v", tt.name, err)
+		}
+		if got != tt.want {
+			t.Errorf("%s: reopened %v, want %v", tt.name, got, tt.want)
+		}
+	}
+
+	tx, err := m.GetTransaction(ctx, 3709)
+	if err != nil || tx == nil {
+		t.Fatalf("transaction: %v %v", tx, err)
+	}
+	if tx.PaymentBilled != 0 || tx.PaymentError != "" || tx.PaymentAmount != 276 {
+		t.Errorf("reopened transaction: billed %d error %q amount %d", tx.PaymentBilled, tx.PaymentError, tx.PaymentAmount)
+	}
+}

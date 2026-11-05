@@ -15,11 +15,13 @@ import (
 )
 
 // stubRedsys records the MIT payments it is asked for. It approves them,
-// unless decline holds a Redsys error code.
+// unless decline holds a Redsys error code, or declines[i] does for the i-th
+// request.
 type stubRedsys struct {
-	mu      sync.Mutex
-	pays    []PayRequest
-	decline string
+	mu       sync.Mutex
+	pays     []PayRequest
+	decline  string
+	declines []string
 }
 
 func (s *stubRedsys) payRequests() []PayRequest {
@@ -31,9 +33,14 @@ func (s *stubRedsys) payRequests() []PayRequest {
 func (s *stubRedsys) Pay(_ context.Context, req PayRequest) (*CaptureResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	n := len(s.pays)
 	s.pays = append(s.pays, req)
-	if s.decline != "" {
-		return &CaptureResponse{Success: false, ErrorCode: s.decline}, nil
+	code := s.decline
+	if n < len(s.declines) && s.declines[n] != "" {
+		code = s.declines[n]
+	}
+	if code != "" {
+		return &CaptureResponse{Success: false, ErrorCode: code}, nil
 	}
 	return &CaptureResponse{Success: true, ResponseCode: "0000", Order: req.OrderNumber, Amount: strconv.Itoa(req.Amount)}, nil
 }
@@ -351,4 +358,166 @@ func TestEnrollmentSavesCard(t *testing.T) {
 			assert.Equal(t, pm, c.pickFreshPaymentMethod(ctx, "uid-158c0", ""))
 		})
 	}
+}
+
+// --- old unpaid sessions are collected on a card that works ---
+
+// withDebt adds transaction 3709 as it is in production: declined with 0190
+// in February, four attempts, retries long exhausted, so it is marked billed
+// and nothing will charge it again.
+func withDebt(t *testing.T, db *database_mock.MockDB) {
+	t.Helper()
+	opened := time.Date(2026, 2, 23, 7, 46, 0, 0, time.UTC)
+	db.SeedTransaction(&entity.Transaction{
+		TransactionId: 3709, ChargePointId: "PE00004", ConnectorId: 1, IdTag: "TAG", IsFinished: true,
+		MeterStop: 6141, PaymentAmount: 276, PaymentBilled: 276, PaymentError: "0190", PaymentOrder: 2763,
+		TimeStop:      time.Date(2026, 2, 12, 18, 52, 20, 0, time.UTC),
+		PaymentOrders: []entity.PaymentOrder{{Order: 2763, TransactionId: 3709, Amount: 276, IsCompleted: true, Result: "0190", TimeOpened: opened, TimeClosed: opened}},
+		UserTag:       &entity.UserTag{IdTag: "TAG", UserId: "uid-389b1", Username: "user_389b1"},
+	})
+}
+
+// debtor is user_389b1 with debt 3709, a new session 5092 not charged yet and
+// one card on file that works.
+func debtor(t *testing.T) (*Core, *database_mock.MockDB, *stubRedsys) {
+	t.Helper()
+	c, db, redsys := unbilled(t, &entity.PaymentMethod{Identifier: "new-card", CofTid: "cof", ExpiryDate: "3211", IsDefault: true})
+	withTag(t, db)
+	withDebt(t, db)
+	return c, db, redsys
+}
+
+func waitForTransaction(t *testing.T, db *database_mock.MockDB, id int, done func(*entity.Transaction) bool) *entity.Transaction {
+	t.Helper()
+	var tx *entity.Transaction
+	require.Eventually(t, func() bool {
+		tx, _ = db.GetTransaction(context.Background(), id)
+		return tx != nil && done(tx)
+	}, 2*time.Second, 10*time.Millisecond)
+	return tx
+}
+
+func paid(tx *entity.Transaction) bool {
+	return tx.PaymentBilled >= tx.PaymentAmount && tx.PaymentError == ""
+}
+
+func TestCapturedPaymentCollectsOldDebt(t *testing.T) {
+	c, db, redsys := debtor(t)
+	ctx := context.Background()
+
+	require.NoError(t, c.PayTransaction(ctx, 5092))
+
+	pays := waitForPayments(t, redsys, 2)
+	assert.Equal(t, 3024, pays[0].Amount, "the new session first")
+	assert.Equal(t, 276, pays[1].Amount, "then the old debt")
+	assert.Equal(t, "new-card", pays[1].CardToken, "on the card that has just been charged")
+
+	tx := waitForTransaction(t, db, 3709, paid)
+	assert.Equal(t, 276, tx.PaymentBilled)
+	require.Len(t, tx.PaymentOrders, 2)
+	assert.True(t, tx.PaymentOrders[1].Debt, "the order is marked as collecting a debt")
+
+	// its capture looks for more; nothing is owed
+	time.Sleep(100 * time.Millisecond)
+	assert.Len(t, redsys.payRequests(), 2)
+}
+
+func TestDebtsCollectedOneByOne(t *testing.T) {
+	c, db, redsys := debtor(t)
+	ctx := context.Background()
+	db.SeedTransaction(&entity.Transaction{
+		TransactionId: 3800, ChargePointId: "PE00004", IdTag: "TAG", IsFinished: true,
+		MeterStop: 2000, PaymentAmount: 90, PaymentBilled: 90, PaymentError: "SIS0334",
+		TimeStop: time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC),
+	})
+
+	require.NoError(t, c.PayTransaction(ctx, 5092))
+
+	pays := waitForPayments(t, redsys, 3)
+	assert.Equal(t, []int{3024, 276, 90}, []int{pays[0].Amount, pays[1].Amount, pays[2].Amount}, "oldest debt first")
+	waitForTransaction(t, db, 3709, paid)
+	waitForTransaction(t, db, 3800, paid)
+}
+
+// A decline of the old debt must not bar the card the user pays with now,
+// nor put the debt back on the retry queue.
+func TestDeclinedDebtDoesNotBlockCard(t *testing.T) {
+	c, db, redsys := debtor(t)
+	redsys.declines = []string{"", "0190"}
+	ctx := context.Background()
+
+	require.NoError(t, c.PayTransaction(ctx, 5092))
+	waitForPayments(t, redsys, 2)
+
+	tx := waitForTransaction(t, db, 3709, func(tx *entity.Transaction) bool { return tx.PaymentError != "" })
+	assert.Equal(t, "0190", tx.PaymentError)
+	assert.Equal(t, 276, tx.PaymentBilled, "marked billed again, as a declined payment")
+	retry, _ := db.GetPaymentRetry(ctx, 3709)
+	assert.Nil(t, retry, "an exhausted debt is not queued again")
+
+	card, err := db.GetPaymentMethodByIdentifier(ctx, "new-card")
+	require.NoError(t, err)
+	assert.Zero(t, card.FailCount, "the card still starts sessions")
+	require.NoError(t, c.validateStartTransactionPaymentMethod(ctx, startRequest))
+
+	// the next payment on the same day does not ask for the debt again
+	c.collectDebts(ctx, "uid-389b1", "new-card")
+	time.Sleep(100 * time.Millisecond)
+	assert.Len(t, redsys.payRequests(), 2)
+}
+
+func TestEnrollmentCollectsDebt(t *testing.T) {
+	db := database_mock.NewMockDB()
+	redsys := &stubRedsys{}
+	c := New(newTestLogger(), db)
+	c.SetRedsys(redsys)
+	withTag(t, db)
+	withDebt(t, db)
+	ctx := context.Background()
+	require.NoError(t, db.SavePaymentOrder(ctx, &entity.PaymentOrder{Order: 3104, UserId: "uid-389b1", UserName: "user_389b1"}))
+
+	c.processPaymentResponse(ctx, &CaptureResponse{
+		Success: true, ResponseCode: "0000", Amount: "0",
+		MerchantIdentifier: "new-card", CofTxnid: "cof", ExpiryDate: "3211",
+	}, 3104)
+
+	req := waitForPayments(t, redsys, 1)[0]
+	assert.Equal(t, "new-card", req.CardToken)
+	assert.Equal(t, 276, req.Amount)
+	waitForTransaction(t, db, 3709, paid)
+}
+
+func TestDebtNotCollectedOnUnusableCard(t *testing.T) {
+	for _, card := range []*entity.PaymentMethod{
+		{Identifier: "card", CofTid: "cof", ExpiryDate: "3211", FailCount: 1},
+		{Identifier: "card", ExpiryDate: "3211"},
+		{Identifier: "card", CofTid: "cof", ExpiryDate: "2001"},
+	} {
+		db := database_mock.NewMockDB()
+		redsys := &stubRedsys{}
+		c := New(newTestLogger(), db)
+		c.SetRedsys(redsys)
+		withTag(t, db)
+		withDebt(t, db)
+		card.UserId = "uid-389b1"
+		require.NoError(t, db.SavePaymentMethod(context.Background(), card))
+
+		c.collectDebts(context.Background(), "uid-389b1", "card")
+		assert.Empty(t, redsys.payRequests(), "%+v", card)
+		tx, _ := db.GetTransaction(context.Background(), 3709)
+		assert.Equal(t, "0190", tx.PaymentError, "left as it was")
+		assert.Equal(t, 276, tx.PaymentBilled)
+	}
+}
+
+// Another user's card is never charged for this user's debt.
+func TestDebtNotCollectedOnOtherUsersCard(t *testing.T) {
+	c, db, redsys := unbilled(t)
+	withTag(t, db)
+	withDebt(t, db)
+	require.NoError(t, db.SavePaymentMethod(context.Background(),
+		&entity.PaymentMethod{Identifier: "theirs", UserId: "uid-other", CofTid: "cof", ExpiryDate: "3211"}))
+
+	c.collectDebts(context.Background(), "uid-389b1", "theirs")
+	assert.Empty(t, redsys.payRequests())
 }

@@ -31,6 +31,9 @@ const (
 	// settleTimeout bounds how long starting a session waits for the user's
 	// pending payments to be answered.
 	settleTimeout = 15 * time.Second
+	// debtRetryGap is how long an old unpaid session rests after a charge
+	// attempt before it is collected again.
+	debtRetryGap = 24 * time.Hour
 )
 
 var retryDelays = []time.Duration{
@@ -716,6 +719,7 @@ func (c *Core) SavePaymentMethod(ctx context.Context, user *entity.User, pm *ent
 		return err
 	}
 	c.payLog(ctx, "info", "method", "saved payment method for user %s (card %s)", user.Username, pm.Description)
+	c.collectDebtsAsync(pm.UserId, pm.Identifier)
 	return nil
 }
 
@@ -1278,8 +1282,21 @@ func (c *Core) unlockOrder(id int, mutex *sync.Mutex) {
 	c.paymentLocks.Delete(id)
 }
 
+// payOptions changes how payTransaction charges a session.
+type payOptions struct {
+	// card is charged as given, without the lookup and fallback of the
+	// session's own card
+	card *entity.PaymentMethod
+	// debt marks the order as collecting an old unpaid session
+	debt bool
+}
+
 // PayTransaction initiates a direct MIT payment for a finished charging transaction.
 func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
+	return c.payTransaction(ctx, transactionId, payOptions{})
+}
+
+func (c *Core) payTransaction(ctx context.Context, transactionId int, opts payOptions) error {
 	mutex := c.lockOrder(transactionId)
 	defer c.unlockOrder(transactionId, mutex)
 
@@ -1339,46 +1356,49 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 		return fmt.Errorf("empty user id for tag %s", tag.IdTag)
 	}
 
-	// Resolve payment method with fallback logic
-	paymentMethod := transaction.PaymentMethod
-	if paymentMethod != nil {
-		// The copy stored on the transaction keeps the fail count it had when
-		// it was first charged; read the card's current state, or the switch
-		// to another card below never sees that this one has failed since.
-		if current, e := c.repo.GetPaymentMethodByIdentifier(ctx, paymentMethod.Identifier); e == nil && current != nil {
-			paymentMethod = current
-		}
-	}
+	now := time.Now()
+	paymentMethod := opts.card
 	if paymentMethod == nil {
-		paymentMethod, err = c.repo.GetDefaultPaymentMethod(ctx, tag.UserId)
-		if err != nil {
-			// a database error says nothing about the user's cards: retry
-			// later rather than write the payment off
-			log.With(sl.Err(err)).Error("failed to look up payment method")
-			return c.failBeforePayment(ctx, transaction, tag, "payment method lookup failed")
+		// Resolve payment method with fallback logic
+		paymentMethod = transaction.PaymentMethod
+		if paymentMethod != nil {
+			// The copy stored on the transaction keeps the fail count it had when
+			// it was first charged; read the card's current state, or the switch
+			// to another card below never sees that this one has failed since.
+			if current, e := c.repo.GetPaymentMethodByIdentifier(ctx, paymentMethod.Identifier); e == nil && current != nil {
+				paymentMethod = current
+			}
 		}
 		if paymentMethod == nil {
-			// no card without failures: try the best one the user has rather
-			// than not charging at all
-			paymentMethod = c.pickKnownPaymentMethod(ctx, tag.UserId)
-			if paymentMethod == nil {
-				return c.failBeforePayment(ctx, transaction, tag, "no usable payment method")
+			paymentMethod, err = c.repo.GetDefaultPaymentMethod(ctx, tag.UserId)
+			if err != nil {
+				// a database error says nothing about the user's cards: retry
+				// later rather than write the payment off
+				log.With(sl.Err(err)).Error("failed to look up payment method")
+				return c.failBeforePayment(ctx, transaction, tag, "payment method lookup failed")
 			}
-			log.With(
-				sl.Secret("identifier", paymentMethod.Identifier),
-				slog.Int("fail_count", paymentMethod.FailCount),
-			).Warn("no card without failures; charging a previously failed card")
+			if paymentMethod == nil {
+				// no card without failures: try the best one the user has rather
+				// than not charging at all
+				paymentMethod = c.pickKnownPaymentMethod(ctx, tag.UserId)
+				if paymentMethod == nil {
+					return c.failBeforePayment(ctx, transaction, tag, "no usable payment method")
+				}
+				log.With(
+					sl.Secret("identifier", paymentMethod.Identifier),
+					slog.Int("fail_count", paymentMethod.FailCount),
+				).Warn("no card without failures; charging a previously failed card")
+			}
 		}
-	}
-	// Try to get alternative if current has problems. Enumerate all of the user's
-	// methods so that a card added between attempts (fail_count == 0) is preferred
-	// over a previously-failed one, even when neither is flagged as default.
-	now := time.Now()
-	if paymentMethod.CofTid == "" || paymentMethod.FailCount > 0 ||
-		transaction.PaymentError != "" || isCardExpired(paymentMethod.ExpiryDate, now) {
-		if alt := c.pickFreshPaymentMethod(ctx, tag.UserId, paymentMethod.Identifier); alt != nil {
-			paymentMethod = alt
-			log.With(sl.Secret("identifier", alt.Identifier)).Warn("switched to alternative payment method")
+		// Try to get alternative if current has problems. Enumerate all of the user's
+		// methods so that a card added between attempts (fail_count == 0) is preferred
+		// over a previously-failed one, even when neither is flagged as default.
+		if paymentMethod.CofTid == "" || paymentMethod.FailCount > 0 ||
+			transaction.PaymentError != "" || isCardExpired(paymentMethod.ExpiryDate, now) {
+			if alt := c.pickFreshPaymentMethod(ctx, tag.UserId, paymentMethod.Identifier); alt != nil {
+				paymentMethod = alt
+				log.With(sl.Secret("identifier", alt.Identifier)).Warn("switched to alternative payment method")
+			}
 		}
 	}
 
@@ -1440,6 +1460,7 @@ func (c *Core) PayTransaction(ctx context.Context, transactionId int) error {
 		UserId:        tag.UserId,
 		UserName:      tag.Username,
 		TimeOpened:    time.Now(),
+		Debt:          opts.debt,
 	}
 
 	paymentOrder.Order = c.nextOrderNumber(ctx)
@@ -1810,6 +1831,8 @@ func (c *Core) processPaymentResponse(ctx context.Context, resp *CaptureResponse
 		c.payLog(ctx, "info", "pay",
 			"transaction %d: payment captured %.2f on order %d (user %s)",
 			order.TransactionId, float64(order.Amount)/100, order.Order, order.UserName)
+
+		c.collectDebtsAsync(order.UserId, order.Identifier)
 	} else {
 		// No transaction linked — this is a card enrollment response; save payment method
 		pm := entity.PaymentMethod{
@@ -1834,6 +1857,7 @@ func (c *Core) processPaymentResponse(ctx context.Context, resp *CaptureResponse
 					log.With(sl.Secret("identifier", pm.Identifier)).Info("payment method renewed")
 					c.payLog(ctx, "info", "method",
 						"enrollment: card renewed for user %s (expiry %s)", pm.UserName, pm.ExpiryDate)
+					c.collectDebtsAsync(pm.UserId, pm.Identifier)
 				}
 			} else if e := c.repo.SavePaymentMethod(ctx, &pm); e != nil {
 				log.With(sl.Err(e)).Error("failed to save payment method from response")
@@ -1843,6 +1867,7 @@ func (c *Core) processPaymentResponse(ctx context.Context, resp *CaptureResponse
 				log.With(sl.Secret("identifier", pm.Identifier)).Info("payment method saved")
 				c.payLog(ctx, "info", "method",
 					"enrollment: card saved for user %s (expiry %s)", pm.UserName, pm.ExpiryDate)
+				c.collectDebtsAsync(pm.UserId, pm.Identifier)
 			}
 		}
 
@@ -1879,7 +1904,11 @@ func (c *Core) closeOrderOnError(ctx context.Context, order *entity.PaymentOrder
 		result = "unknown error"
 	}
 
-	c.updatePaymentMethodFailCounter(ctx, order.Identifier, 1)
+	// A declined old debt says little about a card that has just been
+	// charged or enrolled; counting it would bar the card from new sessions.
+	if !order.Debt {
+		c.updatePaymentMethodFailCounter(ctx, order.Identifier, 1)
+	}
 
 	if !order.IsCompleted {
 		order.IsCompleted = true
@@ -1917,10 +1946,20 @@ func (c *Core) closeOrderOnError(ctx context.Context, order *entity.PaymentOrder
 				c.log.With(sl.Err(e)).Error("failed to update transaction on error")
 			}
 
-			c.schedulePaymentRetry(ctx, order.TransactionId, result)
+			// A debt whose retries were exhausted stays so: it is collected
+			// again on the user's next successful payment, not on a schedule.
+			queued, _ := c.repo.GetPaymentRetry(ctx, order.TransactionId)
+			if !order.Debt || queued != nil {
+				c.schedulePaymentRetry(ctx, order.TransactionId, result)
+			}
 
 			warning.ChargePointId = transaction.ChargePointId
-			if retry, _ := c.repo.GetPaymentRetry(ctx, order.TransactionId); retry != nil {
+			if order.Debt && queued == nil {
+				warning.Exhausted = true
+				c.payLog(ctx, "error", "debt",
+					"transaction %d: unpaid session not collected on order %d (%s); next try after the user's next successful payment",
+					order.TransactionId, order.Order, result)
+			} else if retry, _ := c.repo.GetPaymentRetry(ctx, order.TransactionId); retry != nil {
 				warning.Attempt = retry.Attempt
 				c.payLog(ctx, "error", "pay",
 					"transaction %d: payment failed on order %d (%s); next retry attempt %d at %s",
@@ -2068,6 +2107,96 @@ func (c *Core) settleTransaction(ctx context.Context, tag *entity.UserTag, t *en
 		}
 	}
 	return c.awaitPayment(ctx, id)
+}
+
+// collectDebtsAsync starts collectDebts in the background.
+func (c *Core) collectDebtsAsync(userId, identifier string) {
+	if c.redsys == nil || c.disablePayment || userId == "" || identifier == "" {
+		return
+	}
+	c.runAsync("collectDebts", func(ctx context.Context) {
+		c.collectDebts(ctx, userId, identifier)
+	})
+}
+
+// collectDebts charges one of the user's failed payments to a card that has
+// just proved it works: a payment was captured on it, or the user saved or
+// enrolled it again. Failures whose retries are exhausted are otherwise never
+// charged again (transaction 3709: declined in February, the user paid every
+// session since on a new card); queued ones need not wait for their slot.
+// One payment at a time, oldest first: its capture comes back here through
+// processPaymentResponse and collects the next, a decline ends the run. The
+// decline neither counts against the card nor revives exhausted retries
+// (closeOrderOnError), and a payment tried within debtRetryGap is left for
+// later, so a card that declines an old debt is not asked on every session.
+func (c *Core) collectDebts(ctx context.Context, userId, identifier string) {
+	log := c.log.With(slog.String("subsystem", "debts"), sl.Secret("user_id", userId))
+
+	now := time.Now()
+	methods, err := c.repo.GetPaymentMethods(ctx, userId)
+	if err != nil {
+		log.With(sl.Err(err)).Error("failed to look up payment methods")
+		return
+	}
+	var card *entity.PaymentMethod
+	for _, pm := range methods {
+		if pm != nil && pm.Identifier == identifier {
+			card = pm
+			break
+		}
+	}
+	if card == nil || card.CofTid == "" || card.FailCount > 0 || isCardExpired(card.ExpiryDate, now) {
+		return
+	}
+
+	transactions, err := c.repo.GetUserOutstandingTransactions(ctx, userId)
+	if err != nil {
+		log.With(sl.Err(err)).Error("failed to look up unpaid sessions")
+		return
+	}
+	for _, t := range transactions {
+		// not charged yet: the unbilled pass sends it within minutes
+		if t.PaymentBilled < t.PaymentAmount || t.PaymentError == "" {
+			continue
+		}
+		if triedSince(t, now.Add(-debtRetryGap)) {
+			continue
+		}
+		id := t.TransactionId
+		if open, e := c.repo.GetPaymentOrderByTransaction(ctx, id); e == nil && open != nil &&
+			time.Since(open.TimeOpened) < paymentInFlight {
+			continue
+		}
+		reopened, err := c.repo.ReopenFailedPayment(ctx, id, t.PaymentError)
+		if err != nil {
+			log.With(slog.Int("transaction_id", id), sl.Err(err)).Error("failed to reopen unpaid session")
+			return
+		}
+		if !reopened {
+			// paid or picked up by another path since the lookup
+			continue
+		}
+
+		c.payLog(ctx, "info", "debt",
+			"transaction %d: collecting unpaid %.2f (%s) from user %s",
+			id, float64(t.PaymentAmount)/100, t.PaymentError, card.UserName)
+		opts := payOptions{card: card, debt: true}
+		if err = c.guardPayment(ctx, id, func() error { return c.payTransaction(ctx, id, opts) }); err != nil {
+			log.With(slog.Int("transaction_id", id), sl.Err(err)).Warn("failed to collect unpaid session")
+		}
+		return
+	}
+}
+
+// triedSince reports whether a payment order for the session was opened after
+// the given time.
+func triedSince(t *entity.Transaction, since time.Time) bool {
+	for _, o := range t.PaymentOrders {
+		if o.TimeOpened.After(since) {
+			return true
+		}
+	}
+	return false
 }
 
 // awaitPayment waits for the answer to a payment just sent: the Redsys request

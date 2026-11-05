@@ -22,6 +22,9 @@ type PaymentOrder struct {
 	TimeClosed    time.Time `json:"time_closed" bson:"time_closed"`
 	RefundAmount  int       `json:"refund_amount" bson:"refund_amount" validate:"min=0"`
 	RefundTime    time.Time `json:"refund_time" bson:"refund_time"`
+	// Debt marks an order that collects an old unpaid session on a card that
+	// has just proved it works. Its decline does not count against the card.
+	Debt bool `json:"debt,omitempty" bson:"debt,omitempty"`
 	// Mode selects the response variant: empty (default) for the Android/native
 	// SDK flow, "web" for the Redsys TPV Virtual hosted-form redirect flow
 	// used by the "add card" page in the Angular app. Not persisted.

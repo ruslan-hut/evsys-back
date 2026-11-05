@@ -128,6 +128,7 @@ entity/                     Domain models and DTOs (26 files)
 - **Webhook notifications** — async Redsys callbacks via `POST /api/v1/payment/notify` (unauthenticated)
 - **Per-order locking** — `sync.Map`-based mutex in Core for concurrent payment safety
 - **Payment method fallback** — auto-switches to alternative method when FailCount > 0
+- **Debt collection** — a captured payment, or a card enrolled/saved, triggers `collectDebts`: the user's failed payments (exhausted retries included) are charged one by one on that card. Orders carry `debt: true`; their decline does not raise the card's fail count, does not requeue an exhausted debt, and the debt rests 24 h (`debtRetryGap`)
 - **DisablePayment mode** — bypasses Redsys calls for testing (`redsys.disable_payment: true`)
 
 **Mail Reports (Brevo)**: `impl/brevo/` posts transactional emails to the Brevo HTTP API; `impl/mail/` runs a goroutine that wakes daily at 06:00 UTC and dispatches per-charger statistics to admin-managed subscribers (daily / weekly on Mon / monthly on the 1st). See [docs/brevo-setup.md](docs/brevo-setup.md) for provider setup.

@@ -1461,6 +1461,31 @@ func (m *MongoDB) GetUserOutstandingTransactions(ctx context.Context, userId str
 	return findMany[*entity.Transaction](m, ctx, collectionTransactions, filter, opts)
 }
 
+// ReopenFailedPayment marks a failed payment as not charged, so that it can be
+// sent again: billed back to zero, error cleared. Only while the transaction
+// still carries paymentError and is marked billed: a payment captured or
+// reopened by another path in the meantime is left alone. Reports whether the
+// payment was reopened.
+func (m *MongoDB) ReopenFailedPayment(ctx context.Context, transactionId int, paymentError string) (bool, error) {
+	if paymentError == "" {
+		return false, nil
+	}
+	filter := bson.D{
+		{Key: "transaction_id", Value: transactionId},
+		{Key: "payment_error", Value: paymentError},
+		{Key: "$expr", Value: bson.D{{Key: "$gte", Value: bson.A{"$payment_billed", "$payment_amount"}}}},
+	}
+	update := bson.D{{Key: "$set", Value: bson.D{
+		{Key: "payment_billed", Value: 0},
+		{Key: "payment_error", Value: ""},
+	}}}
+	result, err := m.col(collectionTransactions).UpdateOne(ctx, filter, update)
+	if err != nil {
+		return false, err
+	}
+	return result.MatchedCount > 0, nil
+}
+
 // SavePaymentRetry upserts a payment retry record by transaction_id
 func (m *MongoDB) SavePaymentRetry(ctx context.Context, retry *entity.PaymentRetry) error {
 	collection := m.col(collectionPaymentRetries)

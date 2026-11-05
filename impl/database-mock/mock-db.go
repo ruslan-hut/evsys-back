@@ -935,6 +935,20 @@ func (db *MockDB) GetUserOutstandingTransactions(_ context.Context, userId strin
 	return result, nil
 }
 
+func (db *MockDB) ReopenFailedPayment(_ context.Context, transactionId int, paymentError string) (bool, error) {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	tx, ok := db.transactions[transactionId]
+	if !ok || paymentError == "" || tx.PaymentError != paymentError || tx.PaymentBilled < tx.PaymentAmount {
+		return false, nil
+	}
+	cp := *tx
+	cp.PaymentBilled = 0
+	cp.PaymentError = ""
+	db.transactions[transactionId] = &cp
+	return true, nil
+}
+
 func (db *MockDB) SavePaymentRetry(_ context.Context, retry *entity.PaymentRetry) error {
 	db.mux.Lock()
 	defer db.mux.Unlock()
