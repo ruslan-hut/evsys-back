@@ -31,6 +31,7 @@ const (
 	collectionInvites           = "invites"
 	collectionPayment           = "payment"
 	collectionPaymentMethods    = "payment_methods"
+	collectionInvoiceProfiles   = "invoice_profiles"
 	collectionPaymentOrders     = "payment_orders"
 	collectionPaymentPlans      = "payment_plans"
 	collectionLocations         = "locations"
@@ -1169,6 +1170,50 @@ func (m *MongoDB) GetPaymentMethods(ctx context.Context, userId string) ([]*enti
 // GetPaymentMethod get payment method by identifier
 func (m *MongoDB) GetPaymentMethod(ctx context.Context, identifier, userId string) (*entity.PaymentMethod, error) {
 	return findOne[entity.PaymentMethod](m, ctx, collectionPaymentMethods, bson.D{{Key: "identifier", Value: identifier}, {Key: "user_id", Value: userId}})
+}
+
+// GetInvoiceProfile returns the invoice profile of a user, nil if none.
+func (m *MongoDB) GetInvoiceProfile(ctx context.Context, userId string) (*entity.InvoiceProfile, error) {
+	return findOne[entity.InvoiceProfile](m, ctx, collectionInvoiceProfiles, bson.D{{Key: "user_id", Value: userId}})
+}
+
+// SaveInvoiceProfile creates or updates the user-editable fields of the
+// profile. holded_contact_id and created_at are not in the $set list: they
+// belong to the server and survive a save.
+func (m *MongoDB) SaveInvoiceProfile(ctx context.Context, p *entity.InvoiceProfile) error {
+	set := bson.D{
+		{Key: "enabled", Value: p.Enabled},
+		{Key: "kind", Value: p.Kind},
+		{Key: "name", Value: p.Name},
+		{Key: "tax_id", Value: p.TaxId},
+		{Key: "email", Value: p.Email},
+		{Key: "address", Value: p.Address},
+		{Key: "city", Value: p.City},
+		{Key: "postal_code", Value: p.PostalCode},
+		{Key: "province", Value: p.Province},
+		{Key: "country_code", Value: p.CountryCode},
+		{Key: "consent_at", Value: p.ConsentAt},
+		{Key: "updated_at", Value: p.UpdatedAt},
+	}
+	update := bson.D{
+		{Key: "$set", Value: set},
+		{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: p.UpdatedAt}}},
+	}
+	_, err := m.col(collectionInvoiceProfiles).UpdateOne(ctx,
+		bson.D{{Key: "user_id", Value: p.UserId}}, update, options.Update().SetUpsert(true))
+	return err
+}
+
+// DeleteInvoiceProfile removes the profile; ErrNotFound if there was none.
+func (m *MongoDB) DeleteInvoiceProfile(ctx context.Context, userId string) error {
+	result, err := m.col(collectionInvoiceProfiles).DeleteOne(ctx, bson.D{{Key: "user_id", Value: userId}})
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return fmt.Errorf("invoice profile %w", entity.ErrNotFound)
+	}
+	return nil
 }
 
 func (m *MongoDB) GetLastOrder(ctx context.Context) (*entity.PaymentOrder, error) {

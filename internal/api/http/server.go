@@ -6,6 +6,7 @@ import (
 	"evsys-back/internal/api/handlers/aireport"
 	centralsystem "evsys-back/internal/api/handlers/central-system"
 	"evsys-back/internal/api/handlers/helper"
+	"evsys-back/internal/api/handlers/invoices"
 	"evsys-back/internal/api/handlers/locations"
 	"evsys-back/internal/api/handlers/mail"
 	oauthapi "evsys-back/internal/api/handlers/oauth"
@@ -54,6 +55,7 @@ type Core interface {
 	locations.Locations
 	centralsystem.CentralSystem
 	transactions.Transactions
+	invoices.Invoices
 	payments.Payments
 	payments.Preauthorizations
 	payments.DirectPayments
@@ -233,6 +235,10 @@ func (s *Server) routes(router chi.Router, log *slog.Logger, core Core, oauth OA
 			r.Post("/payment/update", payments.Update(log, core))
 			r.Post("/payment/delete", payments.Delete(log, core))
 			r.Post("/payment/order", payments.Order(log, core))
+
+			r.Get("/invoice/profile", invoices.GetProfile(log, core))
+			r.Put("/invoice/profile", invoices.SaveProfile(log, core))
+			r.Delete("/invoice/profile", invoices.DeleteProfile(log, core))
 
 			r.Get("/report/month", report.MonthlyStatistics(log, core))
 			r.Get("/report/user", report.UsersStatistics(log, core))

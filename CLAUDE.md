@@ -210,6 +210,15 @@ API-key-authenticated (service-to-service, `Authorization: Bearer {api_key}`):
 Unauthenticated (Redsys webhook):
 - `POST /api/v1/payment/notify` — Redsys async payment notification
 
+## Invoice Profile API Endpoints
+
+User-authenticated; the profile (tax id, address) is stored in `invoice_profiles`, one document per user, and is only returned to its owner:
+- `GET    /api/v1/invoice/profile` — Own profile; empty with `enabled: false` if none
+- `PUT    /api/v1/invoice/profile` — Save `{enabled, consent, kind, name, tax_id, email, address, city, postal_code, province, country_code}`; `enabled: true` requires `name`, `tax_id`, `address`, `city`, `postal_code`, `consent` and checks the ES tax id checksum (`kind` defaults to `person`, `country_code` to `ES`); the server sets `consent_at` once
+- `DELETE /api/v1/invoice/profile` — Remove the profile with all its data
+
+`holded_contact_id` is server-only (never in JSON, never overwritten by a save).
+
 ## Mail Subscription API Endpoints
 
 Admin/operator only (`RequirePowerUser`):

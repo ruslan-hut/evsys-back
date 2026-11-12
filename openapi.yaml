@@ -684,6 +684,67 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /invoice/profile:
+    get:
+      tags: [Invoices]
+      summary: Get invoice profile
+      description: >
+        The current user's invoice profile. A user who never set one gets an
+        empty profile with enabled=false. Never returned to anyone else.
+      operationId: getInvoiceProfile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Invoice profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      tags: [Invoices]
+      summary: Save invoice profile
+      description: >
+        Creates or replaces the profile. With enabled=true the required fields,
+        the tax id (checksum for ES) and consent=true are checked; with
+        enabled=false nothing is validated, data and the consent date are kept.
+      operationId: saveInvoiceProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceProfileRequest'
+      responses:
+        '200':
+          description: Saved profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceProfile'
+        '400':
+          description: Validation failed; the message lists every problem
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Invoices]
+      summary: Delete invoice profile
+      description: Removes the profile with all its data.
+      operationId: deleteInvoiceProfile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Deleted
+        '404':
+          description: No profile
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /payment/methods:
     get:
       tags: [Payments]
@@ -1706,6 +1767,35 @@ components:
           items:
             $ref: '#/components/schemas/PaymentOrder'
 
+    InvoiceProfileRequest:
+      type: object
+      properties:
+        enabled: {type: boolean}
+        consent: {type: boolean, description: "User agrees to processing of the tax data; required when enabled"}
+        kind: {type: string, enum: [person, company], description: "Default person"}
+        name: {type: string}
+        tax_id: {type: string, description: "Normalized on the server; NIF/NIE/CIF checksum for country ES"}
+        email: {type: string}
+        address: {type: string}
+        city: {type: string}
+        postal_code: {type: string}
+        province: {type: string}
+        country_code: {type: string, description: "ISO 3166-1 alpha-2, default ES"}
+    InvoiceProfile:
+      type: object
+      properties:
+        enabled: {type: boolean}
+        kind: {type: string, enum: [person, company]}
+        name: {type: string}
+        tax_id: {type: string}
+        email: {type: string}
+        address: {type: string}
+        city: {type: string}
+        postal_code: {type: string}
+        province: {type: string}
+        country_code: {type: string}
+        consent_at: {type: string, format: date-time, description: "Set by the server when the user first consents"}
+        updated_at: {type: string, format: date-time}
     PaymentMethod:
       type: object
       properties:

@@ -31,6 +31,9 @@ type Repository interface {
 	SavePaymentMethod(ctx context.Context, paymentMethod *entity.PaymentMethod) error
 	UpdatePaymentMethod(ctx context.Context, paymentMethod *entity.PaymentMethod) error
 	DeletePaymentMethod(ctx context.Context, paymentMethod *entity.PaymentMethod) error
+	GetInvoiceProfile(ctx context.Context, userId string) (*entity.InvoiceProfile, error)
+	SaveInvoiceProfile(ctx context.Context, profile *entity.InvoiceProfile) error
+	DeleteInvoiceProfile(ctx context.Context, userId string) error
 	GetLastOrder(ctx context.Context) (*entity.PaymentOrder, error)
 	SavePaymentOrder(ctx context.Context, order *entity.PaymentOrder) error
 	GetPaymentOrderByTransaction(ctx context.Context, transactionId int) (*entity.PaymentOrder, error)

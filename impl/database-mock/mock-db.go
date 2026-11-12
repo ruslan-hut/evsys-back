@@ -24,6 +24,7 @@ type MockDB struct {
 	chargeStates       map[int]*entity.ChargeState          // key: transactionId
 	meterValues        map[int][]entity.TransactionMeter    // key: transactionId
 	paymentMethods     map[string][]*entity.PaymentMethod   // key: userId
+	invoiceProfiles    map[string]*entity.InvoiceProfile    // key: userId
 	paymentOrders      map[int]*entity.PaymentOrder         // key: orderId
 	ordersByTx         map[int]*entity.PaymentOrder         // key: transactionId
 	preauthorizations  map[string]*entity.Preauthorization  // key: orderNumber
@@ -59,6 +60,7 @@ func (db *MockDB) clear() {
 	db.chargeStates = make(map[int]*entity.ChargeState)
 	db.meterValues = make(map[int][]entity.TransactionMeter)
 	db.paymentMethods = make(map[string][]*entity.PaymentMethod)
+	db.invoiceProfiles = make(map[string]*entity.InvoiceProfile)
 	db.paymentOrders = make(map[int]*entity.PaymentOrder)
 	db.ordersByTx = make(map[int]*entity.PaymentOrder)
 	db.preauthorizations = make(map[string]*entity.Preauthorization)
@@ -633,6 +635,43 @@ func (db *MockDB) DeletePaymentMethod(_ context.Context, paymentMethod *entity.P
 			break
 		}
 	}
+	return nil
+}
+
+// --- Invoice profiles ---
+
+func (db *MockDB) GetInvoiceProfile(_ context.Context, userId string) (*entity.InvoiceProfile, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	p, ok := db.invoiceProfiles[userId]
+	if !ok {
+		return nil, nil
+	}
+	cp := *p
+	return &cp, nil
+}
+
+func (db *MockDB) SaveInvoiceProfile(_ context.Context, profile *entity.InvoiceProfile) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	cp := *profile
+	if old, ok := db.invoiceProfiles[profile.UserId]; ok {
+		cp.HoldedContactId = old.HoldedContactId
+		cp.CreatedAt = old.CreatedAt
+	} else {
+		cp.CreatedAt = profile.UpdatedAt
+	}
+	db.invoiceProfiles[profile.UserId] = &cp
+	return nil
+}
+
+func (db *MockDB) DeleteInvoiceProfile(_ context.Context, userId string) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	if _, ok := db.invoiceProfiles[userId]; !ok {
+		return fmt.Errorf("invoice profile %w", entity.ErrNotFound)
+	}
+	delete(db.invoiceProfiles, userId)
 	return nil
 }
 

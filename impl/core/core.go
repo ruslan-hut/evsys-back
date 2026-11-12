@@ -757,6 +757,72 @@ func (c *Core) DeletePaymentMethod(ctx context.Context, user *entity.User, pm *e
 	return nil
 }
 
+// GetInvoiceProfile returns the user's invoice profile. A user who never set
+// one gets an empty profile with invoices off, not an error.
+func (c *Core) GetInvoiceProfile(ctx context.Context, user *entity.User) (*entity.InvoiceProfile, error) {
+	if user == nil {
+		return nil, fmt.Errorf("user is nil")
+	}
+	p, err := c.repo.GetInvoiceProfile(ctx, user.UserId)
+	if err != nil {
+		return nil, err
+	}
+	if p == nil {
+		return &entity.InvoiceProfile{}, nil
+	}
+	return p, nil
+}
+
+// SaveInvoiceProfile stores the profile the user sent. The consent date is set
+// when the user first consents and kept on later saves; turning invoices off
+// keeps the entered data and the consent date, and DeleteInvoiceProfile
+// removes everything.
+func (c *Core) SaveInvoiceProfile(ctx context.Context, user *entity.User, req *entity.InvoiceProfileRequest) (*entity.InvoiceProfile, error) {
+	if user == nil {
+		return nil, fmt.Errorf("user is nil")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("invoice profile is nil")
+	}
+	now := time.Now().UTC()
+	profile := &entity.InvoiceProfile{
+		UserId:      user.UserId,
+		Enabled:     req.Enabled,
+		Kind:        req.Kind,
+		Name:        req.Name,
+		TaxId:       req.TaxId,
+		Email:       req.Email,
+		Address:     req.Address,
+		City:        req.City,
+		PostalCode:  req.PostalCode,
+		Province:    req.Province,
+		CountryCode: req.CountryCode,
+		UpdatedAt:   now,
+	}
+	old, err := c.repo.GetInvoiceProfile(ctx, user.UserId)
+	if err != nil {
+		return nil, err
+	}
+	if old != nil {
+		profile.ConsentAt = old.ConsentAt
+	}
+	if req.Enabled && req.Consent && profile.ConsentAt == nil {
+		profile.ConsentAt = &now
+	}
+	if err = c.repo.SaveInvoiceProfile(ctx, profile); err != nil {
+		return nil, err
+	}
+	return profile, nil
+}
+
+// DeleteInvoiceProfile removes the user's invoice profile with all its data.
+func (c *Core) DeleteInvoiceProfile(ctx context.Context, user *entity.User) error {
+	if user == nil {
+		return fmt.Errorf("user is nil")
+	}
+	return c.repo.DeleteInvoiceProfile(ctx, user.UserId)
+}
+
 // WebOrderRequest carries the dynamic inputs for CreateWebOrder — the
 // browser-provided return URLs and the language tag used by Redsys.
 type WebOrderRequest struct {
