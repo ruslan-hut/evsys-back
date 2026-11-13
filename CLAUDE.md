@@ -219,6 +219,10 @@ User-authenticated; the profile (tax id, address) is stored in `invoice_profiles
 
 `holded_contact_id` is server-only (never in JSON, never overwritten by a save).
 
+### Holded client
+
+`impl/holded` is a thin client of the Holded API (contact, invoice, approve, payment, send); config section `holded` (`api_key` only in the config, never in MongoDB). It is not wired into the payment flow yet: the invoice queue and its trigger (only after a successful Redsys answer in `processPaymentResponse`) are the next step. Request shapes follow the public docs and have not been run against a live account. `*holded.Error` tells the caller what to do: `Retryable()` (no answer, 429, 5xx), `Ambiguous()` (the document may exist - Holded has no idempotency key, so a failed create is checked by listing, not repeated), `Unauthorized()` (key or permission problem, alert the operator).
+
 ## Mail Subscription API Endpoints
 
 Admin/operator only (`RequirePowerUser`):

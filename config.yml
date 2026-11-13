@@ -39,6 +39,11 @@ brevo:
   sender_name: "EVSys Reports"
   sender_email: "noreply@example.com"
   api_url: "https://api.brevo.com/v3/smtp/email"
+holded:
+  enabled: false
+  api_key: ""
+  api_url: "https://api.holded.com/api/v2"
+  timeout: 30
 openai:
   api_key: ""
   api_url: "https://api.openai.com/v1"
