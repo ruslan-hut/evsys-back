@@ -59,14 +59,19 @@ type Config struct {
 		SenderMail string `yaml:"sender_email" env-default:"noreply@example.com"`
 		ApiUrl     string `yaml:"api_url" env-default:"https://api.brevo.com/v3/smtp/email"`
 	} `yaml:"brevo"`
-	// Holded issues the invoices users ask for (impl/holded). Not wired into
-	// the payment flow yet; the key lives here only, never in the database.
+	// Holded issues the invoices users ask for (impl/holded). The invoice queue
+	// (impl/core/invoice.go) uses it; the key lives here only, never in the database.
 	Holded struct {
 		Enabled bool   `yaml:"enabled" env-default:"false"`
 		ApiKey  string `yaml:"api_key" env-default:""`
 		ApiUrl  string `yaml:"api_url" env-default:"https://api.holded.com/api/v2"`
 		// Timeout bounds one request, in seconds.
 		Timeout int `yaml:"timeout" env-default:"30"`
+		// Document settings, empty until the accountant decides (task P-44).
+		Tax          string `yaml:"tax" env-default:""`
+		NumberLineId string `yaml:"number_line_id" env-default:""`
+		TreasuryId   string `yaml:"treasury_id" env-default:""`
+		Description  string `yaml:"description" env-default:""`
 	} `yaml:"holded"`
 	// OpenAI serves the AI analysis. The key lives here only, never in the
 	// database; the analysis settings are edited in the admin UI.

@@ -251,6 +251,10 @@ func (e *Error) Unauthorized() bool {
 	return e.Status == http.StatusUnauthorized || e.Status == http.StatusForbidden
 }
 
+// Wait is how long Holded asked to wait before the next call (Retry-After of a
+// 429), zero if it did not say.
+func (e *Error) Wait() time.Duration { return e.RetryAfter }
+
 func parseRetryAfter(v string) time.Duration {
 	if secs, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && secs >= 0 {
 		return time.Duration(secs) * time.Second

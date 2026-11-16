@@ -10,6 +10,7 @@ import (
 	"evsys-back/impl/core"
 	"evsys-back/impl/database"
 	databasemock "evsys-back/impl/database-mock"
+	"evsys-back/impl/holded"
 	"evsys-back/impl/mail"
 	"evsys-back/impl/oauth"
 	"evsys-back/impl/openai"
@@ -120,6 +121,20 @@ func main() {
 			coreHandler.SetDisablePayment(true)
 		}
 		coreHandler.StartPaymentProcessor()
+	}
+
+	if conf.Holded.Enabled {
+		log.With(sl.Secret("api_key", conf.Holded.ApiKey)).Info("initializing holded client, invoice queue on")
+		coreHandler.SetInvoiceClient(holded.New(holded.Config{
+			ApiKey:  conf.Holded.ApiKey,
+			ApiUrl:  conf.Holded.ApiUrl,
+			Timeout: time.Duration(conf.Holded.Timeout) * time.Second,
+		}, log), core.InvoiceSettings{
+			Tax:          conf.Holded.Tax,
+			NumberLineId: conf.Holded.NumberLineId,
+			TreasuryId:   conf.Holded.TreasuryId,
+			Description:  conf.Holded.Description,
+		})
 	}
 
 	var mailService *mail.Service

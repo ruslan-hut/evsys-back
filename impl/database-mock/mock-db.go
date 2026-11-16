@@ -4,6 +4,7 @@ import (
 	"context"
 	"evsys-back/entity"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -30,6 +31,7 @@ type MockDB struct {
 	preauthorizations  map[string]*entity.Preauthorization  // key: orderNumber
 	preauthByTx        map[int]*entity.Preauthorization     // key: transactionId
 	paymentRetries     map[int]*entity.PaymentRetry         // key: transactionId
+	invoiceJobs        map[int]*entity.InvoiceJob           // key: transactionId
 	mailSubscriptions  map[string]*entity.MailSubscription  // key: id
 	webhookSubscribers map[string]*entity.WebhookSubscriber // key: id
 	oauthClients       map[string]*entity.OAuthClient       // key: clientId
@@ -66,6 +68,7 @@ func (db *MockDB) clear() {
 	db.preauthorizations = make(map[string]*entity.Preauthorization)
 	db.preauthByTx = make(map[int]*entity.Preauthorization)
 	db.paymentRetries = make(map[int]*entity.PaymentRetry)
+	db.invoiceJobs = make(map[int]*entity.InvoiceJob)
 	db.mailSubscriptions = make(map[string]*entity.MailSubscription)
 	db.webhookSubscribers = make(map[string]*entity.WebhookSubscriber)
 	db.oauthClients = make(map[string]*entity.OAuthClient)
@@ -673,6 +676,69 @@ func (db *MockDB) DeleteInvoiceProfile(_ context.Context, userId string) error {
 	}
 	delete(db.invoiceProfiles, userId)
 	return nil
+}
+
+func (db *MockDB) SetInvoiceProfileContact(_ context.Context, userId, contactId string) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	p, ok := db.invoiceProfiles[userId]
+	if !ok {
+		return fmt.Errorf("invoice profile %w", entity.ErrNotFound)
+	}
+	p.HoldedContactId = contactId
+	return nil
+}
+
+// --- Invoice jobs ---
+
+func (db *MockDB) CreateInvoiceJob(_ context.Context, job *entity.InvoiceJob) (bool, error) {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	if _, ok := db.invoiceJobs[job.TransactionId]; ok {
+		return false, nil
+	}
+	cp := *job
+	db.invoiceJobs[job.TransactionId] = &cp
+	return true, nil
+}
+
+func (db *MockDB) UpdateInvoiceJob(_ context.Context, job *entity.InvoiceJob) error {
+	db.mux.Lock()
+	defer db.mux.Unlock()
+	if _, ok := db.invoiceJobs[job.TransactionId]; !ok {
+		return fmt.Errorf("invoice job %w", entity.ErrNotFound)
+	}
+	cp := *job
+	db.invoiceJobs[job.TransactionId] = &cp
+	return nil
+}
+
+func (db *MockDB) GetPendingInvoiceJobs(_ context.Context, now time.Time) ([]*entity.InvoiceJob, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	var result []*entity.InvoiceJob
+	for _, job := range db.invoiceJobs {
+		if job.Status == entity.InvoiceJobPending && !job.NextAttemptTime.After(now) {
+			cp := *job
+			result = append(result, &cp)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].TransactionId < result[j].TransactionId })
+	return result, nil
+}
+
+func (db *MockDB) ListInvoiceJobs(_ context.Context, statuses ...string) ([]*entity.InvoiceJob, error) {
+	db.mux.RLock()
+	defer db.mux.RUnlock()
+	var result []*entity.InvoiceJob
+	for _, job := range db.invoiceJobs {
+		if len(statuses) == 0 || slices.Contains(statuses, job.Status) {
+			cp := *job
+			result = append(result, &cp)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].TransactionId < result[j].TransactionId })
+	return result, nil
 }
 
 // --- Payment Orders ---

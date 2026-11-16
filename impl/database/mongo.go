@@ -32,6 +32,7 @@ const (
 	collectionPayment           = "payment"
 	collectionPaymentMethods    = "payment_methods"
 	collectionInvoiceProfiles   = "invoice_profiles"
+	collectionInvoiceJobs       = "invoice_jobs"
 	collectionPaymentOrders     = "payment_orders"
 	collectionPaymentPlans      = "payment_plans"
 	collectionLocations         = "locations"
@@ -149,11 +150,32 @@ func NewMongoClient(conf *config.Config) (*MongoDB, error) {
 		return nil, fmt.Errorf("pinging mongodb: %w", err)
 	}
 
-	return &MongoDB{
+	m := &MongoDB{
 		client:           client,
 		database:         conf.Mongo.Database,
 		logRecordsNumber: conf.LogRecords,
-	}, nil
+	}
+	if err := m.ensureInvoiceIndexes(ctx); err != nil {
+		return nil, fmt.Errorf("invoice_jobs indexes: %w", err)
+	}
+	return m, nil
+}
+
+// ensureInvoiceIndexes creates the indexes of invoice_jobs, a collection only
+// this service uses (evsys migrations do not cover it). The unique index on
+// transaction_id is what keeps a session from getting two invoices.
+func (m *MongoDB) ensureInvoiceIndexes(ctx context.Context) error {
+	_, err := m.col(collectionInvoiceJobs).Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "transaction_id", Value: 1}},
+			Options: options.Index().SetUnique(true).SetName("transaction_id_unique"),
+		},
+		{
+			Keys:    bson.D{{Key: "status", Value: 1}, {Key: "next_attempt_time", Value: 1}},
+			Options: options.Index().SetName("status_next_attempt"),
+		},
+	})
+	return err
 }
 
 func (m *MongoDB) Close() error {
@@ -1214,6 +1236,52 @@ func (m *MongoDB) DeleteInvoiceProfile(ctx context.Context, userId string) error
 		return fmt.Errorf("invoice profile %w", entity.ErrNotFound)
 	}
 	return nil
+}
+
+// SetInvoiceProfileContact stores the customer's Holded contact id on the
+// profile; ErrNotFound if the profile is gone.
+func (m *MongoDB) SetInvoiceProfileContact(ctx context.Context, userId, contactId string) error {
+	return m.updateOne(ctx, collectionInvoiceProfiles,
+		bson.D{{Key: "user_id", Value: userId}},
+		bson.D{{Key: "$set", Value: bson.D{{Key: "holded_contact_id", Value: contactId}}}},
+		"invoice profile")
+}
+
+// CreateInvoiceJob queues a job; false (and no error) if the transaction
+// already has one.
+func (m *MongoDB) CreateInvoiceJob(ctx context.Context, job *entity.InvoiceJob) (bool, error) {
+	_, err := m.col(collectionInvoiceJobs).InsertOne(ctx, job)
+	if mongo.IsDuplicateKeyError(err) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// UpdateInvoiceJob saves the progress of a job, found by transaction_id.
+func (m *MongoDB) UpdateInvoiceJob(ctx context.Context, job *entity.InvoiceJob) error {
+	return m.updateOne(ctx, collectionInvoiceJobs,
+		bson.D{{Key: "transaction_id", Value: job.TransactionId}},
+		bson.D{{Key: "$set", Value: job}}, "invoice job")
+}
+
+// GetPendingInvoiceJobs returns the jobs whose turn has come, oldest first.
+func (m *MongoDB) GetPendingInvoiceJobs(ctx context.Context, now time.Time) ([]*entity.InvoiceJob, error) {
+	filter := bson.D{
+		{Key: "status", Value: entity.InvoiceJobPending},
+		{Key: "next_attempt_time", Value: bson.D{{Key: "$lte", Value: now}}},
+	}
+	opts := options.Find().SetSort(bson.D{{Key: "next_attempt_time", Value: 1}}).SetLimit(100)
+	return findMany[*entity.InvoiceJob](m, ctx, collectionInvoiceJobs, filter, opts)
+}
+
+// ListInvoiceJobs returns jobs in the given statuses (all if none), newest first.
+func (m *MongoDB) ListInvoiceJobs(ctx context.Context, statuses ...string) ([]*entity.InvoiceJob, error) {
+	filter := bson.D{}
+	if len(statuses) > 0 {
+		filter = bson.D{{Key: "status", Value: bson.D{{Key: "$in", Value: statuses}}}}
+	}
+	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}}).SetLimit(500)
+	return findMany[*entity.InvoiceJob](m, ctx, collectionInvoiceJobs, filter, opts)
 }
 
 func (m *MongoDB) GetLastOrder(ctx context.Context) (*entity.PaymentOrder, error) {

@@ -34,6 +34,13 @@ type Repository interface {
 	GetInvoiceProfile(ctx context.Context, userId string) (*entity.InvoiceProfile, error)
 	SaveInvoiceProfile(ctx context.Context, profile *entity.InvoiceProfile) error
 	DeleteInvoiceProfile(ctx context.Context, userId string) error
+	SetInvoiceProfileContact(ctx context.Context, userId, contactId string) error
+
+	// Invoice queue: one job per transaction
+	CreateInvoiceJob(ctx context.Context, job *entity.InvoiceJob) (bool, error)
+	UpdateInvoiceJob(ctx context.Context, job *entity.InvoiceJob) error
+	GetPendingInvoiceJobs(ctx context.Context, now time.Time) ([]*entity.InvoiceJob, error)
+	ListInvoiceJobs(ctx context.Context, statuses ...string) ([]*entity.InvoiceJob, error)
 	GetLastOrder(ctx context.Context) (*entity.PaymentOrder, error)
 	SavePaymentOrder(ctx context.Context, order *entity.PaymentOrder) error
 	GetPaymentOrderByTransaction(ctx context.Context, transactionId int) (*entity.PaymentOrder, error)

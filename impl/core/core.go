@@ -54,6 +54,9 @@ type Core struct {
 	currency             string
 	disablePayment       bool
 	paymentLocks         sync.Map
+	invoices             InvoiceClient
+	invoiceSettings      InvoiceSettings
+	invoiceUnsaved       sync.Map // transaction id -> Holded invoice id, progress not saved
 	stopPaymentProcessor chan struct{}
 	log                  *slog.Logger
 }
@@ -1894,6 +1897,9 @@ func (c *Core) processPaymentResponse(ctx context.Context, resp *CaptureResponse
 			log.With(sl.Err(e)).Error("failed to delete payment retry record")
 		}
 
+		// the session is paid: queue its invoice (never fails the payment)
+		c.enqueueInvoice(ctx, transaction, order.UserId)
+
 		c.payLog(ctx, "info", "pay",
 			"transaction %d: payment captured %.2f on order %d (user %s)",
 			order.TransactionId, float64(order.Amount)/100, order.Order, order.UserName)
@@ -2336,6 +2342,7 @@ func (c *Core) StartPaymentProcessor() {
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 				c.processUnbilledTransactions(ctx)
 				c.processPaymentRetries(ctx)
+				c.processInvoices(ctx)
 				cancel()
 			case <-c.stopPaymentProcessor:
 				return
